@@ -96,6 +96,12 @@ class TestBestAvailableEndpoint(unittest.TestCase):
             "databricks-meta-llama-3-3-70b-instruct",
         )
 
+    def test_sonnet_fallback_prefers_46_then_45(self):
+        primary = "databricks-claude-sonnet-5-5"
+        both = ["databricks-claude-sonnet-4-5", "databricks-claude-sonnet-4-6"]
+        self.assertEqual(self._run(primary, both), "databricks-claude-sonnet-4-6")
+        self.assertEqual(self._run(primary, ["databricks-claude-sonnet-4-5"]), "databricks-claude-sonnet-4-5")
+
     def test_no_known_fallback_uses_first_available(self):
         available = ["some-custom-endpoint", "another-endpoint"]
         self.assertEqual(

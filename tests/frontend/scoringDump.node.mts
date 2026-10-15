@@ -9,7 +9,13 @@
 // mergeStatus/stepNumbersToGates .node pattern — no vitest, imports the actual
 // TS source (not a stand-in) so drift between the two copies is caught.
 
-import { STEP_SCORES, CHAPTERS } from '../../src/constants/scoring.ts';
+// Loaded through Vite's module runner (loadComponent.ts): since main's 2.7.0,
+// scoring.ts imports journeykit types without a file extension, which plain
+// node --experimental-strip-types cannot resolve.
+import { loadComponentModule } from './loadComponent.ts';
+
+type ScoringModule = typeof import('../../src/constants/scoring.ts');
+const { STEP_SCORES, CHAPTERS } = await loadComponentModule<ScoringModule>('src/constants/scoring.ts');
 
 const chapters: Record<string, { steps: number[]; display: string }> = {};
 for (const [name, info] of Object.entries(CHAPTERS)) {

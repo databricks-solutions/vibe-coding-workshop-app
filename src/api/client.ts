@@ -530,6 +530,77 @@ export interface LeaderboardEntry {
   workshop_level?: string;
 }
 
+/** Same shape as `IdeaScore` in the journey kit. */
+export interface IdeaScoreResponse {
+  journey: number;
+  quality: number | null;
+  outcome: number;
+  total: number;
+  tier: string;
+  breakdown: { key: string; label: string; score: number; why?: string; raise?: string; capped?: boolean }[] | null;
+  headline?: string | null;
+  revision?: number | null;
+  scoredAt?: string | null;
+  approvedInLibrary?: boolean;
+}
+
+/** One idea on the Insights leaderboard. */
+export interface InsightsLeaderboardEntry {
+  rank: number;
+  idea_id: string;
+  title: string;
+  mode: 'ideate' | 'insights';
+  industry: string;
+  user_id: string;
+  display_name: string;
+  avatar: string;
+  total: number;
+  journey: number;
+  quality: number | null;
+  outcome: number;
+  tier: string;
+  dimensions: { key: string; label: string; score: number }[];
+  approved: string[];
+  step: string;
+  status: 'exploring' | 'committed' | 'parked' | 'submitted' | 'approved' | 'shaping' | 'building' | 'live';
+  value_per_year: number | null;
+  session_id?: string | null;
+  updated_at?: string | null;
+  is_mine: boolean;
+}
+
+export type LeaderboardBoard = 'technical' | 'insights';
+
+export interface LeaderboardSeason {
+  id: string;
+  board: LeaderboardBoard;
+  kind: 'season' | 'snapshot';
+  name: string;
+  /** null = all time */
+  startedAt: string | null;
+  /** null = the live season */
+  endedAt: string | null;
+  entryCount: number;
+  createdBy: string;
+  createdAt: string | null;
+}
+
+export interface LeaderboardSeasons {
+  board: LeaderboardBoard;
+  current: LeaderboardSeason | null;
+  archive: LeaderboardSeason[];
+  canManage: boolean;
+}
+
+export interface IdeasSummary {
+  total: number;
+  byMode: { ideate: number; insights: number };
+  funnel: Record<'ideate' | 'insights', Record<string, number>>;
+  scored: number;
+  avgQuality: number | null;
+  qualityMax: number;
+}
+
 export interface WorkshopUser {
   display_name: string;
   email: string;
@@ -2009,11 +2080,13 @@ class ApiClient {
     step: string,
     idea: Record<string, unknown>,
     feedback?: string,
+    signal?: AbortSignal,
   ): Promise<{ data: T; model: string; fallback: boolean }> {
     const response = await fetch(`${this.baseUrl}/ideate/step`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ step, idea, feedback }),
+      signal,
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -2042,6 +2115,90 @@ class ApiClient {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
     return body;
+  }
+
+  /** My saved ideas, each with its server-computed `score`. */
+  async ideasList(): Promise<Record<string, unknown>[]> {
+    const response = await fetch(`${this.baseUrl}/ideate/ideas`);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    return body.ideas ?? [];
+  }
+
+  /** Save one idea; returns the points the server computed for it. */
+  async ideaSave(idea: Record<string, unknown>, valuePerYear?: number | null): Promise<{ id: string; score: IdeaScoreResponse }> {
+    const response = await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(String(idea.id))}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea, value_per_year: valuePerYear ?? null }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    return body;
+  }
+
+  async ideaDelete(id: string): Promise<void> {
+    await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  /** Anyone signed in can read an idea; only the owner can edit it. */
+  async ideaGet(id: string): Promise<{ idea: Record<string, unknown>; owner: { displayName: string; avatar: string }; isOwner: boolean }> {
+    const response = await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(id)}`);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    return body;
+  }
+
+  /** Ask the AI judge for the idea's quality scorecard. */
+  async ideaScore(id: string): Promise<{ score: IdeaScoreResponse; cached: boolean }> {
+    const response = await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(id)}/score`, { method: 'POST' });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    return body;
+  }
+
+  async insightsLeaderboard(params: { limit?: number; mode?: string; industry?: string } = {}): Promise<InsightsLeaderboardEntry[]> {
+    const q = new URLSearchParams();
+    if (params.limit) q.set('limit', String(params.limit));
+    if (params.mode) q.set('mode', params.mode);
+    if (params.industry) q.set('industry', params.industry);
+    const response = await fetch(`${this.baseUrl}/insights/leaderboard?${q}`);
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    return response.json();
+  }
+
+  async leaderboardSeasons(board: LeaderboardBoard): Promise<LeaderboardSeasons> {
+    return this.fetch<LeaderboardSeasons>(`/leaderboards/${board}/seasons`, { headers: getDevPersonaHeader() });
+  }
+
+  /** A frozen archive; `entries` has the board's own row shape. */
+  async leaderboardSeason<T = unknown>(id: string): Promise<LeaderboardSeason & { entries: T[] }> {
+    return this.fetch(`/leaderboards/seasons/${encodeURIComponent(id)}`);
+  }
+
+  async leaderboardAdmin(action: 'snapshot' | 'reset', board: LeaderboardBoard | 'all', name?: string): Promise<unknown> {
+    return this.adminPost(`/admin/leaderboards/${board}/${action}`, { name: name || null });
+  }
+
+  async leaderboardRestore(seasonId: string): Promise<unknown> {
+    return this.adminPost(`/admin/leaderboards/seasons/${encodeURIComponent(seasonId)}/restore`, {});
+  }
+
+  private async adminPost(path: string, payload: unknown): Promise<unknown> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getDevPersonaHeader() },
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+    return body;
+  }
+
+  async ideasSummary(): Promise<IdeasSummary> {
+    const response = await fetch(`${this.baseUrl}/ideate/ideas-summary`);
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    return response.json();
   }
 
   /** Stream the Ideate brief (SSE). Returns an AbortController to cancel. */

@@ -5,6 +5,8 @@
  * Used for instant point calculation and chapter detection in the UI
  */
 
+import { NOT_SURE, type Idea, type JourneyMode, type StepKey } from '../components/journeykit/engine/types';
+
 // Points per step based on chapter difficulty
 // Later chapters = harder = more points
 export const STEP_SCORES: Record<number, number> = {
@@ -172,4 +174,126 @@ export function getLeaderboardMessage(
   }
   
   return `${pointsNeeded} points to Top 10!`;
+}
+
+// ============== Idea Points (Ideate and Insights) ==============
+// Mirrors IDEA_STEP_SCORES and friends in src/backend/api/ideate_ideas.py.
+// Journey (up to 300) + AI quality (up to 600) + outcome (up to 100) = 1,000.
+
+export const IDEA_STEP_SCORES: Record<JourneyMode, Partial<Record<StepKey, number>>> = {
+  ideate: { spark: 25, map: 25, clarify: 60, shape: 30, impact: 60, brief: 50 },
+  insights: { spark: 20, map: 20, clarify: 50, shape: 25, questions: 50, impact: 40, brief: 45 },
+};
+
+const POINTS_PER_ITEM = 10;
+const DEPTH = { gaps: 15, case: 15, assumption: 5, assumptionMax: 20, max: 50 };
+export const IDEA_OUTCOME_POINTS = { first: 40, second: 60 };
+export const IDEA_QUALITY_MAX = 600;
+export const IDEA_POINTS_MAX = 1000;
+
+export type IdeaTier = 'spark' | 'shaped' | 'investable' | 'boardroom';
+
+export const IDEA_TIERS: { key: IdeaTier; label: string; floor: number }[] = [
+  { key: 'spark', label: 'Spark', floor: 0 },
+  { key: 'shaped', label: 'Shaped', floor: 250 },
+  { key: 'investable', label: 'Investable', floor: 500 },
+  { key: 'boardroom', label: 'Boardroom-ready', floor: 750 },
+];
+
+/** Camps along the trail: finishing every step in one is a milestone, like a chapter in the technical flow. */
+export const IDEA_PHASES: Record<JourneyMode, { key: string; display: string; steps: StepKey[] }[]> = {
+  ideate: [
+    { key: 'understand', display: 'Problem understood', steps: ['spark', 'map', 'clarify'] },
+    { key: 'design', display: 'Approach designed', steps: ['shape', 'impact'] },
+    { key: 'summit', display: 'Summit reached', steps: ['brief'] },
+  ],
+  insights: [
+    { key: 'understand', display: 'Problem understood', steps: ['spark', 'map', 'clarify'] },
+    { key: 'design', display: 'Approach designed', steps: ['shape', 'questions', 'impact'] },
+    { key: 'camp', display: 'Ready to build', steps: ['brief'] },
+  ],
+};
+
+const modeOfIdea = (idea: Pick<Idea, 'mode'>): JourneyMode => (idea.mode === 'insights' ? 'insights' : 'ideate');
+
+function realAnswers(idea: Idea) {
+  return (idea.questions ?? []).filter(q => { const a = idea.answers[q.id]; return !!a && a !== NOT_SURE; }).length;
+}
+
+/** Share of impact answers the user gave themselves; null when Impact was skipped or not sized. */
+function impactShare(idea: Idea): number | null {
+  if (!idea.impact || idea.impact.skipped) return null;
+  const answers = Object.values(idea.impact.answers ?? {});
+  if (!answers.length) return 0;
+  return answers.filter(a => a.source === 'you said').length / answers.length;
+}
+
+/** Points a step is worth at most on this idea's trail. */
+export function ideaStepAvailable(idea: Pick<Idea, 'mode'>, step: StepKey): number {
+  return IDEA_STEP_SCORES[modeOfIdea(idea)][step] ?? 0;
+}
+
+/** Points earned on a step; only approved steps count. */
+export function ideaStepPoints(idea: Idea, step: StepKey): number {
+  const available = ideaStepAvailable(idea, step);
+  if (!available || !idea.approved.includes(step)) return 0;
+  if (step === 'clarify') return Math.min(available, POINTS_PER_ITEM * realAnswers(idea));
+  if (step === 'questions') return Math.min(available, POINTS_PER_ITEM * (idea.genieQuestions?.length ?? 0));
+  if (step === 'impact') {
+    const share = impactShare(idea);
+    return share === null ? 0 : Math.round(available * (0.5 + 0.5 * share));
+  }
+  return available;
+}
+
+export function ideaDepthPoints(idea: Idea): number {
+  let pts = 0;
+  if (idea.gaps?.length) pts += DEPTH.gaps;
+  if (idea.caseOpenedAt) pts += DEPTH.case;
+  const resolved = idea.assumptions.filter(a => a.status === 'accepted' || a.status === 'question').length;
+  pts += Math.min(DEPTH.assumptionMax, DEPTH.assumption * resolved);
+  return Math.min(DEPTH.max, pts);
+}
+
+export function ideaJourneyPoints(idea: Idea): number {
+  const steps = Object.keys(IDEA_STEP_SCORES[modeOfIdea(idea)]) as StepKey[];
+  return steps.reduce((n, s) => n + ideaStepPoints(idea, s), 0) + ideaDepthPoints(idea);
+}
+
+export function ideaOutcomePoints(idea: Idea): number {
+  const insights = modeOfIdea(idea) === 'insights';
+  const first = insights ? !!idea.lockedAt : !!idea.catalogRef;
+  const second = insights ? idea.buildStage === 'studio' : first && !!idea.score?.approvedInLibrary;
+  return (first ? IDEA_OUTCOME_POINTS.first : 0) + (second ? IDEA_OUTCOME_POINTS.second : 0);
+}
+
+export interface IdeaPointsBreakdown {
+  journey: number;
+  quality: number | null;
+  outcome: number;
+  total: number;
+  tier: IdeaTier;
+}
+
+/** The score shown in the UI: journey and outcome computed live, quality from the server's scorecard. */
+export function calculateIdeaScore(idea: Idea): IdeaPointsBreakdown {
+  const journey = ideaJourneyPoints(idea);
+  const outcome = ideaOutcomePoints(idea);
+  const quality = idea.score?.quality ?? null;
+  const total = journey + outcome + (quality ?? 0);
+  return { journey, quality, outcome, total, tier: ideaTierFor(total).key };
+}
+
+export function ideaTierFor(total: number) {
+  return [...IDEA_TIERS].reverse().find(t => total >= t.floor) ?? IDEA_TIERS[0];
+}
+
+export function nextIdeaTier(total: number) {
+  return IDEA_TIERS.find(t => t.floor > total) ?? null;
+}
+
+/** The camp finished by approving `newlyApproved`, if any; mirrors getCompletedChapter. */
+export function getCompletedIdeaPhase(idea: Pick<Idea, 'mode' | 'approved'>, newlyApproved: StepKey) {
+  const approved = new Set([...idea.approved, newlyApproved]);
+  return IDEA_PHASES[modeOfIdea(idea)].find(p => p.steps.includes(newlyApproved) && p.steps.every(s => approved.has(s))) ?? null;
 }

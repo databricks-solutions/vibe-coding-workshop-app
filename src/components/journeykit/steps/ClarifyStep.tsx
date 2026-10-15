@@ -50,6 +50,7 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
           why={q.why}
           recommended={q.recommended}
           multi={q.multi}
+          maxPicks={q.maxPicks}
           eyebrow={q.isFollowup && <p className="text-ui-2xs uppercase tracking-wider font-semibold text-amber-400 mb-1">One quick follow-up</p>}
           confirmLabel={editing !== null || lastOpen ? 'Done' : 'Next'}
           onPick={pick}

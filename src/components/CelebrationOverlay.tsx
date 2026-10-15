@@ -7,7 +7,7 @@
  *   clickable Databricks service popovers, thumbs up/down feedback, and Close button
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { 
   Trophy, Sparkles, Star, ThumbsUp, ThumbsDown, X,
   Globe, HardDrive, Database, Layers, Zap, Bot, LayoutDashboard, Brain,
@@ -20,6 +20,8 @@ import { ServicePopover } from './ServicePopover';
 import { serviceData } from './ServicePopover.utils';
 import type { ServiceKey } from './ServicePopover';
 import { apiClient } from '../api/client';
+import { ConfettiBurst } from './celebration/ConfettiBurst';
+import { AnimatedPoints } from './celebration/AnimatedPoints';
 
 // ============== Service Icon Mapping ==============
 // Maps each service key to its lucide icon + color (matching Architecture Overview)
@@ -57,141 +59,19 @@ export interface CelebrationData {
   sessionId?: string;       // Session ID for feedback submission
   totalScore?: number;
   leaderboardMessage?: string;  // e.g., "5 points to Top 10!"
+  // Optional milestone slots for other flows; omitted, the modal looks exactly as it does in the workshop.
+  icon?: LucideIcon;            // replaces the trophy
+  image?: string;               // illustration above the title, instead of the trophy tile
+  congratsTitle?: string;       // overrides "<Chapter> Complete!"
+  body?: ReactNode;             // replaces "What you learned" and the services list
+  hideFeedback?: boolean;
+  primaryAction?: { label: string; onClick: () => void };
+  closeLabel?: string;
 }
 
 interface CelebrationOverlayProps {
   celebration: CelebrationData | null;
   onComplete: () => void;
-}
-
-// ============== Confetti Particle ==============
-
-function ConfettiParticle({ 
-  delay, 
-  color, 
-  size = 'normal',
-  startX,
-  startY,
-  rotation
-}: { 
-  delay: number; 
-  color: string; 
-  size?: 'small' | 'normal' | 'large';
-  startX: number;
-  startY: number;
-  rotation: number;
-}) {
-  const sizeClasses = {
-    small: 'w-1.5 h-1.5',
-    normal: 'w-2.5 h-2.5',
-    large: 'w-3 h-3',
-  };
-  
-  return (
-    <div
-      className={`absolute ${sizeClasses[size]} rounded-sm animate-celebration-confetti`}
-      style={{
-        backgroundColor: color,
-        left: `${startX}%`,
-        top: `${startY}%`,
-        animationDelay: `${delay}ms`,
-        transform: `rotate(${rotation}deg)`,
-      }}
-    />
-  );
-}
-
-// ============== Confetti Burst ==============
-
-const CONFETTI_COLORS = [
-  '#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-  '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE',
-];
-
-function makeConfettiParticles(count: number, centerX: number, centerY: number, spread: number) {
-  return Array.from({ length: count }, (_, i) => ({
-    id: i,
-    delay: Math.random() * 300,
-    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-    size: Math.random() > 0.7 ? 'large' : Math.random() > 0.4 ? 'normal' : 'small' as 'small' | 'normal' | 'large',
-    startX: centerX + (Math.random() - 0.5) * spread,
-    startY: centerY + (Math.random() - 0.5) * spread * 0.5,
-    rotation: Math.random() * 360,
-  }));
-}
-
-// Exported for tests/frontend/CelebrationOverlay.node.test.ts.
-export function ConfettiBurst({ 
-  count = 40, 
-  centerX = 50, 
-  centerY = 40,
-  spread = 30 
-}: { 
-  count?: number; 
-  centerX?: number; 
-  centerY?: number;
-  spread?: number;
-}) {
-  // Randomized once per mount (lazy state initializer) so render stays pure.
-  const [particles] = useState(() => makeConfettiParticles(count, centerX, centerY, spread));
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {particles.map((p) => (
-        <ConfettiParticle 
-          key={p.id} 
-          delay={p.delay} 
-          color={p.color}
-          size={p.size}
-          startX={p.startX}
-          startY={p.startY}
-          rotation={p.rotation}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ============== Animated Points Counter ==============
-
-function AnimatedPoints({ 
-  points, 
-  duration = 800,
-  prefix = '+',
-  suffix = ''
-}: { 
-  points: number; 
-  duration?: number;
-  prefix?: string;
-  suffix?: string;
-}) {
-  const [displayPoints, setDisplayPoints] = useState(0);
-  
-  useEffect(() => {
-    const startTime = Date.now();
-    const startValue = 0;
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const current = Math.round(startValue + (points - startValue) * eased);
-      
-      setDisplayPoints(current);
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    
-    requestAnimationFrame(animate);
-  }, [points, duration]);
-  
-  return (
-    <span className="tabular-nums">
-      {prefix}{displayPoints}{suffix}
-    </span>
-  );
 }
 
 // ============== Step Celebration (Quick) ==============
@@ -266,14 +146,15 @@ function MilestoneCelebration({
   sessionId,
   totalScore,
   leaderboardMessage,
+  icon: Icon = Trophy,
+  image,
+  congratsTitle,
+  body,
+  hideFeedback,
+  primaryAction,
+  closeLabel = 'Close',
   onComplete 
-}: { 
-  pointsEarned: number;
-  milestoneTitle?: string;
-  chapterName?: string;
-  sessionId?: string;
-  totalScore?: number;
-  leaderboardMessage?: string;
+}: Omit<CelebrationData, 'type'> & { 
   onComplete: () => void;
 }) {
   const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
@@ -285,7 +166,7 @@ function MilestoneCelebration({
 
   // Look up chapter learning content
   const chapterKey = chapterName || milestoneTitle || '';
-  const learning = CHAPTER_LEARNING[chapterKey];
+  const learning = body ? undefined : CHAPTER_LEARNING[chapterKey];
   
   // Smooth entrance
   useEffect(() => {
@@ -373,9 +254,13 @@ function MilestoneCelebration({
           <div className={`inline-flex transition-all duration-500 delay-200
             ${isVisible ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}
           `}>
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30 animate-milestone-trophy">
-              <Trophy className="w-8 h-8 text-white" />
-            </div>
+            {image ? (
+              <img src={image} alt="" width={180} height={120} className="w-44 rounded-2xl" />
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30 animate-milestone-trophy">
+                <Icon className="w-8 h-8 text-white" />
+              </div>
+            )}
           </div>
           
           <div className={`mt-3 transition-all duration-500 delay-300
@@ -383,7 +268,7 @@ function MilestoneCelebration({
           `}>
             <div className="inline-block px-5 py-1.5 rounded-full bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 border border-amber-500/25">
               <span className="text-base font-bold text-amber-400">
-                {learning?.congratsTitle || `${milestoneTitle || 'Chapter'} Complete!`}
+                {congratsTitle || learning?.congratsTitle || `${milestoneTitle || 'Chapter'} Complete!`}
               </span>
             </div>
           </div>
@@ -415,6 +300,14 @@ function MilestoneCelebration({
         {/* Divider */}
         <div className="mx-6 border-t border-border" />
         
+        {body && (
+          <div className={`px-6 py-5 transition-all duration-500 delay-500
+            ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}
+          `}>
+            {body}
+          </div>
+        )}
+
         {/* Learning Content - Static Display */}
         {learning && (
           <div className={`px-6 py-5 transition-all duration-500 delay-500
@@ -477,7 +370,7 @@ function MilestoneCelebration({
         )}
 
         {/* Feedback Section - Fades in after typing completes */}
-        <div className={`px-6 pb-4 transition-all duration-500
+        {!hideFeedback && <div className={`px-6 pb-4 transition-all duration-500
           ${typingComplete ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}
         `}>
           <div className="flex items-center justify-center gap-4 py-3 border-t border-border">
@@ -515,16 +408,27 @@ function MilestoneCelebration({
               </button>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Close Button */}
-        <div className="px-6 pb-6">
+        <div className="px-6 pb-6 flex gap-2">
+          {primaryAction && (
+            <button
+              onClick={() => { primaryAction.onClick(); handleClose(); }}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm
+                hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              {primaryAction.label}
+            </button>
+          )}
           <button
             onClick={handleClose}
-            className="w-full py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm
-              hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className={primaryAction
+              ? 'flex-1 py-2.5 px-4 rounded-xl border border-border text-foreground font-medium text-sm hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50'
+              : `w-full py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-medium text-sm
+              hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50`}
           >
-            Close
+            {closeLabel}
           </button>
         </div>
       </div>
@@ -543,15 +447,7 @@ export function CelebrationOverlay({ celebration, onComplete }: CelebrationOverl
   
   if (celebration.type === 'milestone') {
     return (
-      <MilestoneCelebration
-        pointsEarned={celebration.pointsEarned}
-        milestoneTitle={celebration.milestoneTitle}
-        chapterName={celebration.chapterName}
-        sessionId={celebration.sessionId}
-        totalScore={celebration.totalScore}
-        leaderboardMessage={celebration.leaderboardMessage}
-        onComplete={handleComplete}
-      />
+      <MilestoneCelebration {...celebration} onComplete={handleComplete} />
     );
   }
   

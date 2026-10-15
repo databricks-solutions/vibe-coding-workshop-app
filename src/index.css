@@ -960,7 +960,43 @@
   }
 }
 
+/* Summit trail: clouds drifting slowly over the peaks. */
+@keyframes trail-cloud-cross {
+  from { transform: translateX(-28%); }
+  to { transform: translateX(105%); }
+}
+.trail-cloud-track {
+  animation-name: trail-cloud-cross;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+@keyframes trail-cloud-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.trail-cloud-bob {
+  animation: trail-cloud-bob 9s ease-in-out infinite;
+}
+@keyframes trail-bird-flap {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.45); }
+}
+.trail-bird {
+  transform-box: fill-box;
+  transform-origin: center 70%;
+  animation: trail-bird-flap 0.9s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .trail-cloud-track {
+    animation: none;
+    transform: translateX(var(--cloud-rest, 0%));
+  }
+  .trail-cloud-bob,
+  .trail-bird {
+    animation: none;
+  }
   .animate-new-badge {
     animation: none;
     box-shadow: 0 0 0 1px hsla(160, 84%, 50%, 0.35);

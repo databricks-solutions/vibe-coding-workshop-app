@@ -1,4 +1,5 @@
-// Node unit test: CelebrationOverlay's confetti is randomized once per mount,
+// Node unit test: CelebrationOverlay's confetti (ConfettiBurst, moved to
+// src/components/celebration/ConfettiBurst.tsx in main's 2.7.0) is randomized once per mount,
 // not on every render (react-hooks/purity).
 //
 // Run: node --experimental-strip-types --test tests/frontend/CelebrationOverlay.node.test.ts
@@ -6,7 +7,7 @@
 // No DOM. Harness calls ConfettiBurst as a function so its hooks belong to
 // Harness, then a render-phase update re-renders Harness with that hook state
 // kept: two renders of one mount. Each pass's particle elements are rendered to
-// markup separately, so randomness in ConfettiParticle's render shows up too.
+// markup separately, so randomness in a particle's render shows up too.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,10 +16,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { loadComponentModule } from './loadComponent.ts';
 
-type CelebrationOverlayModule = typeof import('../../src/components/CelebrationOverlay.tsx');
+type ConfettiBurstModule = typeof import('../../src/components/celebration/ConfettiBurst.tsx');
 
-const { ConfettiBurst } = await loadComponentModule<CelebrationOverlayModule>(
-  'src/components/CelebrationOverlay.tsx',
+const { ConfettiBurst } = await loadComponentModule<ConfettiBurstModule>(
+  'src/components/celebration/ConfettiBurst.tsx',
 );
 
 function renderTwiceInOneMount(props: Parameters<typeof ConfettiBurst>[0]): [string, string] {

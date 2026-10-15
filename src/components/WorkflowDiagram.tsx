@@ -12,7 +12,7 @@ import { SectionedWorkflowSidebar } from './SectionedWorkflowSidebar';
 import { SectionDetailPanel } from './SectionDetailPanel';
 import { DefineIntentSection } from './DefineIntentSection';
 import { SetUpProjectStep } from './SetUpProjectStep';
-import { CelebrationOverlay, type CelebrationData } from './CelebrationOverlay';
+import { useCelebration } from '../hooks/useCelebration';
 import { PathAndArchitecture } from './PathAndArchitecture';
 import { WorkflowReadSkeleton } from './WorkflowReadSkeleton';
 import {
@@ -31,7 +31,6 @@ import {
   getStepPoints, 
   getCompletedChapter, 
   calculateTotalScore,
-  getLeaderboardMessage 
 } from '../constants/scoring';
 import { 
   ArrowDown, 
@@ -252,7 +251,7 @@ export function WorkflowDiagram({
   );
   
   // Celebration state for step/chapter completion
-  const [celebration, setCelebration] = useState<CelebrationData | null>(null);
+  const { celebrate, overlay: celebrationOverlay } = useCelebration({ disabled: readOnly });
   
   // Parameter refresh -- incremented when session parameters change via the sidebar popover
   const [paramRefreshKey, setParamRefreshKey] = useState(0);
@@ -793,35 +792,24 @@ export function WorkflowDiagram({
     if (completedChapter) {
       // Milestone celebration - fetch leaderboard for comparison
       const totalScore = calculateTotalScore(newCompletedSteps, skippedSteps);
-      let leaderboardMessage = '';
-      
-      try {
-        const leaderboard = await apiClient.getLeaderboard();
-        const topScores = leaderboard.map(entry => entry.score);
-        leaderboardMessage = getLeaderboardMessage(totalScore, topScores);
-      } catch (err) {
-        console.error('Failed to fetch leaderboard for celebration:', err);
-        leaderboardMessage = 'Keep going!';
-      }
-      
-      setCelebration({
+      celebrate({
         type: 'milestone',
         pointsEarned: completedChapter.chapterPoints,
         milestoneTitle: completedChapter.display,
         chapterName: completedChapter.name,
         sessionId: sessionId || undefined,
         totalScore,
-        leaderboardMessage,
+        rankAgainst: () => apiClient.getLeaderboard().then(l => l.map(entry => entry.score)),
       });
     } else {
       // Step celebration
-      setCelebration({
+      celebrate({
         type: 'step',
         pointsEarned: points,
         stepTitle: getStepTitle(stepId),
       });
     }
-  }, [completedSteps, skippedSteps, visibleSections, getStepTitle, sessionId]);
+  }, [completedSteps, skippedSteps, visibleSections, getStepTitle, sessionId, celebrate]);
 
   const toggleStepComplete = useCallback((stepId: number, shouldExpandNext: boolean = true) => {
     if (readOnly) return;
@@ -876,11 +864,6 @@ export function WorkflowDiagram({
     }
     onCompletedStepsChange(newSet);
   }, [completedSteps, skippedSteps, sessionId, onCompletedStepsChange, onSkippedStepsChange, triggerCelebration, getNextStep, scrollToStep, sectionForStep]);
-  
-  // Handle celebration complete
-  const handleCelebrationComplete = useCallback(() => {
-    setCelebration(null);
-  }, []);
   
   // Reset a step (mark as incomplete) - called when user re-generates
   const resetStepComplete = useCallback((stepId: number) => {
@@ -3690,12 +3673,7 @@ export function WorkflowDiagram({
       <HackathonEntryCard />
 
       {/* Celebration Overlay */}
-      {!readOnly && (
-        <CelebrationOverlay
-          celebration={celebration}
-          onComplete={handleCelebrationComplete}
-        />
-      )}
+      {celebrationOverlay}
     </div>
     </ReadOnlyProvider>
   );

@@ -1,27 +1,26 @@
 import type { ReactNode } from 'react';
 import { ArrowRight, CloudOff } from 'lucide-react';
 import {
-  IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, MAX_GENIE_QUESTIONS, PrimaryButton, QuestionListEditor, useIdeaFlow,
-  type IdeaFlow, type ProgressPhase, type StepKey,
+  IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, MAX_GENIE_QUESTIONS, PrimaryButton, QuestionListEditor, ideaProgressSteps, ideaTrail, useIdeaFlow,
+  type IdeaFlow, type StepKey,
 } from '../../journeykit';
 import { INDUSTRY_IDEAS } from '../journey';
 
 interface IdeaStageProps {
   ideaId: string;
   industryId: string;
-  phasesFor: (viewStep: StepKey) => ProgressPhase[];
   tools?: ReactNode;
   onBackFromFirst?: () => void;
   onChangeUseCase?: () => void;
 }
 
 /** Insights' idea phase: the exact Ideate steps, inside the Insights progress. Keyed by idea id by the caller. */
-export function IdeaStage({ ideaId, industryId, phasesFor, tools, onBackFromFirst, onChangeUseCase }: IdeaStageProps) {
+export function IdeaStage({ ideaId, industryId, tools, onBackFromFirst, onChangeUseCase }: IdeaStageProps) {
   const flow = useIdeaFlow(ideaId);
   if (!flow.idea) return null;
   return (
     <JourneyScreen
-      progress={<JourneyProgress phases={phasesFor(flow.viewStep)} onSelectStep={k => flow.setViewStep(k as StepKey)} trailing="then 4 build chapters" />}
+      progress={<JourneyProgress variant="trail" steps={ideaProgressSteps(flow.idea, flow.viewStep)} {...ideaTrail(flow.idea)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
       tools={<>{tools}<IdeaTools flow={flow} /></>}
     >
       <IdeaStepStage

@@ -18,7 +18,7 @@ export const STEPS: StepMeta[] = [
   { key: 'spark', label: 'Your idea', hint: 'Did I get your idea right?', minutes: 1 },
   { key: 'map', label: 'Where it fits', hint: 'Where your idea sits in the industry', minutes: 1 },
   { key: 'clarify', label: 'A few questions', hint: 'A few quick questions', minutes: 2 },
-  { key: 'shape', label: 'Pick an approach', hint: 'Three ways to deliver it', minutes: 2 },
+  { key: 'shape', label: 'Pick an approach', hint: 'Three ways to bring it to life', minutes: 2 },
   { key: 'impact', label: "What it's worth", hint: 'What could it be worth?', optional: true, minutes: 2 },
   { key: 'brief', label: 'Your brief', hint: 'Your decision-ready one-pager', minutes: 2 },
 ];
@@ -81,8 +81,12 @@ export interface IndustryMap {
   branches: IndustryBranch[];
   placedLeafId: string | null;
   adjacentLeafIds: string[];
+  /** Extra spots the idea also covers, picked by the user (max MAX_ALSO_LEAVES). */
+  alsoLeafIds?: string[];
   rationale: string;
 }
+
+export const MAX_ALSO_LEAVES = 3;
 
 export interface ClarifyQuestion {
   id: string;
@@ -95,6 +99,8 @@ export interface ClarifyQuestion {
   recommended?: number;
   /** Pick all that apply; the answer is the picks joined with "; ". */
   multi?: boolean;
+  /** Maximum selections for a multi question; absent means every option may be picked. */
+  maxPicks?: number;
   isFollowup?: boolean;
 }
 
@@ -288,6 +294,31 @@ export interface UseCaseContext {
 
 export type QuestionSource = 'use_case' | 'ai' | 'you';
 
+export interface QualityDimension {
+  key: 'problem' | 'users' | 'value' | 'feasibility' | 'risks' | 'writing';
+  label: string;
+  score: number;
+  why?: string;
+  raise?: string;
+  /** Held down because the step it depends on was skipped. */
+  capped?: boolean;
+}
+
+/** Points owned by the server; the browser never writes these. */
+export interface IdeaScore {
+  journey: number;
+  quality: number | null;
+  outcome: number;
+  total: number;
+  tier: string;
+  breakdown: QualityDimension[] | null;
+  headline?: string | null;
+  /** The idea revision the scorecard was written for. */
+  revision?: number | null;
+  scoredAt?: string | null;
+  approvedInLibrary?: boolean;
+}
+
 /** Insights builds a Genie and dashboard on existing data; Technical builds apps, agents and pipelines. */
 export type BuildTarget = 'insights' | 'technical';
 
@@ -330,6 +361,10 @@ export interface Idea {
   caseOpenedAt?: string;
   /** The AI helper was unavailable, so the user listed questions by hand. */
   classic?: boolean;
+  /** Idea Points from the server, including the AI scorecard. */
+  score?: IdeaScore;
+  /** The trail intro was shown for this idea. */
+  trailSeenAt?: string;
   createdAt: string;
   updatedAt: string;
   /** Furthest step reached. */

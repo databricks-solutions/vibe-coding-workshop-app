@@ -33,6 +33,14 @@ export function placedLeaf(idea: Idea) {
   return null;
 }
 
+/** The extra spots the user said the idea also covers, in the order they were added. */
+export function alsoLeaves(idea: Idea) {
+  const map = idea.map;
+  if (!map?.alsoLeafIds?.length) return [];
+  const all = map.branches.flatMap(b => b.leaves.map(l => ({ branch: b.name, ...l })));
+  return map.alsoLeafIds.flatMap(id => all.find(l => l.id === id && id !== map.placedLeafId) ?? []);
+}
+
 export function chosenShape(idea: Idea) {
   return idea.shapes?.find(s => s.id === idea.chosenShapeId) ?? null;
 }
@@ -63,7 +71,16 @@ export function buildContext(idea: Idea, includeDraftsFor?: StepKey): Record<str
   if (ok('spark') && idea.spark) ctx.confirmedIntent = idea.spark;
   if (ok('map') && leaf) {
     const adjacent = idea.map!.branches.flatMap(b => b.leaves).filter(l => idea.map!.adjacentLeafIds.includes(l.id)).map(l => l.name);
-    ctx.industryPlacement = { branch: leaf.branch, capability: leaf.name, problem: leaf.problem, personas: leaf.personas, surfaces: leaf.surfaces, alsoTouches: adjacent };
+    const also = alsoLeaves(idea);
+    ctx.industryPlacement = {
+      branch: leaf.branch,
+      capability: leaf.name,
+      problem: leaf.problem,
+      personas: [...new Set([...leaf.personas, ...also.flatMap(l => l.personas)])],
+      surfaces: leaf.surfaces,
+      alsoTouches: adjacent,
+      ...(also.length ? { alsoCovers: also.map(l => ({ branch: l.branch, capability: l.name, problem: l.problem })) } : {}),
+    };
   }
   if (ok('clarify')) ctx.answers = answeredPairs(idea);
   if (ok('shape') && shape) {

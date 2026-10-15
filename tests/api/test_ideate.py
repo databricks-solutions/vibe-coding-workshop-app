@@ -128,16 +128,21 @@ class TestNormalize(unittest.TestCase):
 
     def test_clarify_and_followup_carry_why_recommended_and_multi(self):
         out = ideate._normalize("clarify", {"questions": [
-            {"dimension": "user", "question": "Who?", "why": "Names the persona", "options": ["a", "b"], "recommended": 1, "multi": True},
-            {"dimension": "scope", "question": "Not do?", "options": ["a", "b"], "recommended": 7, "multi": True},
-            {"dimension": "cost", "question": "Cost?", "options": ["a", "b"], "recommended": True},
+            {"dimension": "user", "question": "Who?", "why": "Names the persona", "options": ["a", "b", "c"], "recommended": 1, "multi": True, "max_picks": 9},
+            {"dimension": "trigger", "question": "Why now?", "options": ["a", "b", "c"], "multi": True},
+            {"dimension": "scope", "question": "Not do?", "options": ["a", "b", "c", "d"], "recommended": 7, "multi": False, "max_picks": 99},
+            {"dimension": "cost", "question": "Cost?", "options": ["a", "b"], "recommended": True, "multi": True, "max_picks": 2},
         ]})
-        user, scope, cost = out["questions"]
-        self.assertEqual((user["why"], user["recommended"], user["multi"]), ("Names the persona", 1, False))
-        self.assertEqual((scope["recommended"], scope["multi"]), (-1, True))
+        user, trigger, scope, cost = out["questions"]
+        self.assertEqual((user["why"], user["recommended"], user["multi"], user["maxPicks"]), ("Names the persona", 1, True, 2))
+        self.assertEqual((trigger["multi"], trigger["maxPicks"]), (True, 2))
+        self.assertEqual((scope["recommended"], scope["multi"], scope["maxPicks"]), (-1, True, 3))
         self.assertEqual(cost["recommended"], -1)
-        f = ideate._normalize("followup", {"followup": {"question": "Scale?", "options": ["a", "b"], "recommended": 0, "multi": True}})["followup"]
+        self.assertFalse(cost["multi"])
+        self.assertNotIn("maxPicks", cost)
+        f = ideate._normalize("followup", {"followup": {"question": "Scale?", "options": ["a", "b"], "recommended": 0, "multi": True, "max_picks": 2}})["followup"]
         self.assertEqual((f["dimension"], f["recommended"], f["multi"], f["isFollowup"]), ("business", 0, False, True))
+        self.assertNotIn("maxPicks", f)
 
     def test_shape_keeps_one_recommendation_and_valid_value_fields(self):
         out = ideate._normalize("shape", {"options": [

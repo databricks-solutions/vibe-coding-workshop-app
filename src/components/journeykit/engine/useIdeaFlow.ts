@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../../../api/client';
 import { useIdeas } from './useIdeas';
-import { buildContext, caseFigures, chosenShape, nextStep, placedLeaf, stepIndex, stepMeta } from './ideaContext';
+import { alsoLeaves, buildContext, caseFigures, chosenShape, nextStep, placedLeaf, stepIndex, stepMeta } from './ideaContext';
 import { money, skippedImpact } from './businessCase';
 import { sampleById } from '../samples';
 import type {
@@ -124,24 +124,34 @@ export function useIdeaFlow(ideaId: string) {
 
   const [fallbackModel, setFallbackModel] = useState<string | null>(null);
   const lastFallback = useRef<string | null>(null);
+  // Only the newest request per AI step may write its answer; older ones are cancelled.
+  const inflight = useRef<Record<string, { seq: number; ctrl: AbortController }>>({});
+  useEffect(() => () => Object.values(inflight.current).forEach(r => r.ctrl.abort()), []);
 
   const call = useCallback(async <T,>(op: string, step: string, ctx: Record<string, unknown>, feedback?: string): Promise<T | null> => {
     if (readOnly) return null;
+    const prev = inflight.current[step];
+    prev?.ctrl.abort();
+    const mine = { seq: (prev?.seq ?? 0) + 1, ctrl: new AbortController() };
+    inflight.current[step] = mine;
+    const current = () => inflight.current[step] === mine;
     setLoading(op);
     setError(null);
     try {
-      const r = await apiClient.ideateStepWithModel<T>(step, ctx, feedback);
+      const r = await apiClient.ideateStepWithModel<T>(step, ctx, feedback, mine.ctrl.signal);
+      if (!current()) return null;
       setAiUnavailable(false);
       lastFallback.current = r.fallback ? r.model : null;
       setFallbackModel(lastFallback.current);
       return r.data;
     } catch (e) {
+      if (!current() || (e as Error).name === 'AbortError') return null;
       const status = (e as { status?: number }).status;
       if (status === undefined || UNAVAILABLE.has(status)) setAiUnavailable(true);
       setError((e as Error).message);
       return null;
     } finally {
-      setLoading(null);
+      if (current()) setLoading(null);
     }
   }, [readOnly]);
 
@@ -198,7 +208,9 @@ export function useIdeaFlow(ideaId: string) {
     } else if (step === 'map') {
       const r = await call<WithAssumptions<IndustryMap>>('map', 'map', ctx, feedback);
       if (!r) return;
-      patch({ map: { branches: r.branches, placedLeafId: r.placedLeafId, adjacentLeafIds: r.adjacentLeafIds, rationale: r.rationale } });
+      const ids = new Set(r.branches.flatMap(b => b.leaves.map(l => l.id)));
+      const alsoLeafIds = (current.map?.alsoLeafIds ?? []).filter(id => ids.has(id) && id !== r.placedLeafId);
+      patch({ map: { branches: r.branches, placedLeafId: r.placedLeafId, adjacentLeafIds: r.adjacentLeafIds, alsoLeafIds, rationale: r.rationale } });
       mergeAssumptions('map', r.assumptions);
     } else if (step === 'clarify') {
       const r = await call<{ questions: ClarifyQuestion[] }>('clarify', 'clarify', ctx, feedback);
@@ -259,7 +271,7 @@ export function useIdeaFlow(ideaId: string) {
     const n = current.genieQuestions?.length ?? 0;
     const label: Record<StepKey, string> = {
       spark: `Confirmed intent: "${current.spark?.statement ?? ''}"`,
-      map: `Placed on industry map: ${placedLeaf(current)?.name ?? 'unplaced'}`,
+      map: `Placed on industry map: ${placedLeaf(current)?.name ?? 'unplaced'}${alsoLeaves(current).length ? ` + ${alsoLeaves(current).length} more` : ''}`,
       clarify: 'Answered clarifying questions',
       shape: `Chose approach: ${chosenShape(current)?.title ?? ''}`,
       questions: `Chose ${n} question${n === 1 ? '' : 's'} for Genie`,

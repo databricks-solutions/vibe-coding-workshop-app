@@ -1,0 +1,796 @@
+"""
+Saved ideas, Idea Points, and the Insights leaderboard.
+
+Ideate and the Insights view share one idea journey. The browser keeps a
+local copy of each idea and mirrors it here, so ideas follow the person across
+browsers and can be ranked. Points are always computed on the server:
+
+- Journey points (up to 300) come from the approved steps, mirrored from
+  IDEA_STEP_SCORES in src/constants/scoring.ts.
+- Quality points (up to 600) come from an AI judge that scores the stored
+  idea on six dimensions.
+- Outcome points (up to 100) come from submitting to the library and its
+  approval (Ideate), or from starting and setting up the Genie build (Insights).
+
+The table is created at runtime (mirrors db/lakebase/ddl/14_ideate_ideas.sql).
+Without Lakebase, ideas are kept in memory for the life of the process.
+"""
+
+import json
+import logging
+import os
+import re
+import threading
+import time
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+from src.backend.api.ideate_prompts import JUDGE_PROMPT
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+try:
+    from src.backend.api.hackathon import _resolve_user
+except Exception:  # pragma: no cover
+    from src.backend.api.routes import _get_session_user as _resolve_user  # type: ignore
+
+try:
+    from src.backend.api.routes import call_databricks_serving_endpoint
+except Exception:  # pragma: no cover
+    async def call_databricks_serving_endpoint(*args, **kwargs):  # type: ignore
+        return {"response": "", "model": "none", "usage": None}
+
+
+# ============== Idea Points (mirror of src/constants/scoring.ts) ==============
+
+NOT_SURE = "Not sure yet"
+IDEA_STEP_SCORES: Dict[str, Dict[str, int]] = {
+    "ideate": {"spark": 25, "map": 25, "clarify": 60, "shape": 30, "impact": 60, "brief": 50},
+    "insights": {"spark": 20, "map": 20, "clarify": 50, "shape": 25, "questions": 50, "impact": 40, "brief": 45},
+}
+POINTS_PER_ITEM = 10
+DEPTH_GAPS = 15
+DEPTH_CASE = 15
+DEPTH_ASSUMPTION = 5
+DEPTH_ASSUMPTION_MAX = 20
+DEPTH_MAX = 50
+OUTCOME_POINTS = {
+    "ideate": {"first": 40, "second": 60},
+    "insights": {"first": 40, "second": 60},
+}
+QUALITY_MAX = 600
+TIERS: List[Tuple[int, str]] = [(750, "boardroom"), (500, "investable"), (250, "shaped"), (0, "spark")]
+
+DIMENSIONS: List[Tuple[str, str]] = [
+    ("problem", "Problem clarity"),
+    ("users", "Users and workflow"),
+    ("value", "Value case and evidence"),
+    ("feasibility", "Feasibility and data"),
+    ("risks", "Risks and kill criterion"),
+    ("writing", "Writing quality"),
+]
+# Caps when the inputs a dimension depends on are missing, so a polished brief can't hide a skipped step.
+CAP_NO_IMPACT = 40
+CAP_NO_ANSWERS = 55
+CAP_NO_MAP = 55
+
+MAX_PAYLOAD_CHARS = 400_000
+MAX_SCORES_PER_DAY = 5
+LEADERBOARD_CACHE_S = 15
+JUDGE_CONTEXT_CHARS = 14000
+
+
+def _mode(idea: Dict[str, Any]) -> str:
+    return "insights" if idea.get("mode") == "insights" else "ideate"
+
+
+def _approved(idea: Dict[str, Any]) -> List[str]:
+    a = idea.get("approved")
+    return [s for s in a if isinstance(s, str)] if isinstance(a, list) else []
+
+
+def _real_answers(idea: Dict[str, Any]) -> int:
+    answers = idea.get("answers") if isinstance(idea.get("answers"), dict) else {}
+    questions = idea.get("questions") if isinstance(idea.get("questions"), list) else []
+    n = 0
+    for q in questions:
+        if isinstance(q, dict):
+            a = answers.get(q.get("id"))
+            if a and a != NOT_SURE:
+                n += 1
+    return n
+
+
+def _impact_share(idea: Dict[str, Any]) -> Optional[float]:
+    """Share of impact answers the user gave themselves, or None when the step was skipped."""
+    impact = idea.get("impact") if isinstance(idea.get("impact"), dict) else None
+    if not impact or impact.get("skipped"):
+        return None
+    answers = impact.get("answers") if isinstance(impact.get("answers"), dict) else {}
+    if not answers:
+        return 0.0
+    said = sum(1 for a in answers.values() if isinstance(a, dict) and a.get("source") == "you said")
+    return said / len(answers)
+
+
+def step_points(idea: Dict[str, Any], step: str) -> int:
+    table = IDEA_STEP_SCORES[_mode(idea)]
+    available = table.get(step, 0)
+    if step not in _approved(idea) or not available:
+        return 0
+    if step == "clarify":
+        return min(available, POINTS_PER_ITEM * _real_answers(idea))
+    if step == "questions":
+        qs = idea.get("genieQuestions") if isinstance(idea.get("genieQuestions"), list) else []
+        return min(available, POINTS_PER_ITEM * len(qs))
+    if step == "impact":
+        share = _impact_share(idea)
+        return 0 if share is None else round(available * (0.5 + 0.5 * share))
+    return available
+
+
+def depth_points(idea: Dict[str, Any]) -> int:
+    pts = 0
+    if idea.get("gaps"):
+        pts += DEPTH_GAPS
+    if idea.get("caseOpenedAt"):
+        pts += DEPTH_CASE
+    assumptions = idea.get("assumptions") if isinstance(idea.get("assumptions"), list) else []
+    resolved = sum(1 for a in assumptions if isinstance(a, dict) and a.get("status") in ("accepted", "question"))
+    pts += min(DEPTH_ASSUMPTION_MAX, DEPTH_ASSUMPTION * resolved)
+    return min(DEPTH_MAX, pts)
+
+
+def journey_points(idea: Dict[str, Any]) -> int:
+    return sum(step_points(idea, s) for s in IDEA_STEP_SCORES[_mode(idea)]) + depth_points(idea)
+
+
+def outcome_points(idea: Dict[str, Any], approved_in_library: bool) -> int:
+    o = OUTCOME_POINTS[_mode(idea)]
+    if _mode(idea) == "insights":
+        first = bool(idea.get("lockedAt"))
+        second = idea.get("buildStage") == "studio"
+    else:
+        first = bool(idea.get("catalogRef"))
+        second = first and approved_in_library
+    return (o["first"] if first else 0) + (o["second"] if second else 0)
+
+
+def quality_points(breakdown: Optional[List[Dict[str, Any]]]) -> Optional[int]:
+    if not breakdown:
+        return None
+    scores = [int(d.get("score") or 0) for d in breakdown]
+    return round(sum(scores) / len(scores) / 100 * QUALITY_MAX) if scores else None
+
+
+def tier_for(total: int) -> str:
+    return next(name for floor, name in TIERS if total >= floor)
+
+
+# ============== Storage ==============
+
+_DDL = """CREATE TABLE IF NOT EXISTS {schema}.ideate_ideas (
+    id VARCHAR(64) PRIMARY KEY,
+    created_by VARCHAR(255) NOT NULL,
+    mode VARCHAR(20) NOT NULL DEFAULT 'ideate',
+    session_id VARCHAR(64),
+    title VARCHAR(300) NOT NULL DEFAULT '',
+    industry VARCHAR(200) NOT NULL DEFAULT '',
+    status VARCHAR(20) NOT NULL DEFAULT 'exploring',
+    step VARCHAR(20) NOT NULL DEFAULT 'spark',
+    approved JSONB NOT NULL DEFAULT '[]'::jsonb,
+    payload JSONB NOT NULL,
+    value_per_year DOUBLE PRECISION,
+    journey_points INTEGER NOT NULL DEFAULT 0,
+    quality_score INTEGER,
+    quality_breakdown JSONB,
+    quality_revision INTEGER,
+    scored_at TIMESTAMP WITHOUT TIME ZONE,
+    total_points INTEGER NOT NULL DEFAULT 0,
+    catalog_ref JSONB,
+    locked_at TIMESTAMP WITHOUT TIME ZONE,
+    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    points_reached_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITHOUT TIME ZONE
+)"""
+
+_memory: Dict[str, Dict[str, Any]] = {}
+_memory_lock = threading.Lock()
+_table_ready: Optional[bool] = None
+
+
+def _db():
+    from src.backend.api.routes import execute_insert, execute_query, get_schema, is_lakebase_configured
+    return execute_insert, execute_query, get_schema, is_lakebase_configured
+
+
+def _ensure_table() -> Optional[str]:
+    """Schema name when the table is usable, else None (memory only)."""
+    global _table_ready
+    try:
+        execute_insert, _, get_schema, configured = _db()
+        if not configured():
+            return None
+        schema = get_schema()
+    except Exception:
+        return None
+    if _table_ready is None:
+        try:
+            _table_ready = bool(execute_insert(_DDL.format(schema=schema)))
+        except Exception as e:
+            logger.warning(f"[Ideas] could not create table: {e}")
+            _table_ready = False
+        if not _table_ready:
+            logger.warning("[Ideas] table unavailable; run setup-lakebase.sh to apply 14_ideate_ideas.sql")
+    return schema if _table_ready else None
+
+
+def _json(v: Any) -> Any:
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except ValueError:
+            return None
+    return v
+
+
+def _iso(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    return v.isoformat() if hasattr(v, "isoformat") else str(v)
+
+
+def _row_out(r: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(r)
+    for k in ("payload", "approved", "quality_breakdown", "catalog_ref"):
+        out[k] = _json(out.get(k))
+    return out
+
+
+def _get_row(idea_id: str) -> Optional[Dict[str, Any]]:
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            r = _memory.get(idea_id)
+            return dict(r) if r else None
+    _, execute_query, _, _ = _db()
+    rows = execute_query(f"SELECT * FROM {schema}.ideate_ideas WHERE id = %s", (idea_id,)) or []
+    return _row_out(rows[0]) if rows else None
+
+
+def _owner_rows(email: str) -> List[Dict[str, Any]]:
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            return [dict(r) for r in _memory.values() if r["created_by"] == email and not r.get("deleted_at")]
+    _, execute_query, _, _ = _db()
+    rows = execute_query(
+        f"SELECT * FROM {schema}.ideate_ideas WHERE created_by = %s AND deleted_at IS NULL ORDER BY updated_at DESC",
+        (email,),
+    ) or []
+    return [_row_out(r) for r in rows]
+
+
+def _active_rows() -> List[Dict[str, Any]]:
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            return [{**r, "build_stage": (r.get("payload") or {}).get("buildStage"),
+                     "idea_created_at": (r.get("payload") or {}).get("createdAt") or _iso(r.get("created_at"))}
+                    for r in _memory.values() if not r.get("deleted_at") and r.get("approved")]
+    _, execute_query, _, _ = _db()
+    rows = execute_query(
+        f"SELECT id, created_by, mode, session_id, title, industry, status, step, approved, value_per_year, journey_points, "
+        f"quality_score, quality_breakdown, total_points, catalog_ref, locked_at, payload->>'buildStage' AS build_stage, "
+        f"COALESCE(payload->>'createdAt', created_at::text) AS idea_created_at, "
+        f"updated_at, points_reached_at FROM {schema}.ideate_ideas "
+        f"WHERE deleted_at IS NULL AND jsonb_array_length(approved) > 0"
+    ) or []
+    return [_row_out(r) for r in rows]
+
+
+def _write_row(row: Dict[str, Any]) -> bool:
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            prev = _memory.get(row["id"], {})
+            _memory[row["id"]] = {**prev, **row}
+        return True
+    execute_insert, _, _, _ = _db()
+    cols = ["created_by", "mode", "session_id", "title", "industry", "status", "step", "approved", "payload",
+            "value_per_year", "journey_points", "total_points", "catalog_ref", "locked_at"]
+    jsonb = {"approved", "payload", "catalog_ref"}
+    vals = [json.dumps(row[c]) if c in jsonb and row[c] is not None else row[c] for c in cols]
+    placeholders = [("%s::jsonb" if c in jsonb else "%s") for c in cols]
+    reached = "CASE WHEN {t}.total_points <> EXCLUDED.total_points THEN CURRENT_TIMESTAMP ELSE {t}.points_reached_at END".format(
+        t=f"{schema}.ideate_ideas")
+    updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c != "created_by")
+    return bool(execute_insert(
+        f"INSERT INTO {schema}.ideate_ideas (id, {', '.join(cols)}, created_at, updated_at, points_reached_at) "
+        f"VALUES (%s, {', '.join(placeholders)}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+        f"ON CONFLICT (id) DO UPDATE SET {updates}, updated_at = CURRENT_TIMESTAMP, points_reached_at = {reached} "
+        f"WHERE {schema}.ideate_ideas.created_by = EXCLUDED.created_by AND {schema}.ideate_ideas.deleted_at IS NULL",
+        tuple([row["id"]] + vals),
+    ))
+
+
+def _save_quality(idea_id: str, breakdown: List[Dict[str, Any]], quality: int, revision: int, total: int) -> bool:
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            if idea_id in _memory:
+                _memory[idea_id].update(quality_breakdown=breakdown, quality_score=quality, quality_revision=revision,
+                                        scored_at=datetime.utcnow(), total_points=total, points_reached_at=datetime.utcnow())
+        return True
+    execute_insert, _, _, _ = _db()
+    return bool(execute_insert(
+        f"UPDATE {schema}.ideate_ideas SET quality_breakdown = %s::jsonb, quality_score = %s, quality_revision = %s, "
+        f"scored_at = CURRENT_TIMESTAMP, total_points = %s, points_reached_at = CURRENT_TIMESTAMP WHERE id = %s",
+        (json.dumps(breakdown), quality, revision, total, idea_id),
+    ))
+
+
+def _soft_delete(idea_id: str) -> bool:
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            if idea_id in _memory:
+                _memory[idea_id]["deleted_at"] = datetime.utcnow()
+        return True
+    execute_insert, _, _, _ = _db()
+    return bool(execute_insert(f"UPDATE {schema}.ideate_ideas SET deleted_at = CURRENT_TIMESTAMP WHERE id = %s", (idea_id,)))
+
+
+_approved_cache: Dict[str, Any] = {"at": 0.0, "keys": set()}
+
+
+def _library_approved() -> set:
+    """(industry, use_case) pairs of Ideate submissions an admin has approved."""
+    if time.time() - _approved_cache["at"] < 60:
+        return _approved_cache["keys"]
+    keys: set = set()
+    try:
+        _, execute_query, get_schema, configured = _db()
+        if configured():
+            rows = execute_query(
+                f"SELECT DISTINCT industry, use_case FROM {get_schema()}.usecase_descriptions "
+                f"WHERE is_active = TRUE AND source = 'ideate_approved'"
+            ) or []
+            keys = {(r.get("industry"), r.get("use_case")) for r in rows}
+    except Exception as e:
+        logger.info(f"[Ideas] library approval lookup failed: {e}")
+    _approved_cache.update(at=time.time(), keys=keys)
+    return keys
+
+
+def _is_library_approved(catalog_ref: Any) -> bool:
+    ref = _json(catalog_ref)
+    if not isinstance(ref, dict):
+        return False
+    return (ref.get("industry"), ref.get("useCase")) in _library_approved()
+
+
+def _points(row: Dict[str, Any], idea: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The score object the browser shows; `idea` defaults to the stored payload."""
+    idea = idea if idea is not None else (row.get("payload") or {})
+    approved_lib = _is_library_approved(row.get("catalog_ref") or idea.get("catalogRef"))
+    journey = journey_points(idea)
+    outcome = outcome_points(idea, approved_lib)
+    breakdown = row.get("quality_breakdown") or None
+    quality = row.get("quality_score")
+    total = journey + outcome + (quality or 0)
+    return {
+        "journey": journey,
+        "quality": quality,
+        "outcome": outcome,
+        "total": total,
+        "tier": tier_for(total),
+        "breakdown": breakdown.get("dimensions") if isinstance(breakdown, dict) else None,
+        "headline": breakdown.get("headline") if isinstance(breakdown, dict) else None,
+        "revision": row.get("quality_revision"),
+        "scoredAt": _iso(row.get("scored_at")),
+        "approvedInLibrary": approved_lib,
+    }
+
+
+def _with_score(row: Dict[str, Any]) -> Dict[str, Any]:
+    idea = dict(row.get("payload") or {})
+    idea["score"] = _points(row, idea)
+    return idea
+
+
+# ============== Helpers ==============
+
+def _signed_in(request: Request) -> Optional[str]:
+    user = _resolve_user(request)
+    return user if user and user != "unknown" else None
+
+
+def _display_name(email: str) -> str:
+    from src.backend.services.lakebase import _format_display_name
+    return _format_display_name(email)
+
+
+def _avatar(email: str) -> str:
+    from src.backend.services.lakebase import AVATAR_EMOJIS
+    h = 0
+    for ch in (email or "").lower():
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    return AVATAR_EMOJIS[h % len(AVATAR_EMOJIS)]
+
+
+def _clean_payload(idea: Dict[str, Any]) -> Dict[str, Any]:
+    """Drops what the server owns or must never store."""
+    out = {k: v for k, v in idea.items() if k not in ("score", "sample")}
+    return out
+
+
+def _str(v: Any, limit: int) -> str:
+    return str(v or "").strip()[:limit]
+
+
+def _row_from_idea(idea: Dict[str, Any], owner: str, value_per_year: Optional[float]) -> Dict[str, Any]:
+    spark = idea.get("spark") if isinstance(idea.get("spark"), dict) else {}
+    catalog_ref = idea.get("catalogRef") if isinstance(idea.get("catalogRef"), dict) else None
+    approved = _approved(idea)
+    journey = journey_points(idea)
+    total_wo_quality = journey + outcome_points(idea, _is_library_approved(catalog_ref))
+    return {
+        "id": _str(idea.get("id"), 64),
+        "created_by": owner,
+        "mode": _mode(idea),
+        "session_id": _str(idea.get("sessionId"), 64) or None,
+        "title": _str(idea.get("title"), 300) or "Untitled idea",
+        "industry": _str(spark.get("industry") or idea.get("industry"), 200),
+        "status": _str(idea.get("status"), 20) or "exploring",
+        "step": _str(idea.get("step"), 20) or "spark",
+        "approved": approved,
+        "payload": idea,
+        "value_per_year": value_per_year if isinstance(value_per_year, (int, float)) and value_per_year >= 0 else None,
+        "journey_points": journey,
+        "total_points": total_wo_quality,
+        "catalog_ref": catalog_ref,
+        "locked_at": idea.get("lockedAt") or None,
+    }
+
+
+# ============== Endpoints ==============
+
+class SaveIdeaRequest(BaseModel):
+    idea: Dict[str, Any]
+    value_per_year: Optional[float] = None
+
+
+@router.get("/ideate/ideas", summary="My saved ideas, with their points")
+async def list_my_ideas(request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to save ideas."}, status_code=401)
+    return {"ideas": [_with_score(r) for r in _owner_rows(user)]}
+
+
+@router.put("/ideate/ideas/{idea_id}", summary="Save an idea; the server recomputes its points")
+async def save_idea(idea_id: str, body: SaveIdeaRequest, request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to save ideas."}, status_code=401)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", idea_id) or body.idea.get("id") != idea_id:
+        return JSONResponse({"error": "Idea id does not match."}, status_code=400)
+    if body.idea.get("sample"):
+        return JSONResponse({"error": "Samples are not saved."}, status_code=400)
+    idea = _clean_payload(body.idea)
+    if len(json.dumps(idea, ensure_ascii=False)) > MAX_PAYLOAD_CHARS:
+        return JSONResponse({"error": "This idea is too large to save."}, status_code=413)
+
+    existing = _get_row(idea_id)
+    if existing and existing.get("created_by") != user:
+        return JSONResponse({"error": "This idea belongs to someone else."}, status_code=403)
+    if existing and existing.get("deleted_at"):
+        return JSONResponse({"error": "This idea was deleted.", "deleted": True}, status_code=410)
+
+    row = _row_from_idea(idea, user, body.value_per_year)
+    if existing and existing.get("quality_score") is not None:
+        row["total_points"] += int(existing["quality_score"])
+    if not _write_row(row):
+        return JSONResponse({"error": "Couldn't save the idea. Your work is still in this browser."}, status_code=500)
+    _leaderboard_cache.clear()
+    merged = {**(existing or {}), **row}
+    return {"id": idea_id, "score": _points(merged, idea)}
+
+
+@router.get("/ideate/ideas/{idea_id}", summary="Read one idea (read-only for anyone signed in)")
+async def get_idea(idea_id: str, request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to view ideas."}, status_code=401)
+    row = _get_row(idea_id)
+    if not row or row.get("deleted_at"):
+        return JSONResponse({"error": "This idea isn't available."}, status_code=404)
+    owner = row.get("created_by") or ""
+    return {
+        "idea": _with_score(row),
+        "owner": {"displayName": _display_name(owner), "avatar": _avatar(owner)},
+        "isOwner": owner == user,
+    }
+
+
+@router.delete("/ideate/ideas/{idea_id}", summary="Delete one of my ideas")
+async def delete_idea(idea_id: str, request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to manage ideas."}, status_code=401)
+    row = _get_row(idea_id)
+    if not row:
+        return {"deleted": True}
+    if row.get("created_by") != user:
+        return JSONResponse({"error": "This idea belongs to someone else."}, status_code=403)
+    _soft_delete(idea_id)
+    _leaderboard_cache.clear()
+    return {"deleted": True}
+
+
+# ---------- AI quality judge ----------
+
+_score_log: Dict[str, List[float]] = {}
+
+
+def _judge_context(idea: Dict[str, Any]) -> str:
+    def pick(d: Any, *keys: str) -> Dict[str, Any]:
+        return {k: d.get(k) for k in keys if isinstance(d, dict) and d.get(k)}
+
+    map_ = idea.get("map") if isinstance(idea.get("map"), dict) else {}
+    leaf = None
+    also_ids = [i for i in map_.get("alsoLeafIds") or [] if isinstance(i, str)]
+    also: Dict[str, str] = {}
+    for b in map_.get("branches") or []:
+        for l in (b or {}).get("leaves") or []:
+            if l.get("id") == map_.get("placedLeafId"):
+                leaf = {"branch": b.get("name"), **pick(l, "name", "problem", "personas", "valuePool")}
+            elif l.get("id") in also_ids:
+                also[l.get("id")] = f"{b.get('name')}: {l.get('name')}"
+    if leaf and also:
+        leaf["alsoCovers"] = [also[i] for i in also_ids if i in also]
+    questions = {q.get("id"): q.get("question") for q in idea.get("questions") or [] if isinstance(q, dict)}
+    answers = [{"question": questions.get(k), "answer": v} for k, v in (idea.get("answers") or {}).items() if questions.get(k)]
+    shape = next((s for s in idea.get("shapes") or [] if isinstance(s, dict) and s.get("id") == idea.get("chosenShapeId")), None)
+    impact = idea.get("impact") if isinstance(idea.get("impact"), dict) else None
+    ctx = {
+        "mode": _mode(idea),
+        "title": idea.get("title"),
+        "rawIdea": idea.get("seed"),
+        "intent": pick(idea.get("spark"), "statement", "industry", "valueHypothesis", "businessLine"),
+        "industryPlacement": leaf,
+        "clarifyingAnswers": answers,
+        "chosenApproach": pick(shape, "title", "value", "effort", "riskiestAssumption", "cheapTest") if shape else None,
+        "genieQuestions": idea.get("genieQuestions"),
+        "impact": "skipped" if not impact or impact.get("skipped") else {
+            **pick(impact, "driverLabel", "scope"),
+            "answers": [{"value": a.get("label"), "source": a.get("source")} for a in (impact.get("answers") or {}).values() if isinstance(a, dict)],
+        },
+        "acceptedAssumptions": [a.get("text") for a in idea.get("assumptions") or [] if isinstance(a, dict) and a.get("status") == "accepted"],
+    }
+    text = json.dumps({k: v for k, v in ctx.items() if v}, ensure_ascii=False, indent=1)
+    brief = str(idea.get("brief") or "")
+    return f"<idea>\nCONTEXT:\n{text[:JUDGE_CONTEXT_CHARS // 2]}\n\nBRIEF:\n{brief[:JUDGE_CONTEXT_CHARS]}\n</idea>"
+
+
+def _parse_judge(text: str, idea: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    m = re.search(r"\{.*\}", text or "", re.S)
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(0), strict=False)
+    except ValueError:
+        return None
+    dims_in = data.get("dimensions") if isinstance(data, dict) else None
+    if not isinstance(dims_in, dict):
+        return None
+    caps: Dict[str, int] = {}
+    if _impact_share(idea) is None:
+        caps["value"] = CAP_NO_IMPACT
+    if _real_answers(idea) == 0:
+        caps["users"] = CAP_NO_ANSWERS
+    if not (idea.get("map") or {}).get("placedLeafId"):
+        caps["feasibility"] = CAP_NO_MAP
+    dims = []
+    for key, label in DIMENSIONS:
+        d = dims_in.get(key)
+        if not isinstance(d, dict):
+            return None
+        try:
+            score = int(round(float(d.get("score"))))
+        except (TypeError, ValueError):
+            return None
+        score = max(0, min(100, score, caps.get(key, 100)))
+        dims.append({
+            "key": key,
+            "label": label,
+            "score": score,
+            "why": _str(d.get("why"), 220),
+            "raise": _str(d.get("raise"), 160),
+            "capped": key in caps and score == caps[key],
+        })
+    return {"dimensions": dims, "headline": _str(data.get("headline"), 200)}
+
+
+@router.post("/ideate/ideas/{idea_id}/score", summary="Score the stored idea with the AI judge")
+async def score_idea(idea_id: str, request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to score ideas."}, status_code=401)
+    row = _get_row(idea_id)
+    if not row or row.get("deleted_at"):
+        return JSONResponse({"error": "Save the idea first."}, status_code=404)
+    if row.get("created_by") != user:
+        return JSONResponse({"error": "Only the owner can score this idea."}, status_code=403)
+    idea = row.get("payload") or {}
+    if not idea.get("brief"):
+        return JSONResponse({"error": "Write the brief first, then get your scorecard."}, status_code=400)
+
+    revision = int(idea.get("revision") or 0)
+    if row.get("quality_score") is not None and row.get("quality_revision") == revision:
+        return {"score": _points(row, idea), "cached": True}
+
+    now = time.time()
+    recent = [t for t in _score_log.get(idea_id, []) if now - t < 86400]
+    if len(recent) >= MAX_SCORES_PER_DAY:
+        return JSONResponse({"error": "You've re-scored this idea 5 times today. Try again tomorrow."}, status_code=429)
+
+    breakdown = None
+    for attempt in range(2):
+        result = await call_databricks_serving_endpoint(
+            prompt=_judge_context(idea) + ("" if attempt == 0 else "\n\nReturn ONLY the JSON object."),
+            system_prompt=JUDGE_PROMPT,
+            max_tokens=1500,
+            temperature=0.0,
+        )
+        text = (result.get("response") or "").strip()
+        if not text or text.startswith("[Error]") or text.startswith("[Mock Response"):
+            return JSONResponse({"error": "The scorecard isn't available right now. Try again in a minute."}, status_code=503)
+        breakdown = _parse_judge(text, idea)
+        if breakdown:
+            break
+    if not breakdown:
+        return JSONResponse({"error": "The scorecard came back unreadable. Please try again."}, status_code=502)
+
+    _score_log[idea_id] = recent + [now]
+    quality = quality_points(breakdown["dimensions"]) or 0
+    merged = {**row, "quality_breakdown": breakdown, "quality_score": quality, "quality_revision": revision,
+              "scored_at": datetime.utcnow()}
+    points = _points(merged, idea)
+    _save_quality(idea_id, breakdown, quality, revision, points["total"])
+    _leaderboard_cache.clear()
+    logger.info(f"[Ideas] Scored {idea_id} for {user}: quality {quality}, total {points['total']}")
+    return {"score": points, "cached": False}
+
+
+# ---------- Insights leaderboard ----------
+
+_leaderboard_cache: Dict[str, Any] = {}
+
+
+def _status_label(r: Dict[str, Any]) -> str:
+    if r.get("mode") == "insights":
+        if r.get("build_stage") == "studio":
+            return "live"
+        return "building" if r.get("locked_at") else "shaping"
+    if r.get("catalog_ref"):
+        return "approved" if _is_library_approved(r.get("catalog_ref")) else "submitted"
+    return r.get("status") or "exploring"
+
+
+def _parse_ts(v: Any) -> Optional[datetime]:
+    if isinstance(v, datetime):
+        return v.replace(tzinfo=None)
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        return None
+
+
+def _season_start() -> Optional[datetime]:
+    try:
+        from src.backend.api.leaderboard_seasons import season_start
+        return season_start("insights")
+    except Exception:
+        return None
+
+
+def insights_leaderboard_entries(limit: int = 50, mode: str = "", industry: str = "") -> List[Dict[str, Any]]:
+    """Ranked rows for the live season; ideas started before the season's start sit out (they are kept)."""
+    limit = max(1, min(limit, 100))
+    key = f"{limit}|{mode}|{industry}"
+    cached = _leaderboard_cache.get(key)
+    if cached and time.time() - cached["at"] < LEADERBOARD_CACHE_S:
+        return cached["entries"]
+    since = _season_start()
+    entries = []
+    for r in _active_rows():
+        if since:
+            created = _parse_ts(r.get("idea_created_at"))
+            if created and created < since:
+                continue
+        if mode in ("ideate", "insights") and r.get("mode") != mode:
+            continue
+        if industry and (r.get("industry") or "").lower() != industry.lower():
+            continue
+        approved = r.get("approved") or []
+        quality = r.get("quality_score")
+        breakdown = r.get("quality_breakdown") if isinstance(r.get("quality_breakdown"), dict) else {}
+        # journey_points is recomputed on every save, so it is current; outcome depends on library approval.
+        idea_stub = {"mode": r.get("mode"), "catalogRef": r.get("catalog_ref"), "lockedAt": r.get("locked_at"),
+                     "buildStage": r.get("build_stage")}
+        outcome = outcome_points(idea_stub, _is_library_approved(r.get("catalog_ref")))
+        journey = int(r.get("journey_points") or 0)
+        total = journey + outcome + (quality or 0)
+        email = r.get("created_by") or ""
+        entries.append({
+            "idea_id": r["id"],
+            "title": r.get("title") or "Untitled idea",
+            "mode": r.get("mode") or "ideate",
+            "industry": r.get("industry") or "",
+            "user_id": email,
+            "display_name": _display_name(email),
+            "avatar": _avatar(email),
+            "total": total,
+            "journey": journey,
+            "quality": quality,
+            "outcome": outcome,
+            "tier": tier_for(total),
+            "dimensions": [{"key": d.get("key"), "label": d.get("label"), "score": d.get("score")}
+                           for d in breakdown.get("dimensions") or []],
+            "approved": approved,
+            "step": r.get("step") or "spark",
+            "status": _status_label(r),
+            "value_per_year": r.get("value_per_year"),
+            "session_id": r.get("session_id"),
+            "updated_at": _iso(r.get("updated_at")),
+            "_reached": _iso(r.get("points_reached_at")) or "",
+        })
+    entries.sort(key=lambda e: (-e["total"], e["_reached"]))
+    entries = entries[:limit]
+    for i, e in enumerate(entries, start=1):
+        e["rank"] = i
+        e.pop("_reached", None)
+    _leaderboard_cache[key] = {"at": time.time(), "entries": entries}
+    return entries
+
+
+@router.get("/insights/leaderboard", summary="Ideas ranked by Idea Points, one row per idea")
+async def insights_leaderboard(request: Request, limit: int = 50, mode: str = "", industry: str = ""):
+    user = _signed_in(request) or ""
+    entries = insights_leaderboard_entries(limit, mode, industry)
+    return [{**e, "is_mine": bool(user) and e["user_id"] == user} for e in entries]
+
+
+@router.get("/ideate/ideas-summary", summary="Admin glance: funnel and quality across saved ideas")
+async def ideas_summary(request: Request):
+    if not _signed_in(request):
+        return JSONResponse({"error": "Sign in to view analytics."}, status_code=401)
+    rows = _active_rows()
+    steps = {m: list(t.keys()) for m, t in IDEA_STEP_SCORES.items()}
+    funnel = {m: {s: 0 for s in steps[m]} for m in steps}
+    by_mode = {"ideate": 0, "insights": 0}
+    scored = []
+    for r in rows:
+        m = r.get("mode") if r.get("mode") in steps else "ideate"
+        by_mode[m] += 1
+        for s in r.get("approved") or []:
+            if s in funnel[m]:
+                funnel[m][s] += 1
+        if r.get("quality_score") is not None:
+            scored.append(int(r["quality_score"]))
+    return {
+        "total": len(rows),
+        "byMode": by_mode,
+        "funnel": funnel,
+        "scored": len(scored),
+        "avgQuality": round(sum(scored) / len(scored)) if scored else None,
+        "qualityMax": QUALITY_MAX,
+    }

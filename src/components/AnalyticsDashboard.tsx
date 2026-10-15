@@ -16,9 +16,14 @@ import {
   ChevronDown,
   ChevronRight,
   SkipForward,
+  Lightbulb,
+  Mountain,
+  Award,
+  FileText,
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type {
+  IdeasSummary,
   AnalyticsData,
   AnalyticsStepCount,
   AnalyticsChapterFeedback,
@@ -28,6 +33,7 @@ import type {
 } from '../api/client';
 import { ALL_STEPS } from '../constants/workflowSections';
 import { CHAPTERS } from '../constants/scoring';
+import { stepsFor } from './journeykit/engine/types';
 
 type Tab = 'overview' | 'feedback' | 'chapter-feedback' | 'users';
 
@@ -98,7 +104,7 @@ function HorizontalBarList({
     );
   }
 
-  const maxCount = items[0]?.count ?? 1;
+  const maxCount = Math.max(1, ...items.map(i => i.count));
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">
@@ -702,8 +708,10 @@ export function AnalyticsDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
+  const [ideas, setIdeas] = useState<IdeasSummary | null>(null);
 
   useEffect(() => {
+    apiClient.ideasSummary().then(setIdeas).catch(() => {});
     apiClient
       .getAnalytics()
       .then(setData)
@@ -842,6 +850,55 @@ export function AnalyticsDashboard() {
             />
           </div>
         </div>
+
+        {ideas && ideas.total > 0 && (
+          <div className="mb-6">
+            <div className="text-ui-2xs font-bold text-muted-foreground uppercase tracking-[0.1em] mb-2 px-1">
+              Insights
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <StatCard
+                label="Ideas"
+                value={ideas.total}
+                icon={Lightbulb}
+                accent="bg-amber-500/10 text-amber-500"
+                subtitle={`${ideas.byMode.ideate} Ideate · ${ideas.byMode.insights} Insights`}
+              />
+              <StatCard
+                label="Briefs Written"
+                value={(ideas.funnel.ideate.brief ?? 0) + (ideas.funnel.insights.brief ?? 0)}
+                icon={FileText}
+                accent="bg-violet-500/10 text-violet-500"
+                subtitle={`${Math.round((((ideas.funnel.ideate.brief ?? 0) + (ideas.funnel.insights.brief ?? 0)) / ideas.total) * 100)}% reach the brief`}
+              />
+              <StatCard
+                label="Avg Quality"
+                value={ideas.avgQuality ?? '—'}
+                icon={Award}
+                accent="bg-emerald-500/10 text-emerald-500"
+                subtitle={`out of ${ideas.qualityMax} · ${ideas.scored} scored`}
+              />
+              <StatCard
+                label="Genie Builds"
+                value={ideas.funnel.insights.brief ?? 0}
+                icon={Mountain}
+                accent="bg-sky-500/10 text-sky-500"
+                subtitle="Insights ideas past base camp"
+              />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-3">
+              {(['ideate', 'insights'] as const).map(mode => (
+                <HorizontalBarList
+                  key={mode}
+                  title={mode === 'ideate' ? 'Ideate Funnel' : 'Insights Funnel'}
+                  subtitle={`Ideas that cleared each stop (of ${ideas.byMode[mode]})`}
+                  items={stepsFor(mode).map(st => ({ label: st.label, count: ideas.funnel[mode][st.key] ?? 0 }))}
+                  emptyMessage="No ideas yet."
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Workshop Level Distribution */}
         {by_level.length > 0 && (
