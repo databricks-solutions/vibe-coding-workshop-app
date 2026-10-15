@@ -226,8 +226,10 @@ and coaching whether driving Genie Code or the UI. Answers persist to the intera
 - [ ] Prose passed through `humanizer` + `economist-style`; tokens/gate strings preserved (§7).
 - [ ] `ui-driven` steps are coached, not quizzed (§4).
 - [ ] `gagent_benchmarks` is `confirm`, `skippable=false` (§8).
-- [ ] Static option coaching is authored for every question — it is the adaptive-coaching **fallback**
-      (§11.4), not just belt-and-suspenders.
+- [ ] Static option coaching is authored for every question — `vibe_submit_answer` returns it. It is not
+      the adaptive-coaching fallback: that is the step's static help with `is_fallback: true` (§11.4); the
+      reason is internal (`CoachOutcome.reason`, `services/coaching.py:452`) and appears only as
+      `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:551`).
 
 ---
 
@@ -275,7 +277,7 @@ always gets useful coaching; the LLM only makes it *better and more personal* wh
 
 ### 11.5 Tone & guardrails (same bars as authored prose)
 Generated coaching obeys the same contract as §7:
-- **Recommend, don't interrogate.** 2–5 sentences, confident guide, not a form or a quiz.
+- **Recommend, don't interrogate.** One short paragraph: at most 4 sentences and about 80 words, confident guide, not a form or a quiz.
 - **`humanizer`/`economist-style` bars.** No emoji, no decorated headers, no marketing adjectives,
   no filler — but stay **precise and literal** about tokens, gate names, and definitions (§7).
 - **Respect settled decisions.** If the learner chose a non-recommended option, coach that path's

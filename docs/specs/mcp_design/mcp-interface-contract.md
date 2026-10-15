@@ -702,7 +702,7 @@ tests (§4).
   "required": ["coaching", "focus", "section_tag", "is_fallback"],
   "properties": {
     "coaching":    { "type": "string",
-                     "description": "2–5 sentences the agent reads out; explains what's happening and why. Never restates the step prompt." },
+                     "description": "One short paragraph (at most 4 sentences, about 80 words) the agent reads out; explains what's happening and why. Never restates the step prompt." },
     "focus":       { "type": "string", "enum": ["what_now","why","unblock","review"] },
     "section_tag": { "type": "string", "description": "The step the coaching is grounded on." },
     "grounded_on": { "type": "array", "items": { "type": "string" },
@@ -763,11 +763,11 @@ FOCUS (from the CONTEXT's `focus` field)
 - review   : recap — what they've accomplished so far and how this step builds on it.
 
 STYLE
-- 2–5 sentences. Confident guide, not a form or a quiz. Recommend, don't interrogate (D5 §3, §7).
+- One short paragraph: at most 4 sentences and about 80 words. Confident guide, not a form or a quiz. Recommend, don't interrogate (D5 §3, §7).
 - No emoji, no numbered/decorated headers, no marketing adjectives, no filler (economist/humanizer
   bars, D5 §7). Precise and literal about tokens, gate names, and definitions — do not vague them.
 - Output prose only. No JSON, no markdown headings — the tool wraps your text into CoachResult.
-- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it ("the table below"). Never draw one, and never describe it line by line.
+- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it ("the table below"). Never draw one, and never describe it line by line. The pointer counts toward the 4 sentences.
 ```
 
 > **D12 (2026-10-13):** the last STYLE line was added by D12 coach visuals (`coaching.COACH_SYSTEM`,

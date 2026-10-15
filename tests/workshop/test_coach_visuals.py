@@ -658,11 +658,12 @@ def test_nit_sync_from_lakebase_alignment():
 def test_coach_system_visual_sentence():
     sentence = (
         "- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it "
-        "(\"the table below\"). Never draw one, and never describe it line by line."
+        "(\"the table below\"). Never draw one, and never describe it line by line. "
+        "The pointer counts toward the 4 sentences."
     )
     assert sentence in coaching.COACH_SYSTEM.split("\n")
     style = coaching.COACH_SYSTEM.split("STYLE\n", 1)[1]
-    assert style.split("\n")[0].startswith("- 2–5 sentences.")
+    assert style.split("\n")[0].startswith("- One short paragraph: at most 4 sentences and about 80 words.")
     assert "- Output prose only." in style
 
 
