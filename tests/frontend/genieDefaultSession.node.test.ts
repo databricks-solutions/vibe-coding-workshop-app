@@ -36,6 +36,18 @@ function appBlock(name: string): string {
   return APP.slice(start, next === -1 ? undefined : next);
 }
 
+/** The brace-balanced body that follows `head` in `source` (head ends with `{`). */
+function bracedBody(source: string, head: string): string {
+  const start = source.indexOf(head);
+  assert.ok(start >= 0, `found ${head}`);
+  let depth = 0;
+  for (let i = start + head.length - 1; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}' && --depth === 0) return source.slice(start + head.length, i);
+  }
+  throw new Error(`unbalanced braces after ${head}`);
+}
+
 const ALL_ON_FLAGS = {
   includeLakehouse: false,
   includeGenieOntology: true,
@@ -178,6 +190,24 @@ test('a first-time default session (nothing stored) takes the defaults; one with
   assert.match(appBlock('getOrCreateDefaultSession'), /if \(isPristineSession\(response\)\) \{\s*applyNewSessionDefaults\(/);
 });
 
+test('a failed default-session fetch lands on Genie Accelerator with ontology and lakehouse off, and writes nothing', () => {
+  const failed = bracedBody(appBlock('getOrCreateDefaultSession'), '} catch (err) {');
+  // D-165: the level the fallback defaults give, ontology off (not the fallback's
+  // ontology: a later progress save stores only the level, which reloads off).
+  assert.match(failed, /applyNewSessionState\(newSessionLevel\(FALLBACK_WORKSHOP_DEFAULTS\), false\);/);
+  assert.equal(client.FALLBACK_WORKSHOP_DEFAULTS.defaultTrack, 'genie-accelerator');
+  assert.match(appBlock('newSessionLevel'), /defaults\.defaultTrack in WORKSHOP_LEVELS \? defaults\.defaultTrack as WorkshopLevel : 'genie-accelerator'/);
+  assert.doesNotMatch(failed, /setWorkshopLevel|setIncludeGenieOntology|includeGenieOntology/, 'only the shared helper sets the level and ontology');
+  // The backend is unreachable and the local id is unsaved by design: no write, no outline fetch.
+  assert.doesNotMatch(failed, /apiClient\.|updateSessionMetadata|fetchOutline|applyNewSessionDefaults/);
+
+  // The helper is state only, and the success path sets its state through it too.
+  const state = bracedBody(appBlock('applyNewSessionState'), '(level: WorkshopLevel, ontology: boolean) => {');
+  assert.equal(state.trim().split(/\s*\n\s*/).join(' '),
+    'setWorkshopLevel(level); setIncludeLakehouse(false); setIncludeGenieOntology(ontology);');
+  assert.match(appBlock('applyNewSessionDefaults'), /applyNewSessionState\(level, ontology\);/);
+});
+
 test('a resumed session without stored ontology still hydrates off (absent = off)', () => {
   const block = appBlock('loadSession');
   assert.match(block, /setIncludeGenieOntology\(!!sessionParams\.include_genie_ontology\)/);
@@ -210,6 +240,15 @@ test('picking an assistant on a new Genie Accelerator session keeps it there', (
   assert.equal(guard(false, 'genie-accelerator', 'genie-accelerator'), false, 'Genie Code');
   // Any future assistant default can't move the new-session default either.
   assert.equal(guard(false, 'genie-accelerator', 'lakehouse'), false);
+});
+
+test('only shouldApplyAssistantDefault lets an assistant pick move the level', () => {
+  const block = appBlock('handleCodingAssistantChange');
+  const guarded = bracedBody(block, 'if (shouldApplyAssistantDefault) {');
+  assert.match(guarded, /setWorkshopLevel\(nextLevel\);/);
+  assert.match(guarded, /workshop_level: nextLevel,/);
+  const unguarded = block.replace(guarded, '');
+  assert.doesNotMatch(unguarded, /setWorkshopLevel|workshop_level/, 'no level change outside the guard');
 });
 
 test('the assistant fallback still applies to a legacy end-to-end session never explicitly placed', () => {

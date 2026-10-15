@@ -538,6 +538,10 @@ export default function App() {
       const localSessionId = crypto.randomUUID();
       setSessionId(localSessionId);
       setSessionSaved(false);
+      // New-session track with ontology and lakehouse off, and no metadata write
+      // (D-165): once the backend recovers, progress saves store only the level,
+      // and a session without a stored ontology reloads with it off.
+      applyNewSessionState(newSessionLevel(FALLBACK_WORKSHOP_DEFAULTS), false);
       window.history.replaceState({}, '', `?sessionId=${localSessionId}${window.location.hash}`);
       // Still finish loading even on error
       finishSessionLoading();
@@ -553,12 +557,16 @@ export default function App() {
   const newSessionLevel = (defaults: WorkshopDefaults): WorkshopLevel => (
     defaults.defaultTrack in WORKSHOP_LEVELS ? defaults.defaultTrack as WorkshopLevel : 'genie-accelerator'
   );
-  const applyNewSessionDefaults = (id: string, defaults: WorkshopDefaults, view: WorkflowViewMode): WorkshopLevel => {
-    const level = newSessionLevel(defaults);
-    const ontology = level === 'genie-accelerator' && defaults.includeGenieOntology;
+  /** The UI half of the new-session defaults, shared with the failed-default-session path. */
+  const applyNewSessionState = (level: WorkshopLevel, ontology: boolean) => {
     setWorkshopLevel(level);
     setIncludeLakehouse(false);
     setIncludeGenieOntology(ontology);
+  };
+  const applyNewSessionDefaults = (id: string, defaults: WorkshopDefaults, view: WorkflowViewMode): WorkshopLevel => {
+    const level = newSessionLevel(defaults);
+    const ontology = level === 'genie-accelerator' && defaults.includeGenieOntology;
+    applyNewSessionState(level, ontology);
     apiClient.updateSessionMetadata(newSessionMetadata(
       id,
       { defaultTrack: level, includeGenieOntology: ontology },
