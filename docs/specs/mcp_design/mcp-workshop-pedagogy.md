@@ -267,8 +267,8 @@ One lens per call, chosen by the learner's phrasing (D2 §3.8 `focus` enum):
 
 ### 11.4 Fail-open to authored coaching
 The generated layer must **degrade to the authored layer**, never to nothing. On any FMAPI
-error/timeout — or when no serving endpoint is configured — `vibe_explain_step` with `focus` returns the static,
-option-keyed coaching from the question bank (§5.1) with `is_fallback:true` (D2 §3.8). (As shipped, the
+error/timeout — or when no serving endpoint is configured — `vibe_explain_step` with `focus` returns the step's static
+help with `is_fallback: true` and a `reason` (`services/coaching.py:448`, `:496`, `:531`, `:536`; D2 §3.8). (As shipped, the
 fallback is the static step help — `why`/`how_to_apply`/`expected_output` — with `coaching` null,
 `coaching.py:3–5`.) A learner
 always gets useful coaching; the LLM only makes it *better and more personal* when available.
@@ -298,7 +298,8 @@ Each coaching turn is logged to `session_interactions` with `kind='coaching'` an
 2. **Comprehension-check density.** One-per-section default (recommended) vs. author's discretion.
    Too many turns the track back into the interrogation §17 removed.
 3. **Coaching for free-text answers — resolved by §11.** Static, option-keyed coaching stays the
-   authored floor and the deterministic fallback; §11's adaptive layer (`vibe_explain_step` with `focus`) handles
+   authored floor; the deterministic fallback is the step's static help with `is_fallback: true` and a
+   `reason` (`services/coaching.py:448`, `:496`, `:531`, `:536`); §11's adaptive layer (`vibe_explain_step` with `focus`) handles
    free-text and open "why/what-now" questions with a **grounded, guarded** LLM call. Open sub-q:
    should `vibe_submit_answer` *also* route free-text comprehension answers through the coaching
    model (richer) or keep returning the static option coaching and let the learner pull `vibe_explain_step` with `focus`

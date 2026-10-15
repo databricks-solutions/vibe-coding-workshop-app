@@ -46,7 +46,7 @@ space") that can pull a learner ahead of the current step. Not addressed here; s
 ### 2.1 The coach is prose-only by construction
 
 - `COACH_SYSTEM` asks for "2–5 sentences … Output prose only. No JSON, no markdown headings"
-  (`src/backend/services/coaching.py:33-60`), with `COACH_MAX_TOKENS = 800` (`:68`).
+  (`src/backend/services/coaching.py:35-63`), with `COACH_MAX_TOKENS = 800` (`:68`).
 - `_scrub_output` rejects any code fence (`coaching.py:194`). A diagram is a fence, so a model
   reply containing one is dropped and the learner gets the static fallback (`is_fallback: true`).
 - `StepHelpResult.coaching` is `str | None`, and there is no visual field
