@@ -677,6 +677,11 @@ def _load_session_for_request(
     caller = _request_user(context)
     if owner and caller != "unknown" and owner != caller:
         return None
+    # Strict owner: an HTTP request with no user identity cannot open a session
+    # someone owns. In-process calls (no context) stay trusted.
+    if owner and owner != "unknown" and _strict_owner_enabled() and _anonymous_http_caller(context):
+        logger.warning("MCP refused an anonymous request for an owned session")
+        return None
     if _record_out is not None:
         _record_out.append(record)
     return build_session_state(record), session_id
@@ -1121,6 +1126,15 @@ def _generate_step_prompt(
 # through _generate_step_prompt unchanged (same cache key, single-flight, budget
 # and negative cache) on a daemon thread, so the current response never waits.
 _STEP_PROMPT_PREFETCH_DISABLED_VALUES = {"0", "false", "off", "no"}
+
+
+def _strict_owner_enabled() -> bool:
+    """Switch, read per call: VIBE_MCP_STRICT_OWNER=0/false/off/no lets an HTTP request
+    with no user identity open an owned session again (the old behaviour). Unset = on."""
+
+    import os
+
+    return os.getenv("VIBE_MCP_STRICT_OWNER", "").strip().lower() not in _STEP_PROMPT_PREFETCH_DISABLED_VALUES
 
 
 def _step_prompt_prefetch_enabled() -> bool:

@@ -126,7 +126,7 @@ export const RELEASES: Release[] = [
       {
         title: 'New app settings for facilitators',
         description:
-          'app.yaml gains MCP_MOUNT_ENABLED (the Genie Code MCP server, on by default), VIBE_DEFAULT_GENIE_ONTOLOGY (set "false" if the workspace has no Genie One Pages), VIBE_STEP_PROMPT_PREFETCH, and the coach’s VIBE_COACH_ENDPOINT and VIBE_COACH_BUDGET_S. The facilitator guide lists each one with its default.',
+          'app.yaml gains MCP_MOUNT_ENABLED (the Genie Code MCP server, on by default), VIBE_DEFAULT_GENIE_ONTOLOGY (set "false" if the workspace has no Genie One Pages), VIBE_STEP_PROMPT_PREFETCH, VIBE_MCP_STRICT_OWNER (a Genie Code request without a user identity cannot open another user’s session), and the coach’s VIBE_COACH_ENDPOINT and VIBE_COACH_BUDGET_S. The facilitator guide lists each one with its default.',
         category: 'new',
         audience: 'installer',
         icon: 'wrench',
