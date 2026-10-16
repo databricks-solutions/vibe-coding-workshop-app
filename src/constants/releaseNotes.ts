@@ -47,6 +47,83 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.7.0',
+    date: '2026-10-15',
+    title: 'The climb, saved ideas, points and leaderboard seasons',
+    items: [
+      {
+        title: 'Your ideas are saved and follow you',
+        description:
+          'Ideas are now saved to your account, so they follow you across browsers. Each idea earns Idea Points on the server for the journey steps you finish, an AI quality judge and its outcome, with tiers and a scorecard.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'The journey is drawn as a climb',
+        description:
+          'The idea journey now opens on a trailhead scene and climbs to a summit flag, with a compact trail in each step header and celebrations at milestones. Named Back and Next buttons sit at the top of every step, and the trail dots show their step on hover.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'Value and feasibility planning',
+        description:
+          'After you pick your data, a value-vs-feasibility matrix places the build in one of four quadrants, such as Quick win or Strategic bet, with confidence ranges and a portfolio comparison. Each axis comes with concrete actions that raise it, and the evidence is saved into the build brief.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Leaderboard seasons and an Insights leaderboard',
+        description:
+          'Facilitators can archive, reset and restore both leaderboards by season without deleting anything, and Insights builds now have a leaderboard of their own.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'database',
+      },
+      {
+        title: 'Builds that promise an app always include it',
+        description:
+          'When the chosen approach promises an app, its app, Lakebase write-back, embedded Genie and deployment steps are always part of the build and can no longer disappear. If a required step is unavailable, Start stops with a clear error instead of quietly dropping it.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'wrench',
+      },
+      {
+        title: 'Clearer idea steps',
+        description:
+          'An approved idea now shows its business case, quality score and next actions in one place and goes straight on to choosing data in Insights. Blueprint results appear only once matching has finished, clarification questions allow one or several answers as fits the question, and loading screens show animated art instead of a blank space.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'A notice when a newer version is deployed',
+        description:
+          'If the app is redeployed while you have it open, a notice on every page asks you to reload. Your saved progress is kept.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'rocket',
+      },
+      {
+        title: 'Sonnet 5.5 is the default model',
+        description:
+          'New deployments default to Claude Sonnet 5.5, falling back to Sonnet 4.6 and then 4.5 before the open models. Deployments that set DATABRICKS_SERVING_ENDPOINT keep their own model.',
+        category: 'improved',
+        audience: 'installer',
+        icon: 'cpu',
+      },
+      {
+        title: 'The completed trail line draws correctly',
+        description: 'The completed part of the trail no longer shows as broken dashes.',
+        category: 'fix',
+        audience: 'attendee',
+      },
+    ],
+  },
+  {
     version: '2.6.0',
     date: '2026-10-13',
     title: 'Insights follows the Genie Accelerator',
