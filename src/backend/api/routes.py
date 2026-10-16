@@ -5172,6 +5172,32 @@ from src.backend.workshop.gate_merge import _merge_app_gates  # noqa: E402,F401 
 
 
 # Session Pydantic Models
+# Levels whose schema prefix comes from the workshop's lakehouse schema, not the use case.
+ACCELERATOR_SCHEMA_LEVELS = ('accelerator', 'genie-accelerator')
+
+
+def derive_user_schema_prefix(current_user: Optional[str], uc_name: Optional[str], is_accelerator: bool) -> Optional[str]:
+    """``<first>_<last initial>_<suffix>``: the suffix is the workshop's lakehouse schema
+    on an accelerator level, else the use-case name as a slug; None without either.
+    Shared by /session/update-metadata and the MCP track switch."""
+    import re as _re
+    _user_part = "user"
+    if current_user and '@' in current_user:
+        _local = current_user.split('@')[0]
+        _parts = _local.split('.')
+        _first = _parts[0].lower()
+        _last_init = _parts[1][0].lower() if len(_parts) > 1 and _parts[1] else ''
+        _user_part = f"{_first}_{_last_init}" if _last_init else _first
+    if is_accelerator:
+        _wp = get_workshop_parameters_sync()
+        _suffix = _wp.get('chapter_3_lakehouse_schema', 'vibe_coding')
+    elif uc_name and uc_name.strip():
+        _suffix = _re.sub(r'[^a-z0-9]+', '_', uc_name.strip().lower()).strip('_')
+    else:
+        _suffix = None
+    return f"{_user_part}_{_suffix}" if _suffix else None
+
+
 def _genie_ontology_mirror(
     include_genie_ontology: Optional[bool], flags: Optional[Dict[str, bool]]
 ) -> tuple[Dict[str, Any], Optional[Dict[str, bool]]]:
@@ -6015,33 +6041,17 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
         )
         _should_derive = bool(_uc_name and _uc_name.strip()) or request_body.workshop_level is not None
         if _should_derive:
-            import re as _re
-            _user_part = "user"
-            if current_user and '@' in current_user:
-                _local = current_user.split('@')[0]
-                _parts = _local.split('.')
-                _first = _parts[0].lower()
-                _last_init = _parts[1][0].lower() if len(_parts) > 1 and _parts[1] else ''
-                _user_part = f"{_first}_{_last_init}" if _last_init else _first
-            
             # Check if accelerator mode (from request or stored session)
-            _is_accelerator = request_body.workshop_level in ('accelerator', 'genie-accelerator')
+            _is_accelerator = request_body.workshop_level in ACCELERATOR_SCHEMA_LEVELS
             if not _is_accelerator and request_body.workshop_level is None:
                 _lvl_sql = f"SELECT workshop_level FROM {get_schema()}.sessions WHERE session_id = %s"
                 _lvl_row = execute_query(_lvl_sql, (request_body.session_id,))
-                _is_accelerator = bool(_lvl_row and _lvl_row[0].get('workshop_level') in ('accelerator', 'genie-accelerator'))
-            
-            if _is_accelerator:
-                _wp = get_workshop_parameters_sync()
-                _suffix = _wp.get('chapter_3_lakehouse_schema', 'vibe_coding')
-            elif _uc_name and _uc_name.strip():
-                _suffix = _re.sub(r'[^a-z0-9]+', '_', _uc_name.strip().lower()).strip('_')
-            else:
-                _suffix = None
-            
-            if _suffix:
-                _session_param_patch['user_schema_prefix'] = f"{_user_part}_{_suffix}"
-                logger.info(f"[Session API] Derived user_schema_prefix: {_session_param_patch['user_schema_prefix']} (accelerator={_is_accelerator})")
+                _is_accelerator = bool(_lvl_row and _lvl_row[0].get('workshop_level') in ACCELERATOR_SCHEMA_LEVELS)
+
+            _prefix = derive_user_schema_prefix(current_user, _uc_name, _is_accelerator)
+            if _prefix:
+                _session_param_patch['user_schema_prefix'] = _prefix
+                logger.info(f"[Session API] Derived user_schema_prefix: {_prefix} (accelerator={_is_accelerator})")
         
         if _session_param_patch:
             try:

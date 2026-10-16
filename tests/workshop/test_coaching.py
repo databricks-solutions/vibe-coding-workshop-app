@@ -609,7 +609,7 @@ def test_invalid_focus_is_invalid_parameter(env):
 
 def test_c12_tool_count_and_annotations():
     tools = {tool.name: tool for tool in mcp_server.mcp._tool_manager.list_tools()}
-    assert len(tools) == 7
+    assert len(tools) == 10
     tool = tools["vibe_explain_step"]
     annotations = tool.annotations
     assert annotations.readOnlyHint is True

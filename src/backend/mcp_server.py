@@ -34,12 +34,21 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel
 from .services import coach_visuals, coaching
 from .services.lakebase import (
     append_session_interaction,
+    get_user_sessions,
     is_lakebase_configured,
     load_session,
     save_session_applying_mcp_delta,
 )
-from .workshop import assembler, engine, manifest
+from .workshop import assembler, engine, manifest, track_switch
 from .workshop.state import build_session_state
+from .workshop.track_names import (
+    TrackMatch,
+    TrackNameError,
+    display_name,
+    parse_start_line,
+    resolve_track_name,
+    valid_tracks_text,
+)
 from .workshop.track_resolution import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -109,6 +118,12 @@ The hard stops: the benchmark step requires an explicit confirmation before it c
 with the Genie Ontology on, Author Pages and Write the Routing Page each need the learner to
 confirm they published the Page in the Databricks UI.
 Everything else is designed to keep moving without pop-up forms or client elicitation.
+
+Moving between the web UI and Genie Code: it is one session either way. The web UI shows a line
+like "Start a workshop track: Genie Accelerator (session <id>)"; start with that session id to
+continue the same session, and open `session_url` to go the other way. `vibe_switch_track` changes
+the track under the web UI's rules, `vibe_save_session` names the session, and `vibe_list_sessions`
+finds earlier sessions.
 
 Troubleshooting:
 - 20-tool budget: disconnect other MCP servers if these tools are missing.
@@ -213,6 +228,51 @@ class StartTrackResult(BaseModel):
     # Deep-link handoff (Workstream 2): a ready-to-open web-UI URL for this session
     # (``<base>?sessionId=<id>``), or None when the request host is unavailable.
     session_url: str | None = None
+    # The track's standalone name ("Databricks Apps + Lakebase"), for the learner.
+    track_name: str | None = None
+    # Set when attaching to an existing session moved it off another track.
+    switched_from: str | None = None
+
+
+class SwitchTrackResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    track: str
+    track_name: str
+    previous_track: str
+    # False when the session was already on ``track`` (nothing written).
+    switched: bool
+    outline: list[OutlineItem]
+    session_url: str | None = None
+
+
+class SaveSessionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    session_name: str
+    is_saved: bool
+    session_url: str | None = None
+
+
+class SessionSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    session_name: str
+    track: str
+    track_name: str
+    use_case_label: str | None = None
+    updated_at: str | None = None
+    is_saved: bool
+    session_url: str | None = None
+
+
+class ListSessionsResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sessions: list[SessionSummary]
 
 
 class CompleteStepResult(BaseModel):
@@ -486,6 +546,9 @@ def _error_result(code: str, message: str, **details: str) -> _ContractError:
 
 
 def _request_user(context: Context | None) -> str:
+    """The caller's email from the proxy headers (the web's _get_session_user list),
+    else PGUSER, else "unknown". Logs which source matched, never the value, so a
+    deployment can confirm Genie Code requests carry an identity header."""
     if context is not None:
         try:
             request = context.request_context.request
@@ -500,13 +563,41 @@ def _request_user(context: Context | None) -> str:
                 ):
                     value = request.headers.get(header, "")
                     if "@" in value:
+                        _log_identity_source(request, header)
                         return value
         except (LookupError, ValueError, AttributeError):
             pass
     import os
 
     value = os.getenv("PGUSER", "")
+    if context is not None:
+        try:
+            request = context.request_context.request
+        except (LookupError, ValueError, AttributeError):
+            request = None
+        if isinstance(request, Request):
+            _log_identity_source(request, "pguser" if "@" in value else "none")
     return value if "@" in value else "unknown"
+
+
+def _log_identity_source(request: Request, source: str) -> None:
+    """Log which identity source a request used, once per request."""
+    if getattr(request.state, "mcp_identity_logged", False):
+        return
+    request.state.mcp_identity_logged = True
+    logger.info("MCP caller identity source: %s", source)
+
+
+def _anonymous_http_caller(context: Context | None) -> bool:
+    """An HTTP request that carries no user identity. In-process calls (no context:
+    tests, local tooling) are trusted, as the owner check trusts them."""
+    if context is None:
+        return False
+    try:
+        request = context.request_context.request
+    except (LookupError, ValueError, AttributeError):
+        return False
+    return isinstance(request, Request) and _request_user(context) == "unknown"
 
 
 def _request_base_url(context: Context | None) -> str | None:
@@ -530,6 +621,12 @@ def _request_base_url(context: Context | None) -> str | None:
     if host_header and "localhost" not in host_header:
         return f"https://{host_header}"
     return None
+
+
+def _session_url(context: Context | None, session_id: str) -> str | None:
+    """The web-UI deep link for a session (``<base>?sessionId=<id>``), or None."""
+    base = _request_base_url(context)
+    return f"{base}?sessionId={session_id}" if base else None
 
 
 def _stash_base_url(state: engine.SessionState, context: Context | None) -> None:
@@ -589,14 +686,15 @@ def _load_session_and_track(
     session_id: str | None,
     context: Context | None = None,
     track: str | None = None,
+    _record_out: list[dict[str, Any]] | None = None,
 ) -> tuple[engine.SessionState, str, str] | None:
     """``_load_session_for_request`` plus the session's track (D-30, D-32).
 
     An explicit ``track`` (vibe_start_track's validated request) wins; otherwise
     the track is resolved from the record. With no record (local dev without
-    Lakebase) it is DEFAULT_TRACK."""
+    Lakebase) it is DEFAULT_TRACK. ``_record_out`` receives the loaded record."""
 
-    records: list[dict[str, Any]] = []
+    records: list[dict[str, Any]] = [] if _record_out is None else _record_out
     loaded = _load_session_for_request(session_id, context, track, _record_out=records)
     if loaded is None:
         return None
@@ -662,12 +760,36 @@ def _default_use_case(track: str) -> str:
 
 def _session_name(track: str, use_case: str | None) -> str:
     """The MCP session name (D-31): the "Genie Code — " client prefix, plus the
-    track title on every track except genie-accelerator (byte-identical names)."""
+    track's display name on every track except genie-accelerator (byte-identical
+    names)."""
 
     if track == _UNTITLED_NAME_TRACK:
         return f"Genie Code — {use_case}" if use_case else "Genie Code Workshop"
-    title = engine.MANIFEST.tracks[track].title
+    title = display_name(track)
     return f"Genie Code — {title}: {use_case}" if use_case else f"Genie Code — {title}"
+
+
+# The web's placeholder name for a session nobody has named (lakebase is_saved).
+UNSAVED_SESSION_NAME = "New Session"
+
+
+# Set by vibe_save_session: the learner chose this name, even one shaped like ours.
+SESSION_NAME_CHOSEN_KEY = "session_name_chosen"
+
+
+def _is_auto_name(name: str | None, params: dict[str, Any] | None = None) -> bool:
+    """True for a name nobody chose: empty, the web placeholder, or one of ours (and
+    not saved by the learner). Only these may be replaced by an automatic name; a
+    learner's name never is."""
+
+    if (params or {}).get(SESSION_NAME_CHOSEN_KEY):
+        return False
+    return (
+        not name
+        or name == UNSAVED_SESSION_NAME
+        or name == "Genie Code Workshop"
+        or name.startswith("Genie Code — ")
+    )
 
 
 def _next_reference(track: str, state: engine.SessionState, step: manifest.Step) -> StepReference:
@@ -1356,10 +1478,10 @@ _SKILLS_TRACK_LOCK_MESSAGE = (
 @mcp.tool(
     name="vibe_start_track",
     description=(
-        "Start or resume a guided workshop track (e.g. the Genie Accelerator) for the current user. "
-        "Call this first, in Agent mode, before any other vibe tool. Args: `track` (required), optional "
-        "`use_case`/`industry`/`session_id`. Returns the session id, a `session_url` deep link to open "
-        "the same session in the web UI, and the ordered step outline. Errors if `track` is unknown."
+        "Start or resume a guided workshop track for the current user. Call this first, in Agent mode. "
+        "`track` takes an id or a name (e.g. \"Genie Accelerator\", \"Apps + Lakebase\"); optional "
+        "`use_case`/`industry`/`session_id`. With `session_id` it continues that web session. Returns "
+        "the session id, a `session_url` deep link to the web UI, and the step outline."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -1376,8 +1498,14 @@ def vibe_start_track(
     session_id: str | None = None,
     context: Context | None = None,
 ) -> StartTrackResult:
-    if track not in engine.MANIFEST.tracks:
-        return _error_result("UNKNOWN_TRACK", f"Unknown workshop track: {track}")  # type: ignore[return-value]
+    # The web UI's whole start line may arrive as the track: its session id
+    # continues that session when no session_id was passed.
+    _, embedded_session = parse_start_line(track)
+    session_id = session_id or embedded_session
+    match = resolve_track_name(track)
+    if isinstance(match, TrackNameError):
+        return _error_result(match.code, match.message)  # type: ignore[return-value]
+    track = match.track
     resolved = session_id or str(uuid.uuid4())
     records: list[dict[str, Any]] = []
     loaded = _load_session_for_request(resolved, context, track, _record_out=records)
@@ -1407,6 +1535,20 @@ def vibe_start_track(
     _email = _request_user(context)
     if "@" in _email:
         state.session_parameters.setdefault("user_email", _email)
+    # Session linking: a stored session on another track (the web UI's start line
+    # names the track the learner sees) switches under the web picker's rule, or
+    # the call is refused with the new-session offer.
+    # A stored level equal to the request is a resume, even where resolve_track
+    # reads it differently (an unlocked skills session reads as end-to-end; the
+    # skills lock below decides it, D-115/D-120).
+    switched_from: str | None = None
+    if records and records[0].get("workshop_level") != track:
+        current_track = _session_track(records[0])
+        if current_track != track:
+            blocked = _apply_track_switch(records[0], state, track, context)
+            if blocked is not None:
+                return blocked  # type: ignore[return-value]
+            switched_from = current_track
     # D-115 / D-120: skills-accelerator always means build_skill (the web app reaches
     # the track only via that use case, and resolve_track keeps a session on it only
     # while build_skill is locked). Lock the pair before the D-13 check and the first
@@ -1497,6 +1639,12 @@ def vibe_start_track(
                 "SESSION_NOT_SAVED",
                 "The new session could not be saved; nothing was started. Retry, or report this error.",
             )
+    elif records and is_lakebase_configured():
+        if not _persist_linked_session(resolved, before, state, records[0], track, switched_from):
+            return _error_result(  # type: ignore[return-value]
+                "SESSION_NOT_SAVED",
+                "The session could not be updated; nothing changed. Retry, or report this error.",
+            )
     if industry:
         state.session_parameters["industry"] = industry
     if use_case:
@@ -1517,14 +1665,309 @@ def vibe_start_track(
     # Deep-link handoff (Workstream 2): hand back a ready-to-open web-UI URL for this
     # same session so the learner can move freely between MCP and the app. None when
     # the request headers do not expose a usable host (degrades gracefully).
-    _base = _request_base_url(context)
-    session_url = f"{_base}?sessionId={resolved}" if _base else None
     return StartTrackResult(
         session_id=resolved,
         track=track,
         outline=_outline_items(track, state),
-        session_url=session_url,
+        session_url=_session_url(context, resolved),
+        track_name=display_name(track),
+        switched_from=switched_from,
     )
+
+
+def _disabled_paths(state: engine.SessionState) -> set[str]:
+    """Tracks the facilitator turned off for Genie Code (the web picker's
+    ``disabledWorkshopLevels`` for that assistant): MCP is only ever the Genie Code
+    client, whatever assistant the web session stored. Fails open: an unreadable
+    admin table must not block a learner."""
+
+    from .api.routes import get_disabled_path_levels
+
+    try:
+        return set(get_disabled_path_levels(DEFAULT_CODING_ASSISTANT))
+    except Exception:  # noqa: BLE001
+        logger.warning("disabled-path lookup failed; allowing the switch", exc_info=True)
+        return set()
+
+
+def _apply_track_switch(
+    record: dict[str, Any],
+    state: engine.SessionState,
+    target: str,
+    context: Context | None,
+) -> _ContractError | None:
+    """Move ``state`` to ``target`` in memory under the web picker's rule
+    (track_switch.evaluate_switch); the caller persists. Returns the refusal, or
+    None when the switch applied (or ``target`` is already the track)."""
+
+    decision = track_switch.evaluate_switch(record, target, _disabled_paths(state))
+    if not decision.allowed:
+        allowed = ", ".join(f"{display_name(t)} ({t})" for t in decision.allowed_targets) or "none"
+        return _error_result(
+            "TRACK_SWITCH_BLOCKED",
+            f"{decision.message} This session stays on {display_name(decision.current)}. To work on "
+            f"{display_name(target)}, start a new session on it.",
+            current_track=decision.current,
+            requested_track=target,
+            reason=decision.reason,
+            allowed_tracks=allowed,
+            suggestion=f'call vibe_start_track with track="{target}" and no session_id',
+        )
+    if decision.reason == "same":
+        return None
+    from .api.routes import ACCELERATOR_SCHEMA_LEVELS, default_genie_ontology, derive_user_schema_prefix
+
+    params = track_switch.switch_params(
+        state.session_parameters,
+        decision.current,
+        target,
+        genie_ontology_default=default_genie_ontology(),
+    )
+    caller = _request_user(context)
+    owner = caller if "@" in caller else record.get("created_by")
+    # The use-case name, so a move off an accelerator gets the use-case schema back
+    # rather than keeping the accelerator's (the web derives it the same way).
+    uc_name = (
+        str(params.get("custom_use_case_label") or "").strip()
+        or record.get("use_case")
+        or record.get("use_case_label")
+        or params.get("use_case")
+    )
+    prefix = derive_user_schema_prefix(owner, uc_name, target in ACCELERATOR_SCHEMA_LEVELS)
+    if prefix:
+        params["user_schema_prefix"] = prefix
+    state.session_parameters.clear()
+    state.session_parameters.update(params)
+    return None
+
+
+def _persist_linked_session(
+    session_id: str,
+    before: engine.SessionState,
+    state: engine.SessionState,
+    record: dict[str, Any],
+    track: str,
+    switched_from: str | None,
+) -> bool:
+    """Persist an attach to a stored session: the switch (track column + params),
+    the Genie Code assistant marker, and an automatic name when nobody named it, so
+    the web's "one unsaved New Session" cleanup can never delete a linked session.
+    A name the learner chose is never replaced."""
+
+    stored_name = record.get("session_name")
+    name = None
+    if _is_auto_name(stored_name, record.get("session_parameters")) and (
+        switched_from or not stored_name or stored_name == UNSAVED_SESSION_NAME
+    ):
+        label = (
+            state.session_parameters.get("use_case_label")
+            or record.get("use_case_label")
+            or state.session_parameters.get("use_case")
+        )
+        candidate = _session_name(track, label)
+        name = candidate if candidate != stored_name else None
+    return _persist_mcp_delta(
+        session_id,
+        before,
+        state,
+        session_parameters=state.session_parameters,
+        session_name=name,
+        workshop_level=track if switched_from else None,
+    )
+
+
+@mcp.tool(
+    name="vibe_switch_track",
+    description=(
+        "Switch an existing session to another workshop track, under the web UI track picker's rules: "
+        "any track before Set Up Project is done, then only the next step on the same path. `track` "
+        "takes an id or a name. If it is blocked, tell the learner why and offer a new session: "
+        "vibe_start_track without session_id."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_switch_track(
+    session_id: str,
+    track: str,
+    context: Context | None = None,
+) -> SwitchTrackResult:
+    match = resolve_track_name(track)
+    if isinstance(match, TrackNameError):
+        return _error_result(match.code, match.message)  # type: ignore[return-value]
+    if _anonymous_http_caller(context):
+        return _error_result(  # type: ignore[return-value]
+            "IDENTITY_UNKNOWN",
+            "This request carries no user identity, so the session's track cannot be changed.",
+        )
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_and_track(session_id, context, _record_out=records)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _, current = loaded
+    before = copy.deepcopy(state)
+    # Without Lakebase (local dev) there is no record: switch in memory from the
+    # track the other tools walk, and persist nothing.
+    record = records[0] if records else {
+        "session_id": session_id,
+        "workshop_level": current,
+        "completed_gates": list(state.completed_gates),
+        "session_parameters": dict(state.session_parameters),
+    }
+    if current == match.track:
+        return SwitchTrackResult(
+            session_id=session_id,
+            track=current,
+            track_name=display_name(current),
+            previous_track=current,
+            switched=False,
+            outline=_outline_items(current, state),
+            session_url=_session_url(context, session_id),
+        )
+    blocked = _apply_track_switch(record, state, match.track, context)
+    if blocked is not None:
+        return blocked  # type: ignore[return-value]
+    if records and not _persist_linked_session(session_id, before, state, record, match.track, current):
+        return _error_result(  # type: ignore[return-value]
+            "SESSION_NOT_SAVED",
+            "The track could not be switched; nothing changed. Retry, or report this error.",
+        )
+    return SwitchTrackResult(
+        session_id=session_id,
+        track=match.track,
+        track_name=display_name(match.track),
+        previous_track=current,
+        switched=True,
+        outline=_outline_items(match.track, state),
+        session_url=_session_url(context, session_id),
+    )
+
+
+# The sessions table's column widths (db/lakebase/ddl/03_sessions.sql).
+_SESSION_NAME_MAX = 100
+_SESSION_DESCRIPTION_MAX = 500
+
+
+@mcp.tool(
+    name="vibe_save_session",
+    description=(
+        "Save or rename a workshop session so it shows under that name in the web UI's session list. "
+        "Args: `session_id`, `name` (1-100 characters, not \"New Session\"), optional `description`. "
+        "Returns the saved name and a `session_url` deep link to open the same session in the web UI."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_save_session(
+    session_id: str,
+    name: str,
+    description: str | None = None,
+    context: Context | None = None,
+) -> SaveSessionResult:
+    clean = (name or "").strip()
+    if not clean or clean.lower() == UNSAVED_SESSION_NAME.lower() or len(clean) > _SESSION_NAME_MAX:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_NAME",
+            f'Name the session in 1-{_SESSION_NAME_MAX} characters, other than "{UNSAVED_SESSION_NAME}".',
+        )
+    clean_description = (description or "").strip() or None
+    if clean_description and len(clean_description) > _SESSION_DESCRIPTION_MAX:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            f"Keep the description to {_SESSION_DESCRIPTION_MAX} characters.",
+        )
+    if _anonymous_http_caller(context):
+        return _error_result(  # type: ignore[return-value]
+            "IDENTITY_UNKNOWN",
+            "This request carries no user identity, so the session cannot be renamed.",
+        )
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_for_request(session_id, context, _record_out=records)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _ = loaded
+    before = copy.deepcopy(state)
+    # The learner chose this name: no automatic rename may replace it later.
+    state.session_parameters[SESSION_NAME_CHOSEN_KEY] = True
+    # Without Lakebase (local dev) there is nothing to save to: report unsaved.
+    if records and not _persist_mcp_delta(
+        session_id,
+        before,
+        state,
+        session_parameters=state.session_parameters,
+        session_name=clean,
+        session_description=clean_description,
+    ):
+        return _error_result(  # type: ignore[return-value]
+            "SESSION_NOT_SAVED",
+            "The session could not be saved; nothing changed. Retry, or report this error.",
+        )
+    return SaveSessionResult(
+        session_id=session_id,
+        session_name=clean,
+        is_saved=bool(records),
+        session_url=_session_url(context, session_id),
+    )
+
+
+_LIST_SESSIONS_MAX = 50
+
+
+@mcp.tool(
+    name="vibe_list_sessions",
+    description=(
+        "List the current user's workshop sessions, newest first, so the learner can pick one to "
+        "continue here or in the web UI. Optional `limit` (default 10) and `include_unsaved`. Each row "
+        "has the session id, name, track, use case, last update and a `session_url`. Continue one with "
+        "vibe_start_track and its session_id."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_list_sessions(
+    limit: int = 10,
+    include_unsaved: bool = False,
+    context: Context | None = None,
+) -> ListSessionsResult:
+    caller = _request_user(context)
+    if caller == "unknown":
+        return _error_result(  # type: ignore[return-value]
+            "IDENTITY_UNKNOWN",
+            "This request carries no user identity, so sessions cannot be listed. Use the session id "
+            "from the web UI instead.",
+        )
+    rows = get_user_sessions(caller, limit=max(1, min(int(limit), _LIST_SESSIONS_MAX)), saved_only=not include_unsaved)
+    sessions = []
+    for row in rows:
+        track = resolve_track(row)
+        sessions.append(
+            SessionSummary(
+                session_id=row["session_id"],
+                session_name=row.get("session_name") or UNSAVED_SESSION_NAME,
+                track=track,
+                track_name=display_name(track),
+                use_case_label=row.get("use_case_label"),
+                updated_at=row.get("updated_at"),
+                is_saved=bool(row.get("is_saved")),
+                session_url=_session_url(context, row["session_id"]),
+            )
+        )
+    return ListSessionsResult(sessions=sessions)
 
 
 @mcp.tool(
@@ -2073,12 +2516,14 @@ def vibe_complete_step(
     captured_output: str,
     context: Context | None = None,
 ) -> CompleteStepResult:
-    loaded = _load_session_and_track(session_id, context)
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_and_track(session_id, context, _record_out=records)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _, track = loaded
     before = copy.deepcopy(state)
+    stored_name = records[0].get("session_name") if records else None
     # The intent beat on a track that does not author use_case_selection as a step:
     # vibe_set_parameters' lock is what completes it (D-8). Once locked, re-completing
     # is an idempotent success; while unlocked, the guards below steer to the lock.
@@ -2181,10 +2626,11 @@ def vibe_complete_step(
         )  # type: ignore[return-value]
 
     # Workstream 3: once the use case locks, refine the auto-name so the web UI
-    # session menu shows what this session is building. None on every other step so
-    # COALESCE preserves any name the learner set in the UI.
+    # session menu shows what this session is building. None on every other step,
+    # and None when the learner named the session (a non-None name always wins the
+    # save's COALESCE, so only an automatic name may be replaced).
     _refined_name = None
-    if sectionTag == "use_case_selection":
+    if sectionTag == "use_case_selection" and _is_auto_name(stored_name, before.session_parameters):
         _label = (
             state.session_parameters.get("use_case_label")
             or state.session_parameters.get("use_case")
@@ -2355,12 +2801,14 @@ def vibe_set_parameters(
     mode: str | None = None,
     context: Context | None = None,
 ) -> SetParametersResult:
-    loaded = _load_session_and_track(session_id, context)
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_and_track(session_id, context, _record_out=records)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _, track = loaded
     before = copy.deepcopy(state)
+    stored_name = records[0].get("session_name") if records else None
 
     # Reject server-owned keys in the INCOMING params before any update/save, so a
     # rejected call persists nothing (all-or-nothing). These are set only by the
@@ -2532,9 +2980,10 @@ def vibe_set_parameters(
         newly = engine.resolve_use_case(state, _build_use_case_brief(resolved_params))
         resolved_use_case = engine.use_case_resolved(state)
         # Refine the auto-name to what this session is building — only when the
-        # gate is newly resolved, so COALESCE preserves a name the learner set.
+        # gate is newly resolved and nobody named the session (a non-None name
+        # always wins the save's COALESCE).
         refined_name = None
-        if newly:
+        if newly and _is_auto_name(stored_name, before.session_parameters):
             label = resolved_params.get("use_case_label") or resolved_params.get("use_case")
             if label:
                 refined_name = _session_name(track, label)
@@ -2760,20 +3209,27 @@ def start_genie_accelerator(use_case: str | None = None, industry: str | None = 
     name="Start a workshop track",
     description="Start the first-run orientation on any workshop track and present step one.",
 )
-def start_track(track: str | None = None, use_case: str | None = None, industry: str | None = None) -> str:
-    if track not in engine.MANIFEST.tracks:
-        valid = ", ".join(sorted(engine.MANIFEST.tracks))
-        lead = f"Unknown workshop track: {track}." if track else "Choose a workshop track."
-        return (
-            f"{lead} Valid tracks: {valid}. Start one with this prompt, then present each "
-            "step's `prompt` verbatim first."
-        )
+def start_track(
+    track: str | None = None,
+    use_case: str | None = None,
+    industry: str | None = None,
+    session_id: str | None = None,
+) -> str:
+    _, embedded_session = parse_start_line(track)
+    session_id = session_id or embedded_session
+    match = resolve_track_name(track) if track else None
+    if not isinstance(match, TrackMatch):
+        lead = match.message if match is not None else f"Choose a workshop track. Valid tracks: {valid_tracks_text()}."
+        return f"{lead} Start one with this prompt (an id or a name), then present each step's `prompt` verbatim first."
+    track = match.track
     parameters = [f'track:"{track}"']
+    if session_id:
+        parameters.append(f'session_id:"{session_id}"')
     if use_case:
         parameters.append(f'use_case="{use_case}"')
     if industry:
         parameters.append(f'industry="{industry}"')
-    title = engine.MANIFEST.tracks[track].title
+    title = display_name(track)
     opt_out = f"\n\n{GENIE_ONTOLOGY_OPT_OUT}" if track == "genie-accelerator" else ""
     return (
         f"{ORIENTATION_PREAMBLE}\n\n"
@@ -2793,7 +3249,8 @@ def start_track(track: str | None = None, use_case: str | None = None, industry:
 def continue_where_left_off() -> str:
     return (
         "Read `vibe://session/{session_id}/state`, call `vibe_next_step`, and resume the learner. "
-        "Present the returned `prompt` verbatim first, then narrate the supporting fields."
+        "If you don't know the session id, call `vibe_list_sessions` and confirm the session with the "
+        "learner first. Present the returned `prompt` verbatim first, then narrate the supporting fields."
     )
 
 
@@ -2814,7 +3271,16 @@ def contract_error_results_for_tests() -> dict[str, _ContractError]:
 
     return {
         code: _error_result(code, f"Expected workshop error: {code}")
-        for code in ("UNKNOWN_TRACK", "INVALID_SESSION", "UNKNOWN_STEP", "STEP_LOCKED")
+        for code in (
+            "UNKNOWN_TRACK",
+            "AMBIGUOUS_TRACK",
+            "INVALID_SESSION",
+            "UNKNOWN_STEP",
+            "STEP_LOCKED",
+            "TRACK_SWITCH_BLOCKED",
+            "INVALID_NAME",
+            "IDENTITY_UNKNOWN",
+        )
     }
 
 

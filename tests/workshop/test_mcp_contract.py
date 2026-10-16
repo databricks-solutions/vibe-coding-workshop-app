@@ -21,6 +21,10 @@ EXPECTED_TOOLS = {
     "vibe_complete_step",
     "vibe_submit_answer",
     "vibe_set_parameters",
+    # Session linking (one engine, two interfaces): switch, save and list.
+    "vibe_switch_track",
+    "vibe_save_session",
+    "vibe_list_sessions",
 }
 
 EXPECTED_ANNOTATIONS = {
@@ -31,6 +35,9 @@ EXPECTED_ANNOTATIONS = {
     "vibe_complete_step": (False, False, True, True),
     "vibe_submit_answer": (False, False, True, True),
     "vibe_set_parameters": (False, False, True, True),
+    "vibe_switch_track": (False, False, True, True),
+    "vibe_save_session": (False, False, True, True),
+    "vibe_list_sessions": (True, False, True, True),
 }
 
 
@@ -49,10 +56,10 @@ def _tools_by_name():
     return {tool.name: tool for tool in mcp_server.mcp._tool_manager.list_tools()}
 
 
-def test_exactly_seven_tools_with_contract_metadata():
+def test_exactly_ten_tools_with_contract_metadata():
     tools = _tools_by_name()
     assert set(tools) == EXPECTED_TOOLS
-    assert len(tools) == 7
+    assert len(tools) == 10
     assert tools["vibe_explain_step"].description == EXPLAIN_STEP_DESCRIPTION
     assert len(EXPLAIN_STEP_DESCRIPTION) == 385
 
@@ -72,7 +79,10 @@ def test_exactly_seven_tools_with_contract_metadata():
         assert actual == EXPECTED_ANNOTATIONS[name]
 
 
-def test_registered_tools_return_schema_valid_structured_content_and_text():
+def test_registered_tools_return_schema_valid_structured_content_and_text(monkeypatch):
+    # vibe_list_sessions refuses an anonymous caller (IDENTITY_UNKNOWN); give the
+    # run an identity so every tool's success shape is checked.
+    monkeypatch.setattr(mcp_server, "_request_user", lambda context: "learner@acme.com")
     tools = _tools_by_name()
     for name, tool in tools.items():
         if name == "vibe_start_track":
@@ -91,6 +101,12 @@ def test_registered_tools_return_schema_valid_structured_content_and_text():
                 "interaction_id": "project_setup.why",
                 "answer": "yes",
             }
+        elif name == "vibe_switch_track":
+            arguments = {"session_id": "test-session", "track": "lakehouse"}
+        elif name == "vibe_save_session":
+            arguments = {"session_id": "test-session", "name": "My workshop"}
+        elif name == "vibe_list_sessions":
+            arguments = {}
         else:
             arguments = {"session_id": "test-session", "params": {}}
 
@@ -133,7 +149,16 @@ def test_next_step_union_admits_blocked_variant():
 
 
 def test_read_tool_errors_are_typed_results():
-    expected = {"UNKNOWN_TRACK", "INVALID_SESSION", "UNKNOWN_STEP", "STEP_LOCKED"}
+    expected = {
+        "UNKNOWN_TRACK",
+        "AMBIGUOUS_TRACK",
+        "INVALID_SESSION",
+        "UNKNOWN_STEP",
+        "STEP_LOCKED",
+        "TRACK_SWITCH_BLOCKED",
+        "INVALID_NAME",
+        "IDENTITY_UNKNOWN",
+    }
     results = mcp_server.contract_error_results_for_tests()
     assert expected.issubset(results)
     for code, result in results.items():

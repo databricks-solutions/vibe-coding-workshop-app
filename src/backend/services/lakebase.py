@@ -1373,7 +1373,7 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                 SELECT
                     session_id, session_name, session_description,
                     industry, industry_label, use_case, use_case_label,
-                    feedback_rating,
+                    feedback_rating, workshop_level,
                     completed_gates, session_parameters,
                     created_by, created_at, updated_at
                 FROM {table_name}
@@ -1389,7 +1389,7 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                 SELECT
                     session_id, session_name, session_description,
                     industry, industry_label, use_case, use_case_label,
-                    feedback_rating,
+                    feedback_rating, workshop_level,
                     completed_gates, session_parameters,
                     created_by, created_at, updated_at
                 FROM {table_name}
@@ -1437,6 +1437,10 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                     "created_at": created_at,
                     "updated_at": updated_at,
                     "is_saved": bool(row.get("session_name") and row["session_name"] != "New Session"),
+                    # The track inputs (resolve_track) for MCP vibe_list_sessions;
+                    # the web list model ignores them.
+                    "workshop_level": row.get("workshop_level"),
+                    "session_parameters": _parse_json_obj(row.get("session_parameters")),
                 })
 
             return sessions

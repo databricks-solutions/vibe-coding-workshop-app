@@ -93,9 +93,12 @@ Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any o
 ## 3. Start the track / continue
 
 - Type or pick the start prompt for your track: on the Genie Accelerator, **"Start the Genie
-  Accelerator"**; on any other track, **"Start a workshop track"** with the track id shown in the
-  app. Genie Code calls `vibe_start_track`, then `vibe_get_step`, and presents step 1 (the prompt
-  **verbatim**, then the why/how).
+  Accelerator"**; on any track, **"Start a workshop track"** with the track. The track can be its
+  id or a name a learner would say ("Genie Accelerator", "Apps + Lakebase", "lakehouse with AI",
+  "Reverse ETL: Analytics App"); "Lakehouse" means Build Forward unless the learner says "reverse".
+  Add the web session's id to continue that same session (§4). Genie Code calls
+  `vibe_start_track`, then `vibe_get_step`, and presents step 1 (the prompt **verbatim**, then the
+  why/how).
 - To resume later, use **"Continue where I left off"** — it calls `vibe_next_step` from your saved
   progress (state is server-side, keyed to you).
 - Answer the occasional in-band question in chat (§6). Silence accepts the recommended default —
@@ -189,12 +192,28 @@ UI is unchanged.
 - The UI is a **companion + progress mirror**; the learner drives from Genie Code. Both read the
   same engine payload, so the story is identical on both surfaces.
 
+**Moving between the web UI and Genie Code (one engine, two interfaces).** It is one session either
+way; both sides read and write the same row.
+- **Web to Genie Code:** start the track with the web session's id (`vibe_start_track` with
+  `session_id`). If that session was never named, Genie Code names it ("Genie Code — …"), so the
+  web UI's "New session" clean-up can't delete it. A name the learner chose is never replaced.
+- **Genie Code to the web UI:** every start, switch and save returns a `session_url`; open it.
+- **Switch track** from either side, under the same rule: any track until Set Up Project is done,
+  then only the next step on the same path (Apps → + Lakebase → + Lakehouse → + AI and Agents).
+  Over MCP, `vibe_switch_track` (or starting with another track on the same session) applies it;
+  when it's blocked, Genie Code offers a new session on the other track. The Agent Skills
+  Accelerator always needs a new session.
+- **Save or rename** from either side: the web UI's Save, or `vibe_save_session` (1-100
+  characters, not "New Session").
+- **Find a session** over MCP with `vibe_list_sessions` (the learner's own sessions, newest first),
+  then continue it with its id.
+
 ---
 
 ## 5. The 20-tool budget caveat
 
-Genie Code enforces a **~20-tool limit across all connected MCP servers**. The workshop uses **7**
-tools. If the learner also has Databricks-managed MCPs connected (Genie, UC functions), they may hit
+Genie Code enforces a **~20-tool limit across all connected MCP servers**. The workshop uses **10**
+tools (7 for the walk, plus `vibe_switch_track`, `vibe_save_session` and `vibe_list_sessions`). If the learner also has Databricks-managed MCPs connected (Genie, UC functions), they may hit
 the ceiling and some tools won't load. If tools are missing:
 - temporarily **disconnect other MCP servers**, or
 - keep only the workshop server connected for the duration of the track.
@@ -244,6 +263,8 @@ the chat** and you answer in chat:
   Pages and Write the Routing Page (confirm you published the Page in the Databricks UI).
 - **No Genie One Pages?** Say "skip the ontology".
 - **Your progress is saved** server-side — switch between Genie Code and the web UI freely.
+- **Change track, save or find a session:** ask Genie Code ("switch to Apps + Lakebase", "save
+  this session as Retail demo", "list my sessions").
 
 ---
 

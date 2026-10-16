@@ -127,19 +127,21 @@ def test_b4_load_path_surfaces_workshop_level(new_session_env):
     assert loaded.get("workshop_level") == "genie-accelerator"
 
 
-# --- T0-B5: resuming an EXISTING session must not clobber the saved level -----
+# --- T0-B5: resuming an EXISTING session -------------------------------------
+# Same track: never re-stamps the level. Another track: the web picker's switch
+# rule (session linking), which moves a not-started session and refuses once
+# Set Up Project is done.
 
 
-def test_b5_resume_existing_session_does_not_clobber_level(monkeypatch):
+def _resume_env(monkeypatch, level, completed_gates=()):
     store = {
         SESSION_ID: {
             "session_id": SESSION_ID,
             "created_by": None,
-            "completed_gates": [],
+            "completed_gates": list(completed_gates),
             "captured_outputs": {},
             "session_parameters": {},
-            # A real, explicitly-persisted level that resume must not overwrite.
-            "workshop_level": "end-to-end",
+            "workshop_level": level,
         }
     }
     saves: list = []
@@ -157,10 +159,41 @@ def test_b5_resume_existing_session_does_not_clobber_level(monkeypatch):
     monkeypatch.setattr(mcp_server, "save_session", save_session)
     monkeypatch.setattr(mcp_server, "is_lakebase_configured", lambda: True)
     monkeypatch.setattr(mcp_server, "_request_user", lambda ctx: "learner@acme.com")
+    monkeypatch.setattr(mcp_server, "_disabled_paths", lambda state: set())
+    return store, saves
+
+
+def test_b5_resume_on_the_same_track_does_not_restamp_level(monkeypatch):
+    store, saves = _resume_env(monkeypatch, "end-to-end")
+
+    result = mcp_server.vibe_start_track("end-to-end", session_id=SESSION_ID)
+
+    assert not isinstance(result, dict), result
+    assert result.switched_from is None
+    assert store[SESSION_ID]["workshop_level"] == "end-to-end"
+    assert all(fields.get("workshop_level") is None for (_s, fields) in saves)
+
+
+def test_b5_resume_on_another_track_before_starting_switches(monkeypatch):
+    store, _ = _resume_env(monkeypatch, "end-to-end")
 
     result = mcp_server.vibe_start_track(TRACK, session_id=SESSION_ID)
 
     assert not isinstance(result, dict), result
-    # The seed save is new-session-only, so a resume never re-stamps the level.
+    assert result.track == TRACK and result.switched_from == "end-to-end"
+    assert store[SESSION_ID]["workshop_level"] == TRACK
+    params = store[SESSION_ID]["session_parameters"]
+    assert params["level_explicitly_selected"] is True
+    assert params["direction"] == "forward"
+    assert params["flags"]["includeLakehouse"] is False
+
+
+def test_b5_resume_on_another_track_after_set_up_project_is_refused(monkeypatch):
+    store, saves = _resume_env(monkeypatch, "end-to-end", completed_gates=["project_setup"])
+
+    result = mcp_server.vibe_start_track(TRACK, session_id=SESSION_ID)
+
+    assert isinstance(result, dict)
+    assert result["error"]["code"] == "TRACK_SWITCH_BLOCKED"
     assert store[SESSION_ID]["workshop_level"] == "end-to-end"
-    assert all(fields.get("workshop_level") is None for (_s, fields) in saves)
+    assert saves == []

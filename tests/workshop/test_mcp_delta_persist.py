@@ -302,4 +302,6 @@ def test_no_mcp_write_tool_calls_save_session_directly():
     import inspect
 
     source = inspect.getsource(mcp_server)
-    assert "save_session(" not in source.replace("save_session_applying_mcp_delta(", "")
+    # vibe_save_session is the MCP tool's own name; it saves through the delta too.
+    stripped = source.replace("save_session_applying_mcp_delta(", "").replace("vibe_save_session(", "")
+    assert "save_session(" not in stripped
