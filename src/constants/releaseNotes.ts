@@ -47,6 +47,92 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.0',
+    date: '2026-10-15',
+    title: 'Run the workshop from Genie Code',
+    items: [
+      {
+        title: 'Run any workshop track from Genie Code',
+        description:
+          'Add the app as a custom MCP server in Genie Code (the app URL followed by /mcp) and say "Start the Genie Accelerator". Genie Code then walks you through the track one step at a time, showing each prompt and waiting for you to run it. Your progress is saved on the server, so you can switch between Genie Code and the web app at any point.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'terminal',
+      },
+      {
+        title: 'A coach inside Genie Code',
+        description:
+          'Ask what to do now, why a step matters, why you are stuck, or for a recap of what you have built. The coach answers in one short paragraph grounded in your own session, with a table or diagram where it helps.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'New sessions start on the Genie Accelerator, with the Genie Ontology',
+        description:
+          'Every new session now starts on the Genie Accelerator, whichever coding assistant you pick, with the Genie Ontology chapter included. A recommended card at the top of the path picker holds the Include Genie Ontology and Include Lakehouse options. If your workspace has no Genie One Pages, untick the ontology in the web app, or say "skip the ontology" in Genie Code. Existing sessions keep their saved path.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'route',
+        beta: true,
+      },
+      {
+        title: 'The ontology chapter comes before the app',
+        description:
+          'Model the Domain, Author Pages and Write the Routing Page now follow the AI/BI Dashboard, before Choose What to Activate and the Lakebase and app steps. In Genie Code, the two Page steps you do in the Databricks UI ask you to confirm the Page is published before they complete.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Steps always run in order',
+        description:
+          'A step can no longer be skipped by accident. Each one becomes available only after the one before it is done, and your use case is chosen before the PRD step.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'Faster step hand-offs in Genie Code',
+        description:
+          'Genie Code now prepares the next step’s prompt while you work on the current one, so finishing a step such as Set Up Project no longer waits 20–40 seconds for the next prompt.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'rocket',
+      },
+      {
+        title: 'Sessions reopen in the view you left',
+        description:
+          'Each session remembers whether you were in Insights or the Technical workflow. Insights sessions started before this release reopen in Technical once; click Insights and it is remembered from then on.',
+        category: 'fix',
+        audience: 'attendee',
+      },
+      {
+        title: 'New app settings for facilitators',
+        description:
+          'app.yaml gains MCP_MOUNT_ENABLED (the Genie Code MCP server, on by default), VIBE_DEFAULT_GENIE_ONTOLOGY (set "false" if the workspace has no Genie One Pages), VIBE_STEP_PROMPT_PREFETCH, and the coach’s VIBE_COACH_ENDPOINT and VIBE_COACH_BUDGET_S. The facilitator guide lists each one with its default.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'wrench',
+      },
+      {
+        title: 'Upgrades keep your data',
+        description:
+          'The table step is now additive by default: it creates what is missing and adds new prompt rows to an existing install, and it never overwrites rows you have edited. A destructive rebuild needs an explicit opt-in. Run the table step before deploying this release.',
+        category: 'improved',
+        audience: 'installer',
+        icon: 'database',
+      },
+      {
+        title: 'Dependency security fixes',
+        description: 'Updated dependencies clear every high-severity advisory in the app’s packages.',
+        category: 'fix',
+        audience: 'installer',
+        icon: 'shield',
+      },
+    ],
+  },
+  {
     version: '2.7.0',
     date: '2026-10-15',
     title: 'The climb, saved ideas, points and leaderboard seasons',
