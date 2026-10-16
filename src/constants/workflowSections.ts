@@ -265,7 +265,10 @@ export function levelSupportsOntologyToggle(level: WorkshopLevel): boolean {
 }
 
 // Translate the Genie Ontology toggle into section_tag strings to disable.
-// includeGenieOntology === false (the default) disables the ontology steps.
+// includeGenieOntology === false disables the ontology steps. New sessions take
+// the value from VIBE_DEFAULT_GENIE_ONTOLOGY (unset = on; routes.py
+// default_genie_ontology); the manifest flag default stays false, and a resumed
+// session with no stored flag hydrates as off.
 export function getDisabledTagsForGenieOntology(
   level: WorkshopLevel,
   includeGenieOntology: boolean,
@@ -339,7 +342,10 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     description: 'Locate data and build a governed Metric View, stand up and tune a Genie Agent, model the Discover ontology, then activate with a dashboard, Lakebase sync, and a deployable bundle.',
     // The new track sections (semantic-layer, genie-agent, genie-ontology, genie-activate)
     // REPLACE the legacy AI/BI beats; data-intelligence is emptied by the engine outline
-    // and dropped by its empty-steps filter. Section display order follows WORKFLOW_SECTIONS.
+    // and dropped by its empty-steps filter. This array is a membership set, not display
+    // order: sections display in WORKFLOW_SECTIONS declaration order (genie-ontology before
+    // genie-activate), and scripts/generate_manifest.py reads it into a set. Regenerate
+    // manifest.json after changing which sections it lists.
     sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'semantic-layer', 'genie-agent', 'genie-activate', 'genie-ontology', 'iterate-enhance', 'cleanup'],
   },
   'data-engineering-accelerator': {
