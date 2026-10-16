@@ -35,13 +35,15 @@ import {
 } from './components/session';
 import { apiClient, FALLBACK_WORKSHOP_DEFAULTS, isPristineSession, newSessionMetadata, type WorkshopDefaults } from './api/client';
 import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
-import { orderedSectionsForRead, WORKSHOP_LEVELS, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { orderedSectionsForRead, WORKSHOP_LEVELS, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { mergeStatus } from './constants/mergeStatus';
-import type { TrackOutlineItem } from './api/client';
+import type { SessionLoadResponse, TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
-import { resolveRestoredLevel } from './constants/restoreLevel';
-import { deriveCompletedStepNumbers, deriveSkippedStepNumbers } from './constants/deriveProgress';
+import { deriveCompletedStepNumbers } from './constants/deriveProgress';
 import { emptyGateBase, hydrateGateBase, gateBaseFields, applyGateWriteResult, type GateBase, type GateWrite } from './utils/gateBase';
+import { ALL_SYNC_GROUPS, canApplyRefresh, changedGroups, groupsDifferingFromLocal, sessionViewFrom, syncSnapshot, type LocalSessionState, type SyncGroup } from './utils/sessionSync';
+import { SessionSyncNotice, type SessionSyncMessage } from './components/SessionSyncNotice';
+import { TRACK_DISPLAY_NAMES } from './constants/trackNames';
 
 /** The step prompt API only stores steps 1 to 30. */
 const MAX_SAVED_STEP = 30;
@@ -456,6 +458,68 @@ export default function App() {
     }
   }, [readOnly, isSessionLoading, assistantConfigLoaded, codingAssistantExplicit, codingAssistant, defaultAssistantId]);
 
+  // The last stored session the UI was hydrated from, one string per sync group
+  // (utils/sessionSync), and when it was last updated on the server.
+  const serverSnapshotRef = useRef<Record<SyncGroup, string> | null>(null);
+  const serverUpdatedAtRef = useRef<string | undefined>(undefined);
+
+  /**
+   * Apply a stored session to the UI: every group on a load, only the changed
+   * groups on a background refresh. Setters only, never the write handlers, so
+   * hydrating writes nothing back.
+   */
+  const hydrateFromResponse = (response: SessionLoadResponse, id: string, groups: SyncGroup[] = ALL_SYNC_GROUPS) => {
+    const view = sessionViewFrom(response);
+    const sessionParams = response.session_parameters || {};
+    const has = (group: SyncGroup) => groups.includes(group);
+    if (has('name')) {
+      setSessionSaved(response.is_saved || false);
+      setSessionName(response.session_name);
+      setSessionDescription(response.session_description);
+    }
+    if (has('intent')) {
+      setSelectedIndustry(response.industry || '');
+      setSelectedIndustryLabel(response.industry_label || '');
+      setSelectedUseCase(response.use_case || '');
+      setSelectedUseCaseLabel(response.use_case_label || '');
+      setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
+      setCustomDescription(sessionParams.custom_use_case_description || '');
+      setBrandUrl(sessionParams.company_brand_url || '');
+    }
+    if (has('prereq')) setPrerequisitesCompleted(response.prerequisites_completed || false);
+    if (has('progress')) {
+      // Gate-first (R4b): completed/skipped steps come from the sectionTag gates.
+      setCompletedSteps(view.completedSteps);
+      setSkippedSteps(view.skippedSteps);
+      lastServerGatesRef.current = hydrateGateBase(id, response.completed_gates, response.skipped_gates);
+    }
+    if (has('prompts')) setStepPrompts(response.step_prompts || {});
+    if (has('track')) {
+      // Use-case lock > real persisted workshop_level > corrected assistant
+      // fallback > system default (resolveRestoredLevel).
+      setUseCaseLockedLevel(view.useCaseLockedLevel);
+      setWorkshopLevel(view.level);
+      setLevelExplicitlySelected(view.levelExplicitlySelected);
+    }
+    if (has('track') || has('composition')) {
+      // The stored chain context and chips are what GET /outline composes from.
+      setChainContext(view.chainContext);
+    }
+    if (has('composition')) {
+      if (view.direction) setDirection(view.direction);
+      setAiAgentsModules(view.aiAgentsModules);
+      setMedallionLayers(view.medallionLayers);
+      setIncludeLakehouse(view.includeLakehouse);
+      setIncludeGenieOntology(view.includeGenieOntology);
+    }
+    if (has('assistant')) {
+      setCodingAssistant(view.codingAssistant);
+      setCodingAssistantExplicit(!!view.codingAssistant);
+    }
+    serverSnapshotRef.current = syncSnapshot(response);
+    serverUpdatedAtRef.current = response.updated_at;
+  };
+
   // Get or create the user's default session (continues where they left off)
   const getOrCreateDefaultSession = async () => {
     try {
@@ -463,61 +527,8 @@ export default function App() {
       if (response.success) {
         setSessionId(response.session_id);
         setSessionOwner(null);
-        setSessionSaved(response.is_saved || false);
-        setSessionName(response.session_name);
-        setSessionDescription(response.session_description);
-        setSelectedIndustry(response.industry || '');
-        setSelectedIndustryLabel(response.industry_label || '');
-        setSelectedUseCase(response.use_case || '');
-        setSelectedUseCaseLabel(response.use_case_label || '');
-        setPrerequisitesCompleted(response.prerequisites_completed || false);
-        
-        // Re-derive use-case-driven path lock from restored use case
-        const restoredLock = USE_CASE_LEVEL_LOCK[response.use_case || ''];
-        setUseCaseLockedLevel(restoredLock ?? null);
-
-        // Restore workshop level via the single precedence resolver: use-case
-        // lock > real persisted workshop_level > corrected assistant fallback >
-        // system default. See resolveRestoredLevel for the full contract.
-        const restoredLevel = resolveRestoredLevel(response, restoredLock);
-        setWorkshopLevel(restoredLevel);
-        
-        // Restore completed steps and skipped steps (gate-first, R4b).
-        const completedStepsArray: number[] = deriveCompletedStepNumbers(
-          response.completed_gates,
-        );
-        const restoredCompleted = new Set(completedStepsArray);
-        // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
-        if (response.industry && response.use_case) {
-          restoredCompleted.add(1);
-        }
-        setCompletedSteps(restoredCompleted);
-        // Gate-first skipped hydration (PR3b′), mirroring completedSteps above:
-        // map the sectionTag-keyed skipped_gates to global numbers.
-        const skippedStepsArray = deriveSkippedStepNumbers(
-          response.skipped_gates,
-        );
-        setSkippedSteps(new Set(skippedStepsArray));
-        lastServerGatesRef.current = hydrateGateBase(
-          response.session_id, response.completed_gates, response.skipped_gates,
-        );
-        
-        // Restore step prompts
-        setStepPrompts(response.step_prompts || {});
-        
-        // Restore custom use case overrides from session_parameters
+        hydrateFromResponse(response, response.session_id);
         const sessionParams = response.session_parameters || {};
-        setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
-        setCustomDescription(sessionParams.custom_use_case_description || '');
-        setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
-        setBrandUrl(sessionParams.company_brand_url || '');
-        if (sessionParams.direction) {
-          setDirection(sessionParams.direction as WorkflowDirection);
-        }
-        setIncludeLakehouse(!!sessionParams.include_lakehouse);
-        setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
-        setCodingAssistant(sessionParams.coding_assistant || null);
-        setCodingAssistantExplicit(!!sessionParams.coding_assistant);
         adoptSessionView(isInsightsSession(sessionParams.view));
         // A first-time user's default session has nothing stored yet, so it starts
         // on the new-session defaults like an explicitly created one.
@@ -587,6 +598,8 @@ export default function App() {
     try {
       const [response, defaults] = await Promise.all([apiClient.createNewSession(), apiClient.getWorkshopDefaults()]);
       onCreated?.(response.session_id);
+      serverSnapshotRef.current = null;
+      serverUpdatedAtRef.current = undefined;
       setSessionId(response.session_id);
       setSessionOwner(null);
       setSessionSaved(false);
@@ -680,65 +693,11 @@ export default function App() {
       if (response.success) {
         setSessionId(id);
         setSessionOwner(response.created_by || null);
-        setSessionSaved(response.is_saved);
-        setSessionName(response.session_name);
-        setSessionDescription(response.session_description);
-        setSelectedIndustry(response.industry || '');
-        setSelectedIndustryLabel(response.industry_label || '');
-        setSelectedUseCase(response.use_case || '');
-        setSelectedUseCaseLabel(response.use_case_label || '');
-        setStepPrompts(response.step_prompts || {});
-        // Sessions carry sectionTag-keyed completed_gates (the cross-surface
-        // source of truth); map them to global step numbers (gate-first, R4b).
-        const loadedCompletedSteps: number[] = deriveCompletedStepNumbers(
-          response.completed_gates,
-        );
-        const loadedCompleted = new Set(loadedCompletedSteps);
-        // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
-        if (response.industry && response.use_case) {
-          loadedCompleted.add(1);
-        }
-        setCompletedSteps(loadedCompleted);
-        // Gate-first skipped hydration (PR3b′), mirroring loadedCompletedSteps:
-        // map the sectionTag-keyed skipped_gates to global numbers.
-        const loadedSkippedSteps = deriveSkippedStepNumbers(
-          response.skipped_gates,
-        );
-        setSkippedSteps(new Set(loadedSkippedSteps));
-        lastServerGatesRef.current = hydrateGateBase(
-          id, response.completed_gates, response.skipped_gates,
-        );
-        setPrerequisitesCompleted(response.prerequisites_completed || false);
-        
-        // Re-derive use-case-driven path lock from restored use case
-        const loadedLock = USE_CASE_LEVEL_LOCK[response.use_case || ''];
-        setUseCaseLockedLevel(loadedLock ?? null);
-
-        // Restore workshop level via the single precedence resolver: use-case
-        // lock > real persisted workshop_level > corrected assistant fallback >
-        // system default. See resolveRestoredLevel for the full contract.
-        const effectiveRestoredLevel: WorkshopLevel = resolveRestoredLevel(response, loadedLock);
-        setWorkshopLevel(effectiveRestoredLevel);
-        // Reconstruct the additive-chain context from the saved level + completed
-        // steps. Without an explicit persisted chainContext we fall back to the
-        // legacy "any APP_LAKEBASE_STEPS completed → APP_CHAIN" heuristic for
-        // ambiguous lakehouse/lakehouse-di states.
-        const restoredChain = deriveInitialChainContext(effectiveRestoredLevel, loadedCompleted);
-        setChainContext(restoredChain);
-        
-        // Restore custom use case overrides from session_parameters
+        // One hydration for every load and refresh (utils/sessionSync): the
+        // stored chain context and chips, not a re-derivation, so the UI matches
+        // what GET /outline composes.
+        hydrateFromResponse(response, id);
         const sessionParams = response.session_parameters || {};
-        setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
-        setCustomDescription(sessionParams.custom_use_case_description || '');
-        setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
-        setBrandUrl(sessionParams.company_brand_url || '');
-        if (sessionParams.direction) {
-          setDirection(sessionParams.direction as WorkflowDirection);
-        }
-        setIncludeLakehouse(!!sessionParams.include_lakehouse);
-        setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
-        setCodingAssistant(sessionParams.coding_assistant || null);
-        setCodingAssistantExplicit(!!sessionParams.coding_assistant);
         adoptSessionView(isInsightsSession(sessionParams.view));
 
         // initialExpandedStep is a memo (T3c) derived from the engine outline; the
@@ -1139,6 +1098,16 @@ export default function App() {
     
     setIsSaving(true);
     const sid = sessionId;
+    // The save writes the whole session from this tab's state. If Genie Code (or
+    // another tab) changed anything but the name since the last refresh, take
+    // those changes first and ask for the save again, rather than writing the
+    // older state over them. The name typed here still wins over a remote one.
+    const refreshed = await syncFromServer();
+    if (refreshed.some(group => group !== 'name')) {
+      setIsSaving(false);
+      setSyncMessage({ kind: 'updated', text: 'This session changed in Genie Code. Check it, then save again.' });
+      return;
+    }
     // Gate write (T5): the COMPLETE completed/skipped gate sets, derived from
     // the live step numbers, so a saved web session reads back through the
     // gates-present path with no progress loss. The legacy numeric progress
@@ -1480,6 +1449,90 @@ export default function App() {
     fetchOutline(workshopLevel, sessionId);
   }, [sessionId, workshopLevel, direction, fetchOutline]);
 
+  // Session sync (one engine, two interfaces): re-read the stored session on the
+  // poll and on focus, and apply only the groups that changed on the server
+  // (Genie Code or another tab). A read a session write could have overtaken is
+  // dropped; the next poll retries. Refs keep the poller's closure current.
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const workshopLevelRef = useRef(workshopLevel);
+  workshopLevelRef.current = workshopLevel;
+  const isSessionLoadingRef = useRef(isSessionLoading);
+  isSessionLoadingRef.current = isSessionLoading;
+  const [syncMessage, setSyncMessage] = useState<SessionSyncMessage | null>(null);
+  // What the tab shows now: a refresh applies only what differs from it, so the
+  // tab's own writes are never re-applied or announced as Genie Code's.
+  const localSessionRef = useRef<LocalSessionState | null>(null);
+  localSessionRef.current = {
+    sessionName, sessionSaved, sessionDescription,
+    industry: selectedIndustry, industryLabel: selectedIndustryLabel,
+    useCase: selectedUseCase, useCaseLabel: selectedUseCaseLabel,
+    customUseCaseLabel, customDescription, brandUrl,
+    level: workshopLevel, useCaseLockedLevel, levelExplicitlySelected,
+    direction, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology,
+    completedSteps, skippedSteps, stepPrompts, codingAssistant, prerequisitesCompleted,
+  };
+  const dismissedNewerRef = useRef<Set<string>>(new Set());
+  const syncFromServer = async (): Promise<SyncGroup[]> => {
+    const sid = sessionIdRef.current;
+    if (!sid || isSessionLoadingRef.current) return [];
+    const before = apiClient.sessionWriteState();
+    if (before.inflight > 0) return [];
+    let response: SessionLoadResponse;
+    try {
+      response = await apiClient.loadSession(sid);
+    } catch {
+      return [];
+    }
+    if (!response.success || !canApplyRefresh(sid, sessionIdRef.current, before, apiClient.sessionWriteState())) return [];
+    const snapshot = syncSnapshot(response);
+    const changed = changedGroups(serverSnapshotRef.current, snapshot);
+    if (changed.length === 0) return [];
+    const groups = localSessionRef.current
+      ? groupsDifferingFromLocal(changed, response, localSessionRef.current)
+      : changed;
+    if (groups.length === 0) {
+      // Only this tab's own writes: the server now matches what the tab shows.
+      serverSnapshotRef.current = snapshot;
+      serverUpdatedAtRef.current = response.updated_at;
+      return [];
+    }
+    const remoteLevel = sessionViewFrom(response).level;
+    if (groups.includes('track') && remoteLevel !== workshopLevelRef.current) {
+      setSyncMessage({ kind: 'updated', text: `Now on ${TRACK_DISPLAY_NAMES[remoteLevel]}.` });
+    } else if (groups.includes('name') && response.is_saved && response.session_name) {
+      setSyncMessage({ kind: 'updated', text: `Saved as "${response.session_name}".` });
+    }
+    hydrateFromResponse(response, sid, groups);
+    return groups;
+  };
+  const syncFromServerRef = useRef(syncFromServer);
+  syncFromServerRef.current = syncFromServer;
+
+  // A session started (or worked on) in Genie Code after this one last changed:
+  // offer to open it. Only names Genie Code gives, once per session.
+  const checkNewerSession = async () => {
+    const sid = sessionIdRef.current;
+    const since = serverUpdatedAtRef.current;
+    if (!sid || !since || isSessionLoadingRef.current) return;
+    try {
+      const sessions = await apiClient.getUserSessions();
+      const newer = sessions.find(item =>
+        item.session_id !== sid
+        && !dismissedNewerRef.current.has(item.session_id)
+        && !!item.updated_at && item.updated_at > since
+        && !!item.session_name && (item.session_name === 'Genie Code Workshop' || item.session_name.startsWith('Genie Code — ')),
+      );
+      if (newer && sessionIdRef.current === sid) {
+        setSyncMessage({ kind: 'newer', sessionId: newer.session_id, text: `"${newer.session_name}" was started in Genie Code.` });
+      }
+    } catch {
+      // The session list is a convenience; the next focus retries.
+    }
+  };
+  const checkNewerSessionRef = useRef(checkNewerSession);
+  checkNewerSessionRef.current = checkNewerSession;
+
   // Polling v1 (NOT SSE): keep the outline live so cross-surface (MCP) progress and
   // any server-side recomposition surface without a manual refresh. Pauses while
   // the tab is hidden; refetches (debounced) on focus / visibility regain.
@@ -1491,11 +1544,17 @@ export default function App() {
     const poll = () => {
       if (document.hidden) return;
       fetchOutline(workshopLevel, sessionId);
+      void syncFromServerRef.current();
     };
     const kick = () => {
       if (document.hidden) return;
       clearTimeout(debounceId);
-      debounceId = setTimeout(() => fetchOutline(workshopLevel, sessionId), 300);
+      debounceId = setTimeout(() => {
+        fetchOutline(workshopLevel, sessionId);
+        // Coming back from Genie Code: pick up its changes, and any session it started.
+        void syncFromServerRef.current();
+        void checkNewerSessionRef.current();
+      }, 300);
     };
     const startInterval = () => {
       clearInterval(intervalId);
@@ -1981,6 +2040,14 @@ export default function App() {
           </button>
         </div>
       )}
+      <SessionSyncNotice
+        message={syncMessage}
+        onOpen={id => { setSyncMessage(null); window.history.replaceState({}, '', `?sessionId=${id}`); loadSession(id); }}
+        onDismiss={() => {
+          if (syncMessage?.kind === 'newer') dismissedNewerRef.current.add(syncMessage.sessionId);
+          setSyncMessage(null);
+        }}
+      />
       <BundleUpdateNotice />
     </div>
   );

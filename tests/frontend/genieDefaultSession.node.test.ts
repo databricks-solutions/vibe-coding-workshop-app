@@ -209,9 +209,12 @@ test('a failed default-session fetch lands on Genie Accelerator with ontology an
 });
 
 test('a resumed session without stored ontology still hydrates off (absent = off)', () => {
+  // loadSession hydrates through the shared session-sync reader, whose
+  // chipsFromParams treats an absent ontology as off (sessionSync.node.test.ts).
   const block = appBlock('loadSession');
-  assert.match(block, /setIncludeGenieOntology\(!!sessionParams\.include_genie_ontology\)/);
+  assert.match(block, /hydrateFromResponse\(response, id\)/);
   assert.doesNotMatch(block, /applyNewSessionDefaults/);
+  assert.match(appBlock('hydrateFromResponse'), /setIncludeGenieOntology\(view\.includeGenieOntology\)/);
 });
 
 test('switching into Genie Accelerator resets ontology to the facilitator default, other paths to off', () => {

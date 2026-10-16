@@ -323,10 +323,14 @@ _NUMERIC_ADD = re.compile(r"\b\w*(?:[Cc]ompleted|[Ss]kipped)\w*\??\.add\(\s*\d+\
 # are not display-only: stepNumbersToGates writes step 1 back as usecase_selection.
 NUMERIC_ADD_ALLOWLIST = {
     "src/App.tsx": (
-        3,
-        "step-1 intent overlay on both hydration paths when industry and use_case are set; "
-        "persisted as the usecase_selection gate on the next gate write; plus main's "
-        "Insights setup (nextCompleted.add(1)), written as completed_gates at once",
+        1,
+        "main's Insights setup (nextCompleted.add(1)), written as completed_gates at once",
+    ),
+    "src/utils/sessionSync.ts": (
+        1,
+        "step-1 intent overlay in sessionViewFrom (the one hydration path for both loads "
+        "and the background refresh) when industry and use_case are set; persisted as the "
+        "usecase_selection gate on the next gate write",
     ),
     "src/components/WorkflowDiagram.tsx": (
         1,
@@ -379,11 +383,14 @@ _ANY_NUMERIC_ADD = re.compile(r"\b[A-Za-z_]\w*\??\.add\(\s*\d+\s*\)")
 # file -> (exact count of numeric-literal adds on any receiver, why). Measured at a175f3a.
 NUMERIC_ANY_ADD_ALLOWLIST = {
     "src/App.tsx": (
-        3,
-        "restoredCompleted.add(1) (restoreSession) and loadedCompleted.add(1) (session "
-        "load): the step-1 intent overlay over the deriveCompletedStepNumbers set when "
-        "industry and use_case are set; written back as usecase_selection by stepNumbersToGates; "
+        1,
         "nextCompleted.add(1) in main's Insights setup, written as completed_gates at once",
+    ),
+    "src/utils/sessionSync.ts": (
+        1,
+        "completed.add(1) in sessionViewFrom: the step-1 intent overlay over the "
+        "deriveCompletedStepNumbers set when industry and use_case are set; written back as "
+        "usecase_selection by stepNumbersToGates",
     ),
     "src/components/WorkflowDiagram.tsx": (
         2,
@@ -432,14 +439,17 @@ def test_x3e_every_numeric_step_set_for_of_is_allowlisted():
 
 def test_x3_numeric_sets_are_gate_derived():
     app = (REPO_ROOT / "src" / "App.tsx").read_text(encoding="utf-8")
-    # Hydration: both load paths derive the numeric sets from the gate columns.
-    assert len(re.findall(r"deriveCompletedStepNumbers\(\s*response\.completed_gates", app)) == 2
-    assert len(re.findall(r"deriveSkippedStepNumbers\(\s*response\.skipped_gates", app)) == 2
+    sync = (REPO_ROOT / "src" / "utils" / "sessionSync.ts").read_text(encoding="utf-8")
+    # Hydration: both load paths and the refresh go through hydrateFromResponse,
+    # whose sessionViewFrom derives the numeric sets from the gate columns.
+    assert len(re.findall(r"deriveCompletedStepNumbers\(\s*resp\.completed_gates", sync)) == 1
+    assert len(re.findall(r"deriveSkippedStepNumbers\(\s*resp\.skipped_gates", sync)) == 1
+    assert len(re.findall(r"hydrateFromResponse\(response, (?:id|response\.session_id)\)", app)) == 2
+    assert "const view = sessionViewFrom(response);" in app
     # Every set*Steps call takes a derived set, a fresh empty set, or a handler's
     # next set (the toggles grow the projected set WorkflowDiagram passes up).
     allowed_args = {
-        "restoredCompleted", "loadedCompleted", "new Set()", "newSteps",
-        "new Set(skippedStepsArray)", "new Set(loadedSkippedSteps)", "newSkipped",
+        "view.completedSteps", "view.skippedSteps", "new Set()", "newSteps", "newSkipped",
         # main's Insights setup and idea-to-build start: the step-1 credit, each
         # written as completed_gates through stepNumbersToGates in the same handler.
         "nextCompleted", "new Set([1])",

@@ -200,16 +200,14 @@ def test_prompts_restate_verbatim_first_contract():
 
 
 def test_spa_start_prompt_names_match_mcp_prompts():
-    # startPromptForTrack (D-59) returns only these two constants; each must be
-    # a registered prompt name, or the panel tells the learner to say a prompt
-    # Genie Code does not have.
+    # The SPA's start line ("Start a workshop track: <name> (session <id>)") names
+    # one prompt; it must be a registered prompt name that takes the track and
+    # session id, or the line tells the learner to say a prompt Genie Code lacks.
     source = (REPO_ROOT / "src/constants/genieCodeMcpConnection.ts").read_text()
-    names = {
-        constant: re.search(rf"export const {constant} = '([^']+)';", source).group(1)
-        for constant in ("GENIE_ACCELERATOR_START_PROMPT", "GENERIC_TRACK_START_PROMPT")
-    }
-    returned = set(re.findall(r"prompt: (\w+_START_PROMPT)", source))
-    assert returned == set(names)
-    prompt_names = {prompt.name for prompt in mcp_server.mcp._prompt_manager.list_prompts()}
-    for constant, name in names.items():
-        assert name in prompt_names, f"{constant}={name!r} is not an MCP prompt"
+    name = re.search(r"export const GENERIC_TRACK_START_PROMPT = '([^']+)';", source).group(1)
+    assert "${GENERIC_TRACK_START_PROMPT}: ${track}${session}" in source
+    assert "Start the Genie Accelerator" not in source.split("*/")[-1], "the UI no longer names the retired prompt"
+    prompts = {prompt.name: prompt for prompt in mcp_server.mcp._prompt_manager.list_prompts()}
+    assert name in prompts, f"GENERIC_TRACK_START_PROMPT={name!r} is not an MCP prompt"
+    arguments = {argument.name for argument in prompts[name].arguments or []}
+    assert {"track", "session_id"} <= arguments

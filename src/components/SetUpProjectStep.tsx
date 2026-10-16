@@ -24,6 +24,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { GenieCodeStartLine } from './ConnectToGenieCodePanel';
 import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Sparkles, Terminal } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
@@ -55,6 +56,8 @@ interface SetUpProjectStepProps {
    * path. Falls back to '<your_email>' placeholder when null / empty.
    */
   currentUserEmail?: string | null;
+  /** The session's track, for the Genie Code start line (session linking). */
+  workshopLevel?: string;
 }
 
 type SetUpProjectVariant = 'coda' | 'genie-code' | 'desktop';
@@ -215,6 +218,7 @@ export function SetUpProjectStep({
   useCaseLabel,
   codingAssistant,
   currentUserEmail,
+  workshopLevel,
 }: SetUpProjectStepProps) {
   const readOnly = useReadOnly();
   const folderName = deriveFolderName(useCaseLabel);
@@ -632,6 +636,14 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                .assistant/skills load path, and validate. Email is
                auto-injected from getCurrentUser().
                =========================================================== */}
+          {/* Session linking: the line that continues THIS session in Genie Code. */}
+          {variant === 'genie-code' && (
+            <div data-testid="genie-code-start-note" className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2.5 space-y-1">
+              <p className="text-ui-sm font-semibold text-foreground">Using Genie Code over MCP?</p>
+              <GenieCodeStartLine workshopLevel={workshopLevel} sessionId={sessionId} lead="Enter" />
+            </div>
+          )}
+
           {variant === 'genie-code' && (() => {
             const emailForPath = currentUserEmail || '<your_email>';
             const projectPath = `/Workspace/Users/${emailForPath}/vibe-coding-workshop`;

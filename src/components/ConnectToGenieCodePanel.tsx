@@ -5,22 +5,65 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import {
   GENIE_CODE_MCP_CONNECTION_STEPS,
   mcpUrlFromOrigin,
-  startPromptForTrack,
+  startLineForSession,
 } from '../constants/genieCodeMcpConnection';
 
-/**
- * Self-serve "Connect to Genie Code" on-ramp (D4 §1.1).
- *
- * Step copy comes from {@link GENIE_CODE_MCP_CONNECTION_STEPS} — the same source
- * locked to D10 §2 by the on-ramp Playwright suite. The start prompt follows the
- * session's track ({@link startPromptForTrack}, D-59).
- */
-export function ConnectToGenieCodePanel({ workshopLevel }: { workshopLevel?: string } = {}) {
-  const { prompt, track } = startPromptForTrack(workshopLevel);
-  const mcpUrl = useMemo(
+/** The app's MCP endpoint, from the page's own origin. */
+function useMcpUrl(): string {
+  return useMemo(
     () => mcpUrlFromOrigin(typeof window !== 'undefined' ? window.location.origin : ''),
     [],
   );
+}
+
+/**
+ * The line a learner says in Genie Code to continue this web session there
+ * ({@link startLineForSession}), with a copy button. Shared by the Genie Code
+ * on-ramp and the Set Up Project note.
+ */
+export function GenieCodeStartLine({
+  workshopLevel,
+  sessionId,
+  lead = 'Then say',
+}: {
+  workshopLevel?: string;
+  sessionId?: string | null;
+  lead?: string;
+}) {
+  const line = startLineForSession(workshopLevel, sessionId);
+  const { copied, handleCopy } = useCopyToClipboard();
+  return (
+    <p className="text-ui-base text-muted-foreground flex items-start gap-2">
+      <ChevronRight className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" aria-hidden />
+      <span className="min-w-0 flex-1">
+        {lead}{' '}
+        <span data-testid="start-line" className="font-semibold text-foreground break-all">
+          &lsquo;{line}&rsquo;
+        </span>
+      </span>
+      <CopyButton
+        copied={copied}
+        onClick={() => void handleCopy(line)}
+        size="sm"
+        className="flex-shrink-0 bg-secondary/60 text-foreground hover:bg-secondary"
+      />
+    </p>
+  );
+}
+
+/**
+ * Self-serve "Connect to Genie Code" on-ramp (D4 §1.1), shown in the Genie Code
+ * detail panel of Choose Your Coding Assistant.
+ *
+ * Step copy comes from {@link GENIE_CODE_MCP_CONNECTION_STEPS} — the same source
+ * locked to D10 §2 by the on-ramp Playwright suite. The start line names the
+ * session's track and id, so Genie Code continues this session (session linking).
+ */
+export function ConnectToGenieCodePanel({
+  workshopLevel,
+  sessionId,
+}: { workshopLevel?: string; sessionId?: string | null } = {}) {
+  const mcpUrl = useMcpUrl();
   const { copied, handleCopy } = useCopyToClipboard();
 
   return (
@@ -30,7 +73,7 @@ export function ConnectToGenieCodePanel({ workshopLevel }: { workshopLevel?: str
       className="bg-card rounded-lg border border-border overflow-hidden"
       aria-labelledby="connect-to-genie-code-heading"
     >
-      <div className="p-4 sm:p-6 space-y-4">
+      <div className="p-4 space-y-4">
         <div className="flex items-start gap-3">
           <div className="p-2 rounded-md bg-primary/20 flex-shrink-0">
             <Plug className="w-5 h-5 text-primary" />
@@ -78,25 +121,30 @@ export function ConnectToGenieCodePanel({ workshopLevel }: { workshopLevel?: str
           ))}
         </ol>
 
-        <p className="text-ui-base text-muted-foreground flex items-start gap-2 pt-1 border-t border-border">
-          <ChevronRight className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" aria-hidden />
-          <span>
-            Then say{' '}
-            <span className="font-semibold text-foreground">
-              &lsquo;{prompt}&rsquo;
-            </span>
-            {track && (
-              <>
-                {' '}with track{' '}
-                <code data-testid="start-prompt-track" className="font-mono text-foreground">
-                  {track}
-                </code>
-              </>
-            )}
-            .
-          </span>
-        </p>
+        <div className="pt-1 border-t border-border space-y-1">
+          <GenieCodeStartLine workshopLevel={workshopLevel} sessionId={sessionId} />
+          <p className="text-ui-xs text-muted-foreground pl-6">
+            It continues this session in Genie Code. You pick or change the track in Workshop Path.
+          </p>
+        </div>
       </div>
     </section>
+  );
+}
+
+/** Compact MCP URL copy chip for the collapsed / locked assistant selector. */
+export function McpUrlChip() {
+  const mcpUrl = useMcpUrl();
+  const { copied, handleCopy } = useCopyToClipboard();
+  return (
+    <span data-testid="mcp-url-chip" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-2 py-0.5">
+      <code className="text-ui-2xs font-mono text-muted-foreground max-w-[18rem] truncate">{mcpUrl}</code>
+      <CopyButton
+        copied={copied}
+        onClick={() => void handleCopy(mcpUrl)}
+        size="sm"
+        className="bg-transparent text-muted-foreground hover:text-foreground"
+      />
+    </span>
   );
 }
