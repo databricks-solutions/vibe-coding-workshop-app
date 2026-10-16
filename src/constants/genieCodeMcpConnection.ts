@@ -7,7 +7,8 @@
  * the same step text (markdown emphasis/backticks stripped).
  */
 
-import { WORKSHOP_LEVELS } from './workflowSections';
+import type { WorkshopLevel } from './workflowSections';
+import { TRACK_DISPLAY_NAMES } from './trackNames';
 
 /** The three connection steps from D10 §2 (learner path). */
 export const GENIE_CODE_MCP_CONNECTION_STEPS = [
@@ -16,24 +17,28 @@ export const GENIE_CODE_MCP_CONNECTION_STEPS = [
   "Enter the app's MCP URL: https://<app-url>/mcp (the app URL + /mcp).",
 ] as const;
 
-/** MCP prompt name from D2 §5 — first-run entry point after connecting. */
-export const GENIE_ACCELERATOR_START_PROMPT = 'Start the Genie Accelerator';
-
-/** MCP prompt name for any other track (`src/backend/mcp_server.py`, arg `track`). */
+/**
+ * The MCP prompt every start line names (`src/backend/mcp_server.py`, args `track`
+ * and `session_id`). The server matches the track by id or by name, so the line
+ * uses the name a learner reads. "Start the Genie Accelerator" stays a server
+ * prompt for anyone who already uses it, but the UI no longer shows it.
+ */
 export const GENERIC_TRACK_START_PROMPT = 'Start a workshop track';
 
 /**
- * The MCP start prompt for the session's track (D-59). The Genie Accelerator, an
- * unset level, or a level the SPA does not know keep the Genie Accelerator prompt;
- * any other track uses the generic prompt with its track id.
+ * What the learner says in Genie Code to continue THIS web session there:
+ * "Start a workshop track: Genie Accelerator (session <id>)". Without a session
+ * id (none loaded yet) it starts a new one.
  */
-export function startPromptForTrack(
+export function startLineForSession(
   level: string | null | undefined,
-): { prompt: string; track: string | null } {
-  if (!level || level === 'genie-accelerator' || !Object.hasOwn(WORKSHOP_LEVELS, level)) {
-    return { prompt: GENIE_ACCELERATOR_START_PROMPT, track: null };
-  }
-  return { prompt: GENERIC_TRACK_START_PROMPT, track: level };
+  sessionId: string | null | undefined,
+): string {
+  const track = level && Object.hasOwn(TRACK_DISPLAY_NAMES, level)
+    ? TRACK_DISPLAY_NAMES[level as WorkshopLevel]
+    : TRACK_DISPLAY_NAMES['genie-accelerator'];
+  const session = sessionId ? ` (session ${sessionId})` : '';
+  return `${GENERIC_TRACK_START_PROMPT}: ${track}${session}`;
 }
 
 /** Runtime MCP endpoint for the deployed app (window origin + /mcp). */

@@ -836,6 +836,7 @@ export function TestScenarioConfig({ onToast }: TestScenarioConfigProps) {
                     useCaseLabel={customUseCaseLabel || selectedUseCaseLabel}
                     codingAssistant={selectedAssistant}
                     currentUserEmail={currentUserEmail}
+                    workshopLevel={workshopLevel}
                   />
                 </div>
               );

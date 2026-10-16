@@ -856,9 +856,26 @@ export interface HackathonResults {
 class ApiClient {
   private baseUrl: string;
   private workshopDefaults?: Promise<WorkshopDefaults>;
+  // Session-row writes issued so far and still in flight, so the background
+  // session refresh never applies a read a write could have overtaken
+  // (utils/sessionSync canApplyRefresh).
+  private sessionWrites = { seq: 0, inflight: 0 };
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
+  }
+
+  /** A snapshot of the session-write counters (see sessionWrites). */
+  sessionWriteState(): { seq: number; inflight: number } {
+    return { ...this.sessionWrites };
+  }
+
+  private trackSessionWrite<T>(write: () => Promise<T>): Promise<T> {
+    this.sessionWrites.seq += 1;
+    this.sessionWrites.inflight += 1;
+    return write().finally(() => {
+      this.sessionWrites.inflight -= 1;
+    });
   }
 
   private async fetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -1641,10 +1658,10 @@ class ApiClient {
 
   /** Save session to database */
   async saveSession(request: SessionSaveRequest): Promise<SessionSaveResponse> {
-    return this.fetch<SessionSaveResponse>('/session/save', {
+    return this.trackSessionWrite(() => this.fetch<SessionSaveResponse>('/session/save', {
       method: 'POST',
       body: JSON.stringify(request),
-    });
+    }));
   }
 
   /** Load session by ID */
@@ -1661,18 +1678,18 @@ class ApiClient {
 
   /** Update a specific step's generated prompt */
   async updateStepPrompt(request: UpdateStepPromptRequest): Promise<{ success: boolean; message: string }> {
-    return this.fetch('/session/update-step', {
+    return this.trackSessionWrite(() => this.fetch<{ success: boolean; message: string }>('/session/update-step', {
       method: 'POST',
       body: JSON.stringify(request),
-    });
+    }));
   }
 
   /** Update session metadata (industry/use case selection) */
   async updateSessionMetadata(request: UpdateSessionMetadataRequest): Promise<{ success: boolean; message: string }> {
-    return this.fetch('/session/update-metadata', {
+    return this.trackSessionWrite(() => this.fetch<{ success: boolean; message: string }>('/session/update-metadata', {
       method: 'POST',
       body: JSON.stringify(request),
-    });
+    }));
   }
 
   /** Submit feedback for a session */

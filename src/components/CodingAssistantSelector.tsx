@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Star, Terminal, Lock, Info } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { AiGatewaySetupGuide } from './AiGatewaySetupGuide';
+import { ConnectToGenieCodePanel, McpUrlChip } from './ConnectToGenieCodePanel';
 import {
   parseCodingAssistantsConfig,
   type AssistantId,
@@ -236,6 +237,9 @@ interface CodingAssistantSelectorProps {
    *  until the user makes an explicit choice. Defaults to true (existing callers
    *  unchanged). */
   selectionExplicit?: boolean;
+  /** The session's track and id, for the Genie Code start line (session linking). */
+  workshopLevel?: string;
+  sessionId?: string | null;
 }
 
 export function CodingAssistantSelector({
@@ -248,6 +252,8 @@ export function CodingAssistantSelector({
   highlightConfirm = false,
   isLocked = false,
   selectionExplicit = true,
+  workshopLevel,
+  sessionId,
 }: CodingAssistantSelectorProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const [prevForceCollapsed, setPrevForceCollapsed] = useState(forceCollapsed);
@@ -320,7 +326,7 @@ export function CodingAssistantSelector({
   // Continue button. Only this one option gets the looser cap so the collapse
   // animation on the other assistants stays snappy (see #ai-gateway-continue).
   const expandedMaxH =
-    selected?.id === 'ai-gateway' ? 'max-h-[1200px]' : 'max-h-[800px]';
+    selected?.id === 'ai-gateway' ? 'max-h-[1200px]' : selected?.id === 'genie-code' ? 'max-h-[1400px]' : 'max-h-[800px]';
 
   const handleConfirm = () => {
     setUserOverride(false);
@@ -372,6 +378,9 @@ export function CodingAssistantSelector({
             }`}
           />
         </button>
+
+        {/* Genie Code learners reconnect from here once the section is collapsed. */}
+        {selected?.id === 'genie-code' && !isExpanded && <McpUrlChip />}
 
         {!hideConfirm && isComplete && !isExpanded && (
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-ui-sm font-medium animate-fade-in">
@@ -555,6 +564,11 @@ export function CodingAssistantSelector({
 
           {/* Inline setup guide — only for the AI Gateway assistant */}
           {selected?.id === 'ai-gateway' && <AiGatewaySetupGuide />}
+
+          {/* Genie Code on-ramp (D4 §1.1): connect, then continue this session there. */}
+          {selected?.id === 'genie-code' && (
+            <ConnectToGenieCodePanel workshopLevel={workshopLevel} sessionId={sessionId} />
+          )}
 
           {/* Prompt to select if nothing chosen yet */}
           {!selected && (

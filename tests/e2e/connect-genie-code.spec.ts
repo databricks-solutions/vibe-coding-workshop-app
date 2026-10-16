@@ -12,10 +12,17 @@ import {
  */
 
 test.describe('Connect to Genie Code on-ramp', () => {
-  test('landing page panel shows MCP URL, copy control, three steps, and start prompt', async ({
+  test('the panel shows only with Genie Code selected: MCP URL, copy, three steps, start line', async ({
     page,
   }) => {
     await page.goto('/');
+
+    // Not shown for every assistant any more: it lives in the Genie Code detail panel.
+    await expect(page.getByTestId('connect-to-genie-code')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /get started/i }).click();
+    const assistants = page.locator('#coding-assistant-section');
+    await assistants.getByRole('button', { name: /Genie Code/ }).first().click();
 
     const panel = page.getByTestId('connect-to-genie-code');
     await expect(panel).toBeVisible();
@@ -25,18 +32,19 @@ test.describe('Connect to Genie Code on-ramp', () => {
     await expect(mcpUrl).toBeVisible();
     const urlText = (await mcpUrl.textContent())?.trim() ?? '';
     expect(urlText).toMatch(/^https?:\/\/.+\/mcp$/);
-    expect(urlText.endsWith('/mcp')).toBe(true);
 
-    await expect(panel.getByRole('button', { name: /copy/i })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /copy/i }).first()).toBeVisible();
 
     for (const step of GENIE_CODE_MCP_CONNECTION_STEPS) {
       await expect(panel.getByText(step, { exact: true })).toBeVisible();
     }
 
-    // A fresh session's level is end-to-end (D-59), so the panel names the generic prompt.
-    await expect(panel.getByText(GENERIC_TRACK_START_PROMPT, { exact: false })).toBeVisible();
-    await expect(panel.getByTestId('start-prompt-track')).toHaveText('end-to-end');
-    await expect(panel.getByText(/then say/i)).toBeVisible();
+    // Session linking: the line names the session's track and id, so Genie Code
+    // continues this session.
+    const startLine = panel.getByTestId('start-line');
+    await expect(startLine).toContainText(`${GENERIC_TRACK_START_PROMPT}: `);
+    await expect(startLine).toHaveText(/Start a workshop track: .+ \(session [0-9a-f-]{36}\)/);
+    await expect(panel.getByText('Start the Genie Accelerator')).toHaveCount(0);
   });
 
   test('connection step copy matches D10 §2 facilitator guide (no drift)', () => {

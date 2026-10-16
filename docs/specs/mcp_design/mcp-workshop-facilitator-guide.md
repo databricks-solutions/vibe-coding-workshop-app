@@ -92,8 +92,11 @@ Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any o
 
 ## 3. Start the track / continue
 
-- Type or pick the start prompt for your track: on the Genie Accelerator, **"Start the Genie
-  Accelerator"**; on any track, **"Start a workshop track"** with the track. The track can be its
+- Type the line the web UI shows: **"Start a workshop track: <track name> (session <id>)"**. It is
+  in the Genie Code card of **Choose Your Coding Assistant** (with the MCP URL and the three
+  connection steps) and again in **Set Up Project**, each with a copy button; it names the
+  session's track and id, so Genie Code continues that same web session. Without the web UI, say
+  **"Start a workshop track"** with the track ("Start the Genie Accelerator" still works too). The track can be its
   id or a name a learner would say ("Genie Accelerator", "Apps + Lakebase", "lakehouse with AI",
   "Reverse ETL: Analytics App"); "Lakehouse" means Build Forward unless the learner says "reverse".
   Add the web session's id to continue that same session (§4). Genie Code calls
@@ -197,7 +200,11 @@ way; both sides read and write the same row.
 - **Web to Genie Code:** start the track with the web session's id (`vibe_start_track` with
   `session_id`). If that session was never named, Genie Code names it ("Genie Code — …"), so the
   web UI's "New session" clean-up can't delete it. A name the learner chose is never replaced.
-- **Genie Code to the web UI:** every start, switch and save returns a `session_url`; open it.
+- **Genie Code to the web UI:** every start, switch and save returns a `session_url`; open it. An
+  open web tab also catches up by itself (every 30 s, and as soon as you switch back to it) and
+  says what changed ("Now on Lakehouse"). A session Genie Code started after this one shows up as
+  "New session in Genie Code" with an **Open** button. If Genie Code changed the session while the
+  Save dialog was open, Save takes those changes first and asks you to save again.
 - **Switch track** from either side, under the same rule: any track until Set Up Project is done,
   then only the next step on the same path (Apps → + Lakebase → + Lakehouse → + AI and Agents).
   Over MCP, `vibe_switch_track` (or starting with another track on the same session) applies it;
@@ -257,7 +264,8 @@ the chat** and you answer in chat:
 ## 8. Learner quick reference
 
 - **Mode:** Agent. **Server URL:** `https://<app-url>/mcp`.
-- **Start:** "Start the Genie Accelerator". **Resume:** "Continue where I left off".
+- **Start:** the line the web UI shows, "Start a workshop track: <track> (session <id>)" (or just
+  "Start a workshop track: Genie Accelerator"). **Resume:** "Continue where I left off".
 - **Answering:** in chat; silence = accept the recommended default.
 - **Hard stops:** the benchmark step asks you to confirm; with the Genie Ontology on, so do Author
   Pages and Write the Routing Page (confirm you published the Page in the Databricks UI).
