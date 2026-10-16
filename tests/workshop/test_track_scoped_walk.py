@@ -31,6 +31,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.backend import mcp_server
+from src.backend.workshop.track_names import display_name
 from src.backend.services import coaching
 from src.backend.workshop import engine
 from src.backend.workshop.state import build_session_state
@@ -338,9 +339,11 @@ def test_w4_genie_accelerator_names_are_byte_identical(walk_env):
     assert _seed_name(saves, started.session_id) == "Genie Code Workshop"
 
 
-def test_w4_other_tracks_add_the_track_title(walk_env):
+def test_w4_other_tracks_add_the_track_display_name(walk_env):
     _, saves = walk_env
-    title = MANIFEST_JSON["lakehouse"]["title"]
+    title = display_name("lakehouse-di")
+    assert _seed_name(saves, _start("lakehouse-di", use_case="Demand")) == f"Genie Code — {title}: Demand"
+    title = display_name("lakehouse")
     assert _seed_name(saves, _start("lakehouse", use_case="Demand")) == f"Genie Code — {title}: Demand"
     started = mcp_server.vibe_start_track("lakehouse")
     assert _seed_name(saves, started.session_id) == f"Genie Code — {title}"
@@ -360,7 +363,7 @@ def test_w4_lock_refines_the_name_with_the_session_track(walk_env):
         },
     )
     names = [fields.get("session_name") for (s, fields) in saves if s == sid]
-    assert f"Genie Code — {MANIFEST_JSON['app-only']['title']}: AI Booking" in names
+    assert f"Genie Code — {display_name('app-only')}: AI Booking" in names
 
 
 # --- D-30a: the use-case fallback is the track's manifest title -----------------
@@ -422,8 +425,8 @@ def test_w5_start_genie_accelerator_is_unchanged():
     assert mcp_server.start_genie_accelerator("U", "I") == f"{mcp_server.ORIENTATION_PREAMBLE}\n\n{expected_tail}"
 
 
-def test_w5_tool_count_is_seven():
-    assert len(mcp_server.mcp._tool_manager.list_tools()) == 7
+def test_w5_tool_count_is_ten():
+    assert len(mcp_server.mcp._tool_manager.list_tools()) == 10
 
 
 # --- W6: coaching receives the session track ------------------------------------

@@ -282,9 +282,9 @@ def test_no_other_track_changes(env):
         assert "includeGenieOntology" not in (params.get("flags") or {}), track
 
 
-def test_still_seven_tools_within_budget():
+def test_still_ten_tools_within_budget():
     tools = mcp_server.mcp._tool_manager.list_tools()
-    assert len(tools) == 7
+    assert len(tools) == 10
     assert all(len(tool.description or "") <= 400 for tool in tools)
 
 

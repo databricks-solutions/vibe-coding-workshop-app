@@ -105,10 +105,10 @@ def test_usecases_resource_unknown_industry_is_empty(monkeypatch):
 
 
 def test_tool_budget_stays_within_limit_and_resources_are_not_tools():
-    """(3) Resources are budget-free: the registered tool set stays at 7 (well under
+    """(3) Resources are budget-free: the registered tool set stays at 10 (half
     the 20-tool budget), and neither use-case URI is a tool."""
     tool_names = {tool.name for tool in mcp_server.mcp._tool_manager.list_tools()}
-    assert len(tool_names) == 7, f"tool budget drifted: {sorted(tool_names)}"
+    assert len(tool_names) == 10, f"tool budget drifted: {sorted(tool_names)}"
 
     # The use-case resources are registered as a concrete resource + a template,
     # never as tools.
