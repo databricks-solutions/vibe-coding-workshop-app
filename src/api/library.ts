@@ -18,7 +18,15 @@ export interface LibraryCollection {
   updated_by?: string | null;
 }
 
-export type UseCaseSource = 'seed' | 'admin' | 'ideate' | 'ideate_approved' | 'ideate_dismissed';
+export type UseCaseSource =
+  | 'seed'
+  | 'admin'
+  | 'ideate'
+  | 'ideate_pending'
+  | 'ideate_changes'
+  | 'ideate_rejected'
+  | 'ideate_approved'
+  | 'ideate_dismissed';
 
 export interface LibraryUseCase {
   industry: string;

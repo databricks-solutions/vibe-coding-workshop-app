@@ -32,8 +32,8 @@ const BlueprintScreen = lazy(() => import('./blueprint/BlueprintScreen'));
 
 const DATA_LABELS: Record<DataSource, string> = {
   existing: 'data already in Databricks',
-  upload: 'a file you upload',
-  sample: 'sample data',
+  upload: 'sample data built from your schema definition CSV',
+  sample: 'synthetic sample data generated from your idea',
   blueprint: 'an industry data model',
 };
 

@@ -699,6 +699,7 @@ try:
                 '10_seed_usecase_collections.sql',
                 '11_seed_industry_outcome_maps.sql',
                 '12_seed_office_plays.sql',
+                '13_update_schema_upload_prompts.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:

@@ -41,10 +41,12 @@ const BLUEPRINT_REPO = 'github.com/databricks-industry-solutions/lakehouse-indus
 
 const DATA_PHRASES: Record<DataSource, string> = {
   existing: 'Use data that already exists in Databricks',
-  upload: 'Use a file I will upload',
-  sample: 'Use realistic sample data',
+  upload: 'Use an uploaded schema definition CSV to create matching sample data',
+  sample: 'Generate synthetic sample data from the idea and its questions',
   blueprint: 'Use the industry data model',
 };
+const LEGACY_UPLOAD_PHRASE = 'Use a file I will upload';
+const LEGACY_SAMPLE_PHRASE = 'Use realistic sample data';
 
 /** The session API rejects longer custom use case labels. */
 export const MAX_NAME_LENGTH = 30;
@@ -226,8 +228,8 @@ export function parseBrief(description: string): ParsedBrief {
   const dataLine = lines.find(l => l.startsWith(DATA_HEADER));
   if (dataLine) {
     const rest = dataLine.slice(DATA_HEADER.length).trim();
-    if (rest.startsWith(DATA_PHRASES.upload)) dataSource = 'upload';
-    else if (rest.startsWith(DATA_PHRASES.sample)) dataSource = 'sample';
+    if (rest.startsWith(DATA_PHRASES.upload) || rest.startsWith(LEGACY_UPLOAD_PHRASE)) dataSource = 'upload';
+    else if (rest.startsWith(DATA_PHRASES.sample) || rest.startsWith(LEGACY_SAMPLE_PHRASE)) dataSource = 'sample';
     else if (rest.startsWith(DATA_PHRASES.blueprint)) {
       const label = rest.match(/"([^"]+)"/)?.[1] ?? '';
       const bpLine = lines.find(l => l.startsWith(BLUEPRINT_HEADER));

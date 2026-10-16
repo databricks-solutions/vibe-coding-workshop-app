@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { apiClient } from '../../../api/client';
-import { stepsFor, type Idea, type IdeaScore } from './types';
+import { stepsFor, type Idea, type IdeaReview, type IdeaScore } from './types';
 import { skippedImpact } from './businessCase';
 import { caseFigures } from './ideaContext';
 
@@ -21,15 +21,27 @@ function normalize(list: unknown): Idea[] {
       title: i.title || 'Untitled idea',
       industry: i.industry ?? '',
       status: i.status ?? 'exploring',
+      revision: typeof i.revision === 'number' && i.revision >= 1 ? i.revision : 1,
       step: stepsFor(i.mode).some(s => s.key === i.step) ? i.step : 'spark',
       approved: Array.isArray(i.approved) ? i.approved : [],
       answers: i.answers && typeof i.answers === 'object' ? i.answers : {},
       assumptions: Array.isArray(i.assumptions) ? i.assumptions : [],
       decisions: Array.isArray(i.decisions) ? i.decisions : [],
+      review: normalizeReview(i.review, typeof i.revision === 'number' && i.revision >= 1 ? i.revision : 1),
       createdAt: i.createdAt ?? new Date().toISOString(),
       updatedAt: i.updatedAt ?? new Date().toISOString(),
     }))
     .map(withImpactStep);
+}
+
+function normalizeReview(value: IdeaReview | undefined, revision: number): IdeaReview {
+  const valid = new Set(['draft', 'pending', 'changes_requested', 'rejected', 'approved']);
+  return {
+    ...value,
+    status: value && valid.has(value.status) ? value.status : 'draft',
+    revision: typeof value?.revision === 'number' ? value.revision : revision,
+    history: Array.isArray(value?.history) ? value.history : [],
+  };
 }
 
 /** One idea from outside the store (a server payload), with the same defaults the store applies. */
@@ -106,6 +118,7 @@ function setSync(s: SyncState) {
 const forServer = (idea: Idea) => {
   const rest: Partial<Idea> = { ...idea };
   delete rest.score;
+  delete rest.review;
   return rest as unknown as Record<string, unknown>;
 };
 
@@ -128,6 +141,9 @@ async function push(id: string) {
   try {
     const r = await apiClient.ideaSave(forServer(idea), caseFigures(idea)?.value.expected ?? null);
     applyScore(id, r.score as IdeaScore);
+    if (r.review && snapshot.some(i => i.id === id)) {
+      commit(snapshot.map(i => (i.id === id ? { ...i, review: r.review as IdeaReview } : i)));
+    }
     if (!pending.size) setSync('saved');
   } catch (e) {
     const status = (e as { status?: number }).status;
@@ -145,10 +161,17 @@ async function push(id: string) {
   }
 }
 
+let hydration: Promise<void> | null = null;
+
 /** Merge the server's copy once per page load; local ideas the server has never seen are uploaded. */
-async function hydrate() {
-  if (hydrated || typeof window === 'undefined') return;
+function hydrate() {
+  if (hydrated || typeof window === 'undefined') return hydration ?? Promise.resolve();
   hydrated = true;
+  hydration = runHydrate();
+  return hydration;
+}
+
+async function runHydrate() {
   let remote: Idea[];
   try {
     remote = normalize(await apiClient.ideasList());
@@ -174,7 +197,7 @@ async function hydrate() {
     } else if (server.updatedAt > local.updatedAt) {
       merged.push(server);
     } else {
-      merged.push({ ...local, score: server.score });
+      merged.push({ ...local, score: server.score, review: server.review });
       if (local.updatedAt > server.updatedAt) toPush.push(local.id);
     }
   }
@@ -210,6 +233,44 @@ export function setIdeaScore(id: string, score: IdeaScore) {
   applyScore(id, score);
 }
 
+/** Puts the server's review decision on a stored idea without counting it as an edit. */
+export function setIdeaReview(id: string, review: IdeaReview) {
+  if (!snapshot.some(i => i.id === id)) return;
+  commit(snapshot.map(i => (i.id === id ? { ...i, review } : i)));
+}
+
+export interface ReviewChange { idea: Idea; from: IdeaReview['status'] }
+
+/**
+ * Pulls decisions other people made since the page loaded. Only review and score are merged,
+ * and ideas with unsaved local edits are left alone.
+ */
+export async function refreshReviews(): Promise<ReviewChange[]> {
+  if (!serverEnabled || typeof window === 'undefined') return [];
+  await hydrate();
+  let remote: Idea[];
+  try {
+    remote = normalize(await apiClient.ideasList());
+  } catch {
+    return [];
+  }
+  const byId = new Map(remote.map(i => [i.id, i]));
+  const changes: ReviewChange[] = [];
+  let dirty = false;
+  const next = snapshot.map(local => {
+    const server = byId.get(local.id);
+    if (!server || pending.has(local.id)) return local;
+    const a = local.review, b = server.review;
+    if (a?.status === b?.status && a?.revision === b?.revision && a?.reviewedAt === b?.reviewedAt) return local;
+    dirty = true;
+    const merged = { ...local, review: b, score: server.score ?? local.score };
+    if (a?.status !== b?.status) changes.push({ idea: merged, from: a?.status ?? 'draft' });
+    return merged;
+  });
+  if (dirty) commit(next);
+  return changes;
+}
+
 // ============== Hook ==============
 
 export function useIdeas() {
@@ -224,6 +285,7 @@ export function useIdeas() {
       title: seed.split(/\s+/).slice(0, 6).join(' '),
       industry,
       status: 'exploring',
+      revision: 1,
       createdAt: now,
       updatedAt: now,
       step: 'spark',
@@ -289,6 +351,7 @@ function copyOf(src: Idea, extra: Partial<Idea>): Idea {
     builtRevision: undefined,
     caseOpenedAt: undefined,
     score: undefined,
+    review: normalizeReview(undefined, src.revision ?? 0),
     trailSeenAt: undefined,
     createdAt: now,
     updatedAt: now,

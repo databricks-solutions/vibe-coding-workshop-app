@@ -251,7 +251,7 @@ export function LibraryPage() {
               />
             )}
             {view.name === 'review' && (
-              <ReviewQueue model={model} actions={actions} canDismiss={!!capabilities?.source} onOpen={openUseCase} />
+              <ReviewQueue notify={notify} />
             )}
             {currentCollection && (
               <CollectionPage

@@ -17514,14 +17514,14 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- Each has a default row (how_to_apply/expected_output) and a genie-code fork.
 -- =============================================================================
 
--- semlayer_locate_upload (default), save uploaded dictionary + seed brief; bypass_llm = TRUE
+-- semlayer_locate_upload (default), build approved Faker data from uploaded schema + seed brief; bypass_llm = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (943, 'semlayer_locate_upload',
-'**Save my uploaded data dictionary, then seed the Genie brief from it and the PRD — no building yet, just a first-pass brief for me to correct.**
+'**Use my uploaded schema definition to propose DDL and row counts, wait for my approval, then create matching Faker sample data in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and seed the Genie brief.**
 
-Save the following CSV to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_dictionary.csv`:
+Treat this CSV as the schema contract and save it to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_schema.csv`:
 
 --- CSV CONTENT START ---
 {csv_content}
@@ -17529,44 +17529,56 @@ Save the following CSV to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_d
 
 Then read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
 
-From the dictionary, pull out every measure name, definition, and field alias, and note the table and column each maps to.
+Parse every table and column from the CSV, preserving its data type, nullability, ordinal position, and comment. Infer relationships only when needed and label every inferred key or constraint as an assumption.
 
-Start `docs/genie_brief.md` from the PRD and the dictionary: the function, candidate measures, and the questions my users actually ask. Collect anything they don''t cover into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list.
+First show me:
+1. the proposed `CREATE TABLE` DDL in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`;
+2. a row count for every table;
+3. inferred relationships and data-generation assumptions.
 
-Record the gate result in `.vibecoding-state.md`.',
+Do not create anything yet. Wait for my explicit approval.
+
+On my approval, create the tables in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, use Faker to generate realistic sample rows that conform to the uploaded types, nullability, and relationships, and validate the actual row counts and key relationships.
+
+Then start `docs/genie_brief.md` from the PRD and the created schema: the function, candidate measures grounded in actual columns, and the questions my users actually ask. Collect open points into ONE numbered list and ask me in a single batch, pre-filling your best assumption for each and marking it "(assumed — correct me)".
+
+Record the target, created tables, validation results, and gate result in `.vibecoding-state.md`.',
 '',
-'Locate Data & Bring Context (Upload)',
-'Upload a data dictionary CSV; Genie Code saves it and seeds the Genie brief from it and the PRD. No building yet',
+'Locate Data & Bring Context (Schema CSV)',
+'Upload a schema definition CSV; Genie Code proposes matching DDL and row counts, waits for approval, creates Faker sample data in your Gold target, and seeds the brief',
 60,
 '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (a git clone of the workshop repo), not the page''s current working directory.
 
 ## How to apply
 
-1. On the **Upload** tab, drop your data dictionary CSV and click **Process & Generate**. The app folds the file into the prompt at `{csv_content}`.
+1. Drop your schema definition CSV and click **Process & Generate**. The app validates the required metadata columns and folds the schema into the prompt at `{csv_content}`.
 2. Copy the generated prompt, start a new Agent chat in Genie Code, paste, and press Enter.
+3. Review the proposed DDL and row counts, then approve before anything is created.
 
 **State:** on the first step of the track Genie Code bootstraps `.vibecoding-state.md`; otherwise it appends this step''s gate.
 
 ## What this produces
 
-`docs/genie_brief.md` seeded from your dictionary and the PRD: function, candidate measures, and the questions your users ask. Every later step reads this brief back, so a good brief here saves rework later.',
+Tables and Faker sample data matching your uploaded schema in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, plus `docs/genie_brief.md` seeded from the created schema and PRD.',
 '## Expected deliverables
 
-- Your dictionary saved under `<ARTIFACT_ROOT>/docs/context/`
-- `docs/genie_brief.md` seeded from the dictionary and the PRD: function, candidate measures, user questions
+- Your schema CSV saved under `<ARTIFACT_ROOT>/docs/context/`
+- Approved DDL and row counts for every uploaded table
+- Created and validated Faker sample data in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`
+- `docs/genie_brief.md` seeded from the created schema and the PRD
 - One batched, pre-assumed clarifying-question list presented for your correction
 - Gate recorded to `.vibecoding-state.md`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- semlayer_locate_upload (genie-code fork), save uploaded dictionary + seed brief; bypass_llm = TRUE
+-- semlayer_locate_upload (genie-code fork), build approved Faker data from uploaded schema + seed brief; bypass_llm = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (944, 'semlayer_locate_upload', 'genie-code',
-'**Save my uploaded data dictionary, then seed the Genie brief from it and the PRD — no building yet, just a first-pass brief for me to correct.**
+'**Use my uploaded schema definition to propose DDL and row counts, wait for my approval, then create matching Faker sample data in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` via `executeCode` and seed the Genie brief.**
 
-Save the following CSV to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_dictionary.csv`:
+Treat this CSV as the schema contract and save it to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_schema.csv`:
 
 --- CSV CONTENT START ---
 {csv_content}
@@ -17574,13 +17586,17 @@ Save the following CSV to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_d
 
 Then read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
 
-From the dictionary, pull out every measure name, definition, and field alias, and note the table and column each maps to.
+Parse every table and column from the CSV, preserving its data type, nullability, ordinal position, and comment. Infer relationships only when needed and label every inferred key or constraint as an assumption.
 
-Start `docs/genie_brief.md` from the PRD and the dictionary: the function, candidate measures, and the questions my users actually ask. Collect anything they don''t cover into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list, and record the gate result in `.vibecoding-state.md`.
+First show me the proposed `CREATE TABLE` DDL in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, a row count for every table, and all inferred relationships and generation assumptions. Do not call `executeCode` or create anything yet. Wait for my explicit approval.
+
+On my approval, use `executeCode` to create the tables in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, generate realistic Faker rows that conform to the uploaded types, nullability, and relationships, and validate the actual row counts and key relationships.
+
+Then start `docs/genie_brief.md` from the PRD and the created schema: the function, candidate measures grounded in actual columns, and the questions my users actually ask. Collect open points into ONE numbered list and ask me in a single batch, pre-filling your best assumption for each and marking it "(assumed — correct me)".
 
 **State-lock:** on the first step of the track Genie Code bootstraps `.vibecoding-state.md`; otherwise it appends this step''s Per-Step Log entry and gate result, then re-reads to confirm the write landed.
 
-**Gate:** `Brief seeded` — the dictionary is saved under `docs/context/`; `docs/genie_brief.md` exists with function, candidate measures, and the questions users ask; one batched, pre-assumed question list was presented; the gate result is recorded in `.vibecoding-state.md`.
+**Gate:** `Brief seeded` — the schema CSV is saved under `docs/context/`; approved tables and Faker sample data exist in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`; actual row counts and key relationships were validated; `docs/genie_brief.md` exists with function, candidate measures, and user questions; the gate result is recorded in `.vibecoding-state.md`.
 
 **➡️ Next step.** Profile the schema so the measure inventory is grounded in what the data can actually support.',
 '',

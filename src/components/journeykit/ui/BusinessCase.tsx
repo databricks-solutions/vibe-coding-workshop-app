@@ -70,14 +70,14 @@ export function BusinessCaseView({ flow, leading, onBackToFlow, onAddNumbers }: 
               <button onClick={download} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-foreground text-ui-sm font-medium hover:bg-secondary/80">
                 <Download className="w-3.5 h-3.5" /> Download PDF
               </button>
-              {config.briefOutcomes && idea.status === 'committed' && (
-                idea.catalogRef ? (
-                  <button onClick={() => setSubmitOpen(true)} title="Resubmit with your latest changes" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-ui-sm font-medium hover:bg-emerald-500/20">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">On the use case map</span>
-                  </button>
+              {config.briefOutcomes && idea.status === 'committed' && idea.review?.status !== 'pending' && (
+                idea.review?.status === 'approved' && idea.review.approvedRevision === (idea.revision ?? 0) ? (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-ui-sm font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Approved</span>
+                  </span>
                 ) : (
                   <button onClick={() => setSubmitOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-ui-sm font-semibold hover:opacity-90">
-                    <Send className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Submit to use case map</span>
+                    <Send className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Submit for approval</span>
                   </button>
                 )
               )}

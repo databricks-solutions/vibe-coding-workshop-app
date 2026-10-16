@@ -5,7 +5,7 @@
 export * from './engine/types';
 export * from './engine/ideaContext';
 export * from './engine/businessCase';
-export { useIdeas, useSyncState, flushIdea, setIdeaScore, normalizeIdea, type SyncState } from './engine/useIdeas';
+export { useIdeas, useSyncState, flushIdea, setIdeaScore, setIdeaReview, refreshReviews, normalizeIdea, type ReviewChange, type SyncState } from './engine/useIdeas';
 export { nextNudge, welcomeBack, type Nudge } from './engine/encouragement';
 export { useIdeaFlow, MAX_GENIE_QUESTIONS, type IdeaFlow } from './engine/useIdeaFlow';
 export { seedFromUseCase } from './engine/seedFromUseCase';
@@ -42,6 +42,9 @@ export { PointsChip } from './ui/PointsChip';
 export { TierBadge } from './ui/TierBadge';
 export { Scorecard, StoredScorecard } from './ui/Scorecard';
 export { SubmitDialog } from './ui/SubmitDialog';
+export { ReviewDialog } from './ui/ReviewDialog';
+export { ApprovalTracker } from './ui/ApprovalTracker';
+export { isApproved, personName, submitterOf, useCanReview, useReviewRefresh, useReviewer } from './engine/approval';
 export { BusinessCaseView, BusinessCaseSheet } from './ui/BusinessCase';
 export { BusinessCaseButton } from './ui/BusinessCaseButton';
 export { SurfaceChips } from './ui/SurfaceChips';

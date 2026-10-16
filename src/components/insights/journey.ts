@@ -182,6 +182,31 @@ export function tagForMoment(moment: Moment, dataSource: DataSource): string {
   return 'semlayer_locate';
 }
 
+/** Gives the locate step path-specific language while retaining the same step and prompt binding. */
+export function dataSourceMoment(moment: Moment, dataSource: DataSource, blueprintLabel?: string): Moment {
+  if (moment.tag !== 'semlayer_locate') return moment;
+  if (dataSource === 'upload') {
+    return {
+      ...moment,
+      title: 'Build sample data from your schema',
+      sentence: 'Upload your schema definition CSV. Genie Code proposes matching tables and row counts, then waits for your approval before generating sample rows.',
+      whatYoullSee: 'Your schema validated, followed by a data plan and instructions tailored to its tables and columns.',
+      unlock: 'has sample data shaped by your schema',
+    };
+  }
+  if (dataSource === 'sample') {
+    return {
+      ...moment,
+      title: 'Generate sample data from your idea',
+      sentence: 'Genie Code proposes a small schema from your idea and questions, then waits for your approval before generating realistic sample rows.',
+      whatYoullSee: 'A proposed schema and row counts grounded in your idea, ready for your approval.',
+      unlock: 'has idea-grounded synthetic sample data',
+    };
+  }
+  if (dataSource === 'blueprint' && blueprintLabel) return blueprintMoment(moment, blueprintLabel);
+  return moment;
+}
+
 /** In the blueprint path, "Find your data" becomes installing the chosen model. */
 export function blueprintMoment(moment: Moment, label: string): Moment {
   if (moment.tag !== 'semlayer_locate') return moment;

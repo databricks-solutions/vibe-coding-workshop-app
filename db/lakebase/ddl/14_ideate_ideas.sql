@@ -26,7 +26,16 @@ CREATE TABLE IF NOT EXISTS ${schema}.ideate_ideas (
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     points_reached_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITHOUT TIME ZONE
+    deleted_at TIMESTAMP WITHOUT TIME ZONE,
+    review_status VARCHAR(24),
+    submitted_revision INTEGER,
+    submitted_at TIMESTAMP WITHOUT TIME ZONE,
+    reviewed_revision INTEGER,
+    reviewed_at TIMESTAMP WITHOUT TIME ZONE,
+    reviewed_by VARCHAR(255),
+    review_note TEXT,
+    approved_revision INTEGER,
+    review_history JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_ideate_ideas_owner ON ${schema}.ideate_ideas (created_by);

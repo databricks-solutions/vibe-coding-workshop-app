@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.backend.api import ideate  # noqa: E402
+from src.backend.api import ideate_ideas as ideas  # noqa: E402
 
 
 IMPACT = {
@@ -246,6 +247,8 @@ class TestSubmit(unittest.TestCase):
     def setUp(self):
         self.inserts = []
         self.rows = {"label": [{"industry_label": "Travel & Hospitality"}], "taken": [{"use_case": "crew_timeout_risk"}], "version": [{"v": 0}]}
+        self._ideas_ensure = ideas._ensure_table
+        self._ideas_resolve_user = ideas._resolve_user
         self._orig = {n: getattr(ideate, n) for n in (
             "is_lakebase_configured", "execute_query", "execute_insert", "get_schema",
             "_invalidate_cache", "_get_session_user", "call_databricks_serving_endpoint")}
@@ -270,13 +273,37 @@ class TestSubmit(unittest.TestCase):
         ideate._invalidate_cache = lambda: None
         ideate._get_session_user = lambda request: "me@example.com"
         ideate.call_databricks_serving_endpoint = llm
+        ideas._ensure_table = lambda: None
+        ideas._resolve_user = lambda request: "me@example.com"
+        ideas._memory.clear()
+        payload = {
+            "id": "idea-submit-1",
+            "title": "Crew Timeout Risk",
+            "revision": 1,
+            "approved": ["brief"],
+            "brief": "## Problem\nCrew timeout risk.",
+        }
+        ideas._memory[payload["id"]] = {
+            "id": payload["id"], "created_by": "me@example.com", "payload": payload,
+            "approved": ["brief"], "review_history": [], "catalog_ref": None,
+        }
 
     def tearDown(self):
         for n, f in self._orig.items():
             setattr(ideate, n, f)
+        ideas._ensure_table = self._ideas_ensure
+        ideas._resolve_user = self._ideas_resolve_user
+        ideas._memory.clear()
 
     def _submit(self, **kw):
-        body = ideate.IdeateSubmitRequest(industry_label="Travel & Hospitality", use_case_label="Crew Timeout Risk", **kw)
+        values = {
+            "idea_id": "idea-submit-1",
+            "idea": {"id": "idea-submit-1", "revision": 1},
+            "industry_label": "Travel & Hospitality",
+            "use_case_label": "Crew Timeout Risk",
+            **kw,
+        }
+        body = ideate.IdeateSubmitRequest(**values)
         return asyncio.run(ideate.ideate_submit(body, _Req()))
 
     def test_inserts_inactive_with_unique_key(self):
@@ -288,17 +315,26 @@ class TestSubmit(unittest.TestCase):
         self.assertIn("category", sql)
         self.assertEqual(params[0], "travel")
         self.assertEqual(params[4], "## Business Context\nGenerated.")
+        self.assertEqual(out["review"]["status"], "pending")
 
-    def test_resubmit_reuses_key_and_bumps_version(self):
-        self.rows["version"] = [{"v": 1}]
+    def test_resubmit_reuses_linked_key_and_version(self):
+        ideas._memory["idea-submit-1"]["catalog_ref"] = {
+            "industry": "travel", "useCase": "crew_timeout_risk", "version": 1,
+        }
+        ideas._memory["idea-submit-1"]["review_status"] = "changes_requested"
         out = self._submit(industry="travel", use_case="crew_timeout_risk")
         self.assertEqual(out["useCase"], "crew_timeout_risk")
-        self.assertEqual(out["version"], 2)
+        self.assertEqual(out["version"], 1)
+        self.assertIn("UPDATE s.usecase_descriptions", self.inserts[0][0])
+        self.assertEqual(out["review"]["status"], "pending")
 
     def test_new_industry_gets_a_key_from_its_label(self):
         self.rows["label"] = []
         self.rows["taken"] = []
-        body = ideate.IdeateSubmitRequest(industry_label="Airlines", use_case_label="Crew Timeout Risk")
+        body = ideate.IdeateSubmitRequest(
+            idea_id="idea-submit-1", idea={"id": "idea-submit-1", "revision": 1},
+            industry_label="Airlines", use_case_label="Crew Timeout Risk",
+        )
         out = asyncio.run(ideate.ideate_submit(body, _Req()))
         self.assertEqual(out["industry"], "airlines")
         self.assertEqual(out["industryLabel"], "Airlines")
@@ -307,7 +343,7 @@ class TestSubmit(unittest.TestCase):
         self._submit(industry="travel")
         sql, _ = self.inserts[0]
         self.assertIn("source", sql)
-        self.assertIn("'ideate'", sql)
+        self.assertIn("'ideate_pending'", sql)
 
     def test_falls_back_without_source_column(self):
         calls = []
@@ -323,6 +359,28 @@ class TestSubmit(unittest.TestCase):
         self._submit(industry="travel")
         self.assertEqual(len(calls), 3)
         self.assertNotIn("category", calls[2])
+
+    def test_requires_saved_owned_current_idea_with_approved_brief(self):
+        del ideas._memory["idea-submit-1"]
+        missing = self._submit()
+        self.assertEqual(missing.status_code, 404)
+        ideas._memory["idea-submit-1"] = {
+            "id": "idea-submit-1", "created_by": "other@example.com",
+            "payload": {"id": "idea-submit-1", "revision": 1, "approved": ["brief"], "brief": "x"},
+        }
+        self.assertEqual(self._submit().status_code, 403)
+        ideas._memory["idea-submit-1"]["created_by"] = "me@example.com"
+        ideas._memory["idea-submit-1"]["payload"]["approved"] = []
+        self.assertEqual(self._submit().status_code, 400)
+
+    def test_rejects_stale_client_revision(self):
+        out = self._submit(idea={"id": "idea-submit-1", "revision": 0})
+        self.assertEqual(out.status_code, 409)
+
+    def test_saved_idea_submit_review_alias_builds_catalog_request(self):
+        out = asyncio.run(ideas.submit_saved_idea_for_review("idea-submit-1", _Req()))
+        self.assertEqual(out["review"]["status"], "pending")
+        self.assertEqual(out["ideaId"], "idea-submit-1")
 
 
 if __name__ == "__main__":

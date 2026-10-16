@@ -38,6 +38,8 @@ interface CsvUploadPanelProps {
   onToggleSkip?: () => void;
   onNavigateNext?: () => void;
   sectionTag?: string;
+  /** Reports whether a complete generated prompt is available to a parent workflow. */
+  onReadyChange?: (ready: boolean) => void;
 }
 
 function validateCsv(content: string): ValidationResult {
@@ -98,12 +100,14 @@ export function CsvUploadPanel({
   onToggleSkip,
   onNavigateNext,
   sectionTag = 'bronze_table_metadata_upload',
+  onReadyChange,
 }: CsvUploadPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptContentRef = useRef<MarkdownContentRef>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamBufferRef = useRef('');
   const rafIdRef = useRef<number>(0);
+  const restoredInitialPromptRef = useRef<string | null>(null);
 
   const [csvContent, setCsvContent] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -121,16 +125,27 @@ export function CsvUploadPanel({
   const { copied, handleCopy } = useCopyToClipboard();
 
   const promptText = streamedPrompt || '';
-  const canMarkComplete = showOutput && !isStreaming && !isProcessing && !!promptText && !isComplete;
+  const promptReady = showOutput && !isStreaming && !isProcessing && !promptError && !truncationWarning && !!promptText.trim();
+  const canMarkComplete = promptReady && !isComplete;
+
+  useEffect(() => {
+    onReadyChange?.(promptReady);
+  }, [onReadyChange, promptReady]);
 
   // Restore output on remount (e.g., user switched tabs and came back, or page refresh)
   useEffect(() => {
-    if (initialPrompt && !showOutput && !streamedPrompt) {
+    if (!initialPrompt) return;
+    if (showOutput || streamedPrompt) {
+      restoredInitialPromptRef.current = initialPrompt;
+      return;
+    }
+    if (restoredInitialPromptRef.current !== initialPrompt) {
+      restoredInitialPromptRef.current = initialPrompt;
       setStreamedPrompt(initialPrompt);
       streamBufferRef.current = initialPrompt;
       setShowOutput(true);
     }
-  }, [initialPrompt]);
+  }, [initialPrompt, showOutput, streamedPrompt]);
 
   // Periodically save streaming content to session so partial output survives page refresh
   useEffect(() => {

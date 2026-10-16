@@ -101,6 +101,7 @@ def _guard(request: Request, idea: Dict[str, Any]) -> Optional[JSONResponse]:
 
 
 class IdeateSubmitRequest(BaseModel):
+    idea_id: Optional[str] = None
     idea: Dict[str, Any] = {}
     business_case: Optional[Dict[str, Any]] = None
     value_profile: Optional[Dict[str, Any]] = None
@@ -684,6 +685,32 @@ def _outcome_map_position(schema: str, industry: str, category: Optional[str]) -
 
 @router.post("/ideate/submit", summary="Submit a committed idea to the use case catalog (inactive)")
 async def ideate_submit(body: IdeateSubmitRequest, request: Request):
+    from src.backend.api import ideate_ideas as ideas
+
+    user = _get_session_user(request)
+    if not user or user == "unknown":
+        return JSONResponse({"error": "Sign in to submit an idea."}, status_code=401)
+    idea_id = (body.idea_id or body.idea.get("id") or "").strip()
+    if not idea_id:
+        return JSONResponse({"error": "Save the idea first and provide its idea id."}, status_code=400)
+    if body.idea_id and body.idea.get("id") and body.idea_id != body.idea.get("id"):
+        return JSONResponse({"error": "The submitted idea id does not match the payload."}, status_code=400)
+    row = ideas._get_row(idea_id)
+    if not row or row.get("deleted_at"):
+        return JSONResponse({"error": "Save this idea before submitting it for review."}, status_code=404)
+    if row.get("created_by") != user:
+        return JSONResponse({"error": "Only the idea owner can submit it for review."}, status_code=403)
+    current_idea = dict(row.get("payload") or {})
+    revision = ideas._revision(current_idea)
+    if revision is None:
+        return JSONResponse({"error": "The saved idea needs a positive integer revision before submission."}, status_code=400)
+    supplied_revision = ideas._revision(body.idea) if body.idea else revision
+    if supplied_revision != revision:
+        return JSONResponse({"error": "The submitted payload is stale. Save and submit the current idea revision."}, status_code=409)
+    if "brief" not in ideas._approved(current_idea) or not str(current_idea.get("brief") or "").strip():
+        return JSONResponse({"error": "Approve and save the brief before submitting this idea."}, status_code=400)
+    if row.get("review_status") == "approved" and row.get("approved_revision") == revision:
+        return JSONResponse({"error": "This revision is already approved.", "review": ideas._review_metadata(row)}, status_code=409)
     if not is_lakebase_configured():
         return JSONResponse({"error": "The use case catalog isn't reachable from this app right now."}, status_code=503)
     label = body.use_case_label.strip()
@@ -692,7 +719,8 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
         return JSONResponse({"error": "Pick an industry and give the use case a name."}, status_code=400)
 
     schema = get_schema()
-    industry = (body.industry or "").strip() or _key(industry_label, 100)
+    old_ref = row.get("catalog_ref") if isinstance(row.get("catalog_ref"), dict) else None
+    industry = (old_ref or {}).get("industry") or (body.industry or "").strip() or _key(industry_label, 100)
     existing = execute_query(f"SELECT industry_label FROM {schema}.usecase_descriptions WHERE industry = %s LIMIT 1", (industry,))
     if existing:
         industry_label = existing[0].get("industry_label") or industry_label
@@ -700,7 +728,9 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
     taken = {r.get("use_case") for r in execute_query(
         f"SELECT DISTINCT use_case FROM {schema}.usecase_descriptions WHERE industry = %s", (industry,)
     ) or []}
-    if body.use_case and body.use_case in taken:
+    if old_ref:
+        use_case = old_ref.get("useCase")
+    elif body.use_case and body.use_case in taken:
         use_case = body.use_case
     else:
         base = _key(label)
@@ -708,6 +738,8 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
         while use_case in taken:
             use_case, n = f"{base}_{n}", n + 1
 
+    body.idea = current_idea
+    body.brief = str(current_idea.get("brief") or "")
     template = await _catalog_template(body)
     if not template:
         return JSONResponse({"error": AI_UNAVAILABLE}, status_code=503)
@@ -716,28 +748,54 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
         f"SELECT COALESCE(MAX(version), 0) AS v FROM {schema}.usecase_descriptions WHERE industry = %s AND use_case = %s",
         (industry, use_case),
     )
-    version = int((version_rows or [{}])[0].get("v") or 0) + 1
-    user = _get_session_user(request)
+    version = int((old_ref or {}).get("version") or 0)
+    if not version:
+        version = int((version_rows or [{}])[0].get("v") or 0) + 1
     category = (body.category or "").strip() or None
 
-    # A resubmit while the last version still waits for review replaces it, so the queue holds one entry per idea.
-    pending = execute_query(
-        f"SELECT version FROM {schema}.usecase_descriptions WHERE industry = %s AND use_case = %s AND version = %s "
-        f"AND is_active = FALSE AND created_by = %s AND source = 'ideate'",
-        (industry, use_case, version - 1, user),
-    ) if version > 1 else []
-    if pending and execute_insert(
-        f"UPDATE {schema}.usecase_descriptions SET prompt_template = %s, use_case_label = %s, "
-        f"category = COALESCE(%s, category), updated_at = CURRENT_TIMESTAMP "
-        f"WHERE industry = %s AND use_case = %s AND version = %s",
-        (template, label, category, industry, use_case, version - 1),
-    ):
+    # Resubmission updates the idea's linked catalog row and makes it inactive again.
+    if old_ref:
+        update_params = (template, label, category, industry, use_case, version)
+        updated = execute_insert(
+            f"UPDATE {schema}.usecase_descriptions SET prompt_template = %s, use_case_label = %s, "
+            f"category = COALESCE(%s, category), is_active = FALSE, source = 'ideate_pending', updated_at = CURRENT_TIMESTAMP "
+            f"WHERE industry = %s AND use_case = %s AND version = %s",
+            update_params,
+        )
+        if not updated:
+            updated = execute_insert(
+                f"UPDATE {schema}.usecase_descriptions SET prompt_template = %s, use_case_label = %s, "
+                f"category = COALESCE(%s, category), is_active = FALSE, updated_at = CURRENT_TIMESTAMP "
+                f"WHERE industry = %s AND use_case = %s AND version = %s",
+                update_params,
+            )
+        if not updated:
+            return JSONResponse({"error": "Couldn't update the linked catalog entry. Please try again."}, status_code=500)
+        catalog_ref = {"industry": industry, "useCase": use_case, "version": version}
+        if not ideas.mark_submitted(idea_id, user, revision, catalog_ref):
+            previous_status = row.get("review_status")
+            previous_source = {
+                "approved": "ideate_approved",
+                "changes_requested": "ideate_changes",
+                "rejected": "ideate_rejected",
+                "pending": "ideate_pending",
+            }.get(previous_status, "ideate_pending")
+            execute_insert(
+                f"UPDATE {schema}.usecase_descriptions SET is_active = %s, source = %s, updated_at = CURRENT_TIMESTAMP "
+                f"WHERE industry = %s AND use_case = %s AND version = %s",
+                (previous_status == "approved", previous_source, industry, use_case, version),
+            )
+            return JSONResponse({"error": "The idea changed while it was being submitted. Save and try again."}, status_code=409)
         _invalidate_cache()
         if body.value_profile:
             from src.backend.api.value_profiles import put_profile
             put_profile(industry, use_case, body.value_profile, "submitted")
-        logger.info(f"[Ideate] Updated pending {industry}/{use_case} v{version - 1} by {user}")
-        return {"industry": industry, "industryLabel": industry_label, "useCase": use_case, "useCaseLabel": label, "version": version - 1}
+        logger.info(f"[Ideate] Resubmitted {industry}/{use_case} v{version} rev {revision} by {user}")
+        return {
+            "ideaId": idea_id, "industry": industry, "industryLabel": industry_label,
+            "useCase": use_case, "useCaseLabel": label, "version": version,
+            "review": ideas._review_metadata(ideas._get_row(idea_id) or {}),
+        }
 
     position = _outcome_map_position(schema, industry, category)
 
@@ -745,7 +803,7 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
     base_vals = (industry, industry_label, use_case, label, template, version, user)
     ok = execute_insert(
         f"INSERT INTO {schema}.usecase_descriptions ({base_cols}, category, category_order, display_order, source) "
-        f"VALUES (%s, %s, %s, %s, %s, %s, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, 'ideate')",
+        f"VALUES (%s, %s, %s, %s, %s, %s, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, 'ideate_pending')",
         base_vals + (category, position["category_order"], position["display_order"]),
     )
     if not ok:
@@ -763,9 +821,21 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
     if not ok:
         return JSONResponse({"error": "Couldn't save to the use case catalog. Please try again."}, status_code=500)
 
+    catalog_ref = {"industry": industry, "useCase": use_case, "version": version}
+    if not ideas.mark_submitted(idea_id, user, revision, catalog_ref):
+        execute_insert(
+            f"DELETE FROM {schema}.usecase_descriptions "
+            f"WHERE industry = %s AND use_case = %s AND version = %s AND created_by = %s AND is_active = FALSE",
+            (industry, use_case, version, user),
+        )
+        return JSONResponse({"error": "The idea changed while it was being submitted. Save and try again."}, status_code=409)
     _invalidate_cache()
     if body.value_profile:
         from src.backend.api.value_profiles import put_profile
         put_profile(industry, use_case, body.value_profile, "submitted")
-    logger.info(f"[Ideate] Submitted {industry}/{use_case} v{version} (inactive) by {user}")
-    return {"industry": industry, "industryLabel": industry_label, "useCase": use_case, "useCaseLabel": label, "version": version}
+    logger.info(f"[Ideate] Submitted {industry}/{use_case} v{version} rev {revision} (inactive) by {user}")
+    return {
+        "ideaId": idea_id, "industry": industry, "industryLabel": industry_label,
+        "useCase": use_case, "useCaseLabel": label, "version": version,
+        "review": ideas._review_metadata(ideas._get_row(idea_id) or {}),
+    }

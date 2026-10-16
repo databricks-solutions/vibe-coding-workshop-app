@@ -105,7 +105,7 @@ export function buildModel(p: LibraryPayload): LibraryModel {
   return {
     collections, byId, byKind, useCases, ucByKey, membersByKey, entriesByCollection, stats,
     skills: useCases.filter(u => u.path_type === 'skill'),
-    pendingReview: useCases.filter(u => u.source === 'ideate' && !u.is_active),
+    pendingReview: useCases.filter(u => (u.source === 'ideate' || u.source === 'ideate_pending') && !u.is_active),
     attendeeCollections,
     attendeeUseCaseCount: attendeeKeys.size,
     attendeeCertifiedCount,

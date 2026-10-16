@@ -203,6 +203,7 @@ export default function App() {
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
   const [pendingNewSession, setPendingNewSession] = useState(false);
+  const [buildGateError, setBuildGateError] = useState<string | null>(null);
 
   // Read-only when viewing another user's session (ownership-based)
   const readOnly = currentUserResolved
@@ -228,7 +229,7 @@ export default function App() {
     if (urlSessionId) {
       // Load specific session from URL
       loadSession(urlSessionId);
-    } else if (urlParams.get('openSession') || urlParams.get('buildIdea')) {
+    } else if (urlParams.get('openSession') || urlParams.get('buildIdea') || urlParams.get('updateBuild')) {
       // Opening an idea's project, or starting one, is handled by the navigation effect below.
     } else {
       // Get or create default session (continues where user left off)
@@ -921,6 +922,24 @@ export default function App() {
     label: idea.title.slice(0, 30),
   });
 
+  const authorizeIdeaBuild = async (idea: Idea, operation: 'start' | 'update') => {
+    setBuildGateError(null);
+    try {
+      const result = await apiClient.ideaBuildAuthorization(idea.id, idea.revision ?? 0, operation);
+      if (result.review) updateIdea(idea.id, { review: result.review });
+      if (result.authorized) return true;
+      setBuildGateError(result.reason || 'This idea revision is not approved for building yet.');
+    } catch (error) {
+      const failure = error as Error & { review?: Idea['review']; status?: number };
+      const review = failure.review;
+      if (review) updateIdea(idea.id, { review });
+      setBuildGateError(failure.status === 403 || failure.status === 409
+        ? failure.message
+        : `Build authorization could not be verified. ${failure.message || 'Try again later.'}`);
+    }
+    return false;
+  };
+
   /** Saves the idea as a Technical project's use case and step 1 brief. */
   const writeTechnicalBrief = (idea: Idea, id: string, completed: number[], level: string | undefined = 'end-to-end') => {
     const { industry, industryLabel, label } = technicalUseCaseOf(idea);
@@ -963,6 +982,7 @@ export default function App() {
       setViewMode(target);
       return;
     }
+    if (!await authorizeIdeaBuild(idea, 'start')) return;
     setIsCreatingNewSession(true);
     try {
       const current = await apiClient.getDefaultSession();
@@ -1057,6 +1077,7 @@ export default function App() {
    * update screen, which keeps the data choices.
    */
   const updateBuildFromIdea = async (idea: Idea) => {
+    if (!await authorizeIdeaBuild(idea, 'update')) return;
     if (!idea.sessionId) return startBuildFromIdea(idea);
     const target = buildTargetFor(idea);
     if (target === 'technical') {
@@ -1239,6 +1260,17 @@ export default function App() {
           {/* Workflow Page (Home) */}
           <Route path="/" element={
             <div className="flex-1 overflow-auto gradient-mesh relative">
+              {buildGateError && (
+                <div className="sticky top-0 z-[60] mx-auto max-w-3xl px-4 pt-4">
+                  <div className="flex items-start gap-3 rounded-xl border border-amber-500/35 bg-card px-4 py-3 shadow-lg">
+                    <div className="flex-1">
+                      <p className="text-ui-sm font-semibold text-foreground">Build blocked</p>
+                      <p className="text-ui-sm text-muted-foreground mt-0.5">{buildGateError}</p>
+                    </div>
+                    <button onClick={() => setBuildGateError(null)} className="text-ui-xs font-medium text-primary hover:underline">Dismiss</button>
+                  </div>
+                </div>
+              )}
               {/* Session Loading Overlay - Glassy backdrop with floating banner */}
               {(isSessionLoading || isFadingOut) && (
                 <div 

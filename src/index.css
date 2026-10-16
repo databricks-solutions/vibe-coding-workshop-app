@@ -1255,6 +1255,26 @@
   opacity: 0;
 }
 
+@keyframes grow-x {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Draws the eye to the card the user just acted on, then settles. */
+@keyframes spotlight {
+  0%   { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.55); transform: scale(1); }
+  15%  { box-shadow: 0 0 0 6px hsl(var(--primary) / 0.35); transform: scale(1.015); }
+  45%  { box-shadow: 0 0 0 3px hsl(var(--primary) / 0.25); transform: scale(1); }
+  70%  { box-shadow: 0 0 0 6px hsl(var(--primary) / 0.2); }
+  100% { box-shadow: 0 0 0 2px hsl(var(--primary) / 0.35); }
+}
+.animate-spotlight {
+  animation: spotlight 2.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-spotlight { animation: none; box-shadow: 0 0 0 2px hsl(var(--primary) / 0.45); }
+}
+
 /* Outcome-map grid animations.
    - cascade-in:    leaf-item pills fan in on hover/selected
    - theme-shimmer: one-time diagonal sweep across coloured header bands

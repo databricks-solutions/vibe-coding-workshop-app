@@ -131,8 +131,16 @@ export function SectionedWorkflowSidebar({
                 }`}
               >
               {/* Section Header */}
-              <button
+              <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
                 onClick={() => onSectionClick(section.id)}
+                onKeyDown={event => {
+                  if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+                  event.preventDefault();
+                  onSectionClick(section.id);
+                }}
                 className="w-full text-left"
               >
                 <div className="flex items-center gap-3 p-3">
@@ -196,7 +204,7 @@ export function SectionedWorkflowSidebar({
                     )}
                   </button>
                 </div>
-              </button>
+              </div>
 
               {/* Expanded Steps */}
               {isExpanded && (
