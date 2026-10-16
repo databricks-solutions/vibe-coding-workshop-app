@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronLeft, Lock, Map, ArrowRight, Star, Layers } from 'lucide-react';
 import { LevelSelectorContent, LockedTooltip } from './LevelSelector';
-import { computeLevelLockState, hasStartedWorkflow, trackTabForLevel } from '../constants/levelLock';
+import { computeLevelLockState, hasStartedWorkflow, trackTabForLevel, type LevelLockState } from '../constants/levelLock';
+import { isForwardProgression } from '../constants/workflowSections';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
 import { PathDescriptionPanel } from './PathDescriptionPanel';
@@ -90,9 +91,16 @@ export function PathAndArchitecture({
   // Picking the Genie tab selects the Genie Accelerator, so it follows the
   // picker's lock rule; Reverse ETL has no accelerators. Viewing it while it is
   // already the track is always allowed.
-  const genieLock = computeLevelLockState('genie-accelerator', {
+  // The picker's lock, then the App's guard (handleWorkshopLevelChange): once
+  // started, only a forward progression goes through. The Genie Accelerator is
+  // on no chain, so a started session on another track can never move to it.
+  const pickerLock = computeLevelLockState('genie-accelerator', {
     selectedLevel, completedSteps, chainContext, useCaseLockedLevel, hasUseCaseSelected, direction, disabledWorkshopLevels,
   });
+  const genieLock: LevelLockState | null = pickerLock
+    ?? (!onGenie && hasStartedWorkflow(completedSteps) && !isForwardProgression(selectedLevel, 'genie-accelerator')
+      ? { reason: 'workflow-started' }
+      : null);
   const genieTabDisabled = !onGenie && (readOnly || direction === 'reverse' || genieLock !== null);
   const trackLocked = hasStartedWorkflow(completedSteps) || !!useCaseLockedLevel;
   const selectGenieTab = () => {

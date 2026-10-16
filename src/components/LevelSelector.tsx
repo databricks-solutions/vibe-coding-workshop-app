@@ -60,7 +60,7 @@ import { ServicePopover } from './ServicePopover';
 import { ModuleBox, ModuleChip } from './ModuleBox';
 import { computeBuildTime, formatHM } from '../constants/pathDurations';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
-import { computeLevelLockState, getHighlightedButtons, type LevelLockContext, type LevelLockState, type LockReason } from '../constants/levelLock';
+import { computeLevelLockState, getHighlightedButtons, hasStartedWorkflow as workflowStarted, type LevelLockContext, type LevelLockState, type LockReason } from '../constants/levelLock';
 import { apiClient, FALLBACK_WORKSHOP_DEFAULTS } from '../api/client';
 
 // Reasons a path button can be locked. Drives the tooltip wording so the user
@@ -484,7 +484,7 @@ function LevelSelectorGrid({
 }: LevelSelectorProps) {
   const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps, chainContext);
 
-  const hasStartedWorkflow = Array.from(completedSteps).some(s => s >= 2);
+  const hasStartedWorkflow = workflowStarted(completedSteps);
   const activeChain = hasStartedWorkflow ? getActiveChain(selectedLevel, completedSteps, chainContext) : null;
   const chainIdx = activeChain ? activeChain.indexOf(selectedLevel) : -1;
   const isPathLocked = hasStartedWorkflow || !!useCaseLockedLevel;

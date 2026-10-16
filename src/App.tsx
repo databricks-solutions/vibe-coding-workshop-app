@@ -44,6 +44,7 @@ import { emptyGateBase, hydrateGateBase, gateBaseFields, applyGateWriteResult, t
 import { ALL_SYNC_GROUPS, canApplyRefresh, changedGroups, groupsDifferingFromLocal, sessionViewFrom, syncSnapshot, type LocalSessionState, type SyncGroup } from './utils/sessionSync';
 import { SessionSyncNotice, type SessionSyncMessage } from './components/SessionSyncNotice';
 import { TRACK_DISPLAY_NAMES } from './constants/trackNames';
+import { hasStartedWorkflow as workflowStarted } from './constants/levelLock';
 
 /** The step prompt API only stores steps 1 to 30. */
 const MAX_SAVED_STEP = 30;
@@ -729,7 +730,7 @@ export default function App() {
   const handleWorkshopLevelChange = useCallback((level: WorkshopLevel, force = false) => {
     if (readOnly) return;
     if (!force) {
-      const hasStartedWorkflow = Array.from(completedSteps).some(s => s >= 2);
+      const hasStartedWorkflow = workflowStarted(completedSteps);
       if (hasStartedWorkflow && level !== workshopLevel) {
         if (!isForwardProgression(workshopLevel, level)) return;
       }

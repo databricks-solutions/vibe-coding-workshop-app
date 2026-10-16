@@ -53,11 +53,16 @@ for (const current of levels) {
     const done = new Set(steps);
     const started = steps.some(s => s >= 2);
     for (const chain of chains) {
+      // The chain the web tab holds for this stored value (utils/sessionSync
+      // chainFromParams): stored only on the lakehouse levels, else derived.
+      const webChain = current === 'lakehouse' || current === 'lakehouse-di'
+        ? chain ?? sections.deriveInitialChainContext(current, done)
+        : sections.deriveInitialChainContext(current, done);
       for (const target of levels) {
         const lock = computeLevelLockState(target, {
           selectedLevel: current,
           completedSteps: done,
-          chainContext: chain,
+          chainContext: webChain,
           direction: target.startsWith('reverse-') ? 'reverse' : 'forward',
         });
         const guard = !started || target === current || sections.isForwardProgression(current, target);

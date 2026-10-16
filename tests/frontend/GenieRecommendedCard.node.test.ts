@@ -245,6 +245,11 @@ test('the Genie tab follows the picker lock: started on another track, or anothe
   const assistant = renderPath({ selectedLevel: 'lakehouse', disabledWorkshopLevels: new Set(['genie-accelerator']) });
   assert.match(tab(assistant, 'genie'), /aria-disabled="true"/);
   assert.match(assistant, /Not available with this assistant/);
+  // The picker alone would let a started end-to-end session (chain 'app') through;
+  // the App's forward-progression guard would not, so the tab is disabled too.
+  const endToEnd = renderPath({ selectedLevel: 'end-to-end', chainContext: 'app', completedSteps: new Set([1, 2]) });
+  assert.match(tab(endToEnd, 'genie'), /aria-disabled="true"/);
+  assert.match(endToEnd, /Path is locked/);
   // The current track is never locked (grandfather rule).
   const own = renderPath({ completedSteps: new Set([1, 2, 3]) });
   assert.match(tab(own, 'genie'), /aria-disabled="false"/);
