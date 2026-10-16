@@ -1,6 +1,6 @@
 # D10 — Facilitator & Learner Guide
 
-**Status:** Draft · **Doc ID:** D10 (optional) · **Date:** 2026-09-22 · **Target repo:** `vibe-coding-workshop-app`
+**Status:** Current for release 2.8.0 · **Doc ID:** D10 (optional) · **Date:** 2026-09-22, updated 2026-10-15 · **Target repo:** `vibe-coding-workshop-app`
 **Series:** [`README.md`](./README.md)
 **Depends on:** [D4 architecture](./mcp-workshop-architecture.md) · [D7 security](./mcp-workshop-security.md)
 · [D9 rollout](./mcp-workshop-rollout.md).
@@ -15,6 +15,51 @@
 > D2 §4–§5). A learner needs **only the app URL** — not this document. This guide is a safety net
 > for classroom facilitation and a human-readable copy of the troubleshooting the server already
 > surfaces itself.
+
+---
+
+## 0. Before the workshop: deploy and configure (facilitator)
+
+Do this once per workspace, at least a day before the session, so there is time to fix anything.
+
+### Deploy or upgrade the app
+
+1. **Name the app with an `mcp-` prefix** (in your `user-config.yaml`, `app.name`; the example uses
+   `mcp-vibe-coding-workshop-app`). Genie Code only offers apps whose name starts with `mcp-` (§1).
+2. **Run the table step first:** `./scripts/deploy.sh --tables-only`. It is additive: it creates
+   missing tables and adds new prompt rows, and never overwrites rows you have edited. Never use
+   `--tables-recreate` on an install that has learner sessions; it drops the configuration tables.
+3. **Only when upgrading an older install** whose sessions predate gate-based progress: run the R1
+   gate backfill first (dry run, then apply), as described in the #130 upgrade notes (B3 step 2).
+4. **Install dependencies and deploy the code:** `npm ci`, then `./scripts/deploy.sh --code-only`.
+   A fresh install can run `./scripts/deploy.sh` once instead of steps 2 and 4.
+
+### Settings in `app.yaml`
+
+`app.yaml` is generated from `app.yaml.template` (`./vibe2value configure`) and is not in git, so a
+merge never changes it. After an upgrade, check that it has these keys:
+
+| Key | Default | What it does |
+|---|---|---|
+| `MCP_MOUNT_ENABLED` | `"true"` | Serves the Genie Code MCP server at `/mcp`. `"false"` turns it off. |
+| `DATABRICKS_SERVING_ENDPOINT` | your choice | The model behind PRD, step prompts and the other generated text. The code default is `databricks-claude-sonnet-5-5`. |
+| `VIBE_COACH_ENDPOINT` | `databricks-claude-sonnet-5-5` | The model the Genie Code coach uses. Unset uses `DATABRICKS_SERVING_ENDPOINT`. |
+| `VIBE_COACH_BUDGET_S` | `"20"` | Seconds the coach waits for the model before falling back to the step's static help. |
+| `VIBE_DEFAULT_GENIE_ONTOLOGY` | `"true"` | Turns the Genie Ontology on for new Genie Accelerator sessions. Set `"false"` if the workspace has no Genie One Pages (§3). |
+| `VIBE_STEP_PROMPT_PREFETCH` | `"true"` | Prepares the next step's prompt in the background over MCP (§3). `"false"` renders it on completion. |
+| `IDEATE_ANALYSIS_ENDPOINT` | blank | Optional stronger model for Ideate's impact sizing. Blank uses `DATABRICKS_SERVING_ENDPOINT`. |
+| `INSIGHTS_BUILD_RECIPES` | blank | Insights add-ons turned on for everyone (`ontology`, `alerts`, `app_view`, `copilot` or `all`). |
+
+The switches are read per call, but `app.yaml` only changes on the next deploy.
+
+### Check it before the room arrives
+
+- Open the app URL: the Release Notes page should show 2.8.0 as the latest release.
+- In Genie Code (Agent mode), add `https://<app-url>/mcp` as a custom MCP server (§2), say "Start the
+  Genie Accelerator", and check that step 1 appears and that the coach answers "what should I do
+  now?". The full check is [docs/superpowers/genie-code-smoke-script.md](../../superpowers/genie-code-smoke-script.md).
+- If the workspace has no Genie One Pages, set `VIBE_DEFAULT_GENIE_ONTOLOGY` to `"false"` and redeploy
+  before the session, rather than asking every learner to opt out.
 
 ---
 
@@ -112,8 +157,8 @@ one that never stored the ontology opens with it off.
   created in the web UI or over MCP, Insights when set up from the Insights view. Switching views
   with the header toggle stores the new one. A `?view=` link always wins; a session with no stored
   view opens in Technical.
-- **Accepted cost, once.** Insights sessions started on main's 2.6.0 app have no stored view, so
-  after this release reaches main they reopen in Technical one time. One click on **Insights**
+- **Accepted cost, once.** Insights sessions started on main's 2.6.0 or 2.7.0 app have no stored
+  view, so after this release reaches main they reopen in Technical one time. One click on **Insights**
   stores the view and they reopen there from then on. Tell learners it is expected.
 
 **Step prompts are prefetched by default (D-160).** Over MCP, when a step becomes current the
@@ -148,7 +193,7 @@ UI is unchanged.
 
 ## 5. The 20-tool budget caveat
 
-Genie Code enforces a **~20-tool limit across all connected MCP servers**. The workshop uses **6**
+Genie Code enforces a **~20-tool limit across all connected MCP servers**. The workshop uses **7**
 tools. If the learner also has Databricks-managed MCPs connected (Genie, UC functions), they may hit
 the ceiling and some tools won't load. If tools are missing:
 - temporarily **disconnect other MCP servers**, or
@@ -211,14 +256,10 @@ the chat** and you answer in chat:
 
 ---
 
-## 10. Release note for #130 (integration → main)
+## 10. Release notes
 
-Item for the release notes when #130 ships; this file is its home because the forge does not edit
-#130.
-
-- **New sessions start on the Genie Accelerator with the Genie Ontology on** (web UI and MCP, every
-  coding assistant). A recommended card in Workshop Path & Architecture holds the Include Genie
-  Ontology (Beta: needs Genie One Pages) and Include Lakehouse toggles; facilitators set the
-  default with `VIBE_DEFAULT_GENIE_ONTOLOGY`. Existing sessions keep their saved path and settings.
-- **Sessions remember their view.** Insights sessions started on 2.6.0 reopen in Technical once;
-  one click on Insights stores the view from then on.
+This release ships as **2.8.0**. Its notes are on the app's Release Notes page
+(`src/constants/releaseNotes.ts`): running the workshop from Genie Code, the coach, the Genie
+Accelerator and Genie Ontology as the default for new sessions, the new ontology position, strict
+step order, prefetched step prompts, sessions that remember their view (Insights sessions started on
+2.6.0 or 2.7.0 reopen in Technical once), and the new `app.yaml` settings in §0.
