@@ -41,7 +41,14 @@ from .services.lakebase import (
 )
 from .workshop import assembler, engine, manifest, track_switch
 from .workshop.state import build_session_state
-from .workshop.track_names import TrackMatch, TrackNameError, display_name, resolve_track_name, valid_tracks_text
+from .workshop.track_names import (
+    TrackMatch,
+    TrackNameError,
+    display_name,
+    parse_start_line,
+    resolve_track_name,
+    valid_tracks_text,
+)
 from .workshop.track_resolution import resolve_track
 
 logger = logging.getLogger(__name__)
@@ -1459,6 +1466,10 @@ def vibe_start_track(
     session_id: str | None = None,
     context: Context | None = None,
 ) -> StartTrackResult:
+    # The web UI's whole start line may arrive as the track: its session id
+    # continues that session when no session_id was passed.
+    _, embedded_session = parse_start_line(track)
+    session_id = session_id or embedded_session
     match = resolve_track_name(track)
     if isinstance(match, TrackNameError):
         return _error_result(match.code, match.message)  # type: ignore[return-value]
@@ -3148,6 +3159,8 @@ def start_track(
     industry: str | None = None,
     session_id: str | None = None,
 ) -> str:
+    _, embedded_session = parse_start_line(track)
+    session_id = session_id or embedded_session
     match = resolve_track_name(track) if track else None
     if not isinstance(match, TrackMatch):
         lead = match.message if match is not None else f"Choose a workshop track. Valid tracks: {valid_tracks_text()}."

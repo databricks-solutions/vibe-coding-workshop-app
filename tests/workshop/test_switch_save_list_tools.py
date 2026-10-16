@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 from src.backend import mcp_server  # noqa: E402
 from src.backend.api import routes  # noqa: E402
 
-SID = "linked-session"
+SID = "0f8e2c1a-1111-4222-8333-944455556666"  # a real session id shape
 OWNER = "ada.lovelace@acme.com"
 
 
@@ -75,6 +75,16 @@ def test_attach_names_an_unsaved_web_session_so_cleanup_cannot_delete_it(env):
     assert result.track_name == "Genie Accelerator" and result.switched_from is None
     assert store[SID]["session_name"] == "Genie Code Workshop"
     assert store[SID]["session_parameters"]["coding_assistant"] == "genie-code"
+
+
+def test_the_pasted_start_line_attaches_to_its_session(env):
+    store, _ = env
+    _web_session(store, level="genie-accelerator")
+
+    result = mcp_server.vibe_start_track(f"Start a workshop track: Genie Accelerator (session {SID})")
+
+    assert result.session_id == SID and result.track == "genie-accelerator"
+    assert store[SID]["session_name"] == "Genie Code Workshop"
 
 
 def test_attach_keeps_a_name_the_learner_chose(env):
@@ -314,6 +324,11 @@ def test_start_prompt_takes_a_name_and_the_web_session_id():
     text = mcp_server.start_track("Apps + Lakebase", session_id=SID)
     assert 'track:"app-database"' in text and f'session_id:"{SID}"' in text
     assert "Databricks Apps + Lakebase" in text
+
+
+def test_start_prompt_takes_the_whole_start_line():
+    text = mcp_server.start_track(f"Start a workshop track: Lakehouse (session {SID})")
+    assert 'track:"lakehouse"' in text and f'session_id:"{SID}"' in text
 
 
 def test_start_prompt_lists_names_for_an_unknown_track():

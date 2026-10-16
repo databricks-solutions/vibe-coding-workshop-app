@@ -19,6 +19,7 @@ from src.backend.workshop.track_names import (  # noqa: E402
     _keys,
     display_name,
     normalize,
+    parse_start_line,
     resolve_track_name,
 )
 
@@ -115,3 +116,25 @@ def test_normalize():
     assert normalize("Databricks Apps + Lakebase") == "databricks apps and lakebase"
     assert normalize("Lakehouse with AI & Agents!") == "lakehouse and ai and agents"
     assert normalize("+ AI and Agents") == "ai and agents"
+
+
+SID = "0f8e2c1a-1111-4222-8333-944455556666"
+
+
+@pytest.mark.parametrize(
+    "line, track_text, session",
+    [
+        (f"Start a workshop track: Genie Accelerator (session {SID})", "Genie Accelerator", SID),
+        (f"Databricks Apps + Lakebase (session {SID.upper()})", "Databricks Apps + Lakebase", SID),
+        (f"start workshop track - lakehouse session: {SID}", "lakehouse", SID),
+        ("Start a workshop track: Lakehouse", "Lakehouse", None),
+        ("Genie Accelerator", "Genie Accelerator", None),
+    ],
+)
+def test_the_web_start_line_splits_into_track_and_session(line, track_text, session):
+    assert parse_start_line(line) == (track_text, session)
+
+
+def test_the_whole_start_line_resolves_to_its_track():
+    assert _track(f"Start a workshop track: Databricks Apps + Lakebase (session {SID})") == "app-database"
+    assert _track(f"Start a workshop track: Reverse ETL: Analytics App (session {SID})") == "reverse-app"

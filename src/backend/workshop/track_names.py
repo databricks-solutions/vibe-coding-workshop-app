@@ -79,6 +79,23 @@ class TrackNameError:
     message: str
 
 
+# The web UI's start line: "Start a workshop track: <name> (session <id>)". An
+# agent may pass all of it as the track; the prefix and the id are taken off.
+_START_PREFIX = re.compile(r"^\s*start\s+(?:a\s+)?(?:workshop\s+)?track\s*[:\-]?\s*", re.IGNORECASE)
+_SESSION_PART = re.compile(r"\(?\s*\bsession(?:\s+id)?\s*[:#]?\s*([0-9a-f]{8}-[0-9a-f-]{27,})\s*\)?", re.IGNORECASE)
+
+
+def parse_start_line(text: str | None) -> tuple[str, str | None]:
+    """Split a start line into (track text, session id or None)."""
+
+    if not text:
+        return "", None
+    session = _SESSION_PART.search(text)
+    track_text = _SESSION_PART.sub(" ", text) if session else text
+    track_text = _START_PREFIX.sub("", track_text).strip()
+    return track_text, session.group(1).lower() if session else None
+
+
 def display_name(track: str) -> str:
     """The standalone name of a track (the manifest title for an unlisted id)."""
 
@@ -139,7 +156,9 @@ def valid_tracks_text() -> str:
 def resolve_track_name(text: str | None) -> TrackMatch | TrackNameError:
     """Resolve a learner's track name (id, name or synonym) to one manifest track."""
 
-    if not text or not text.strip():
+    original = text
+    text, _session = parse_start_line(text)
+    if not text:
         return TrackNameError("UNKNOWN_TRACK", f"Choose a workshop track. Valid tracks: {valid_tracks_text()}.")
     if text in engine.MANIFEST.tracks:
         return TrackMatch(text, display_name(text))
@@ -156,5 +175,5 @@ def resolve_track_name(text: str | None) -> TrackMatch | TrackNameError:
         return TrackMatch(matches[0], display_name(matches[0]))
     if matches:
         options = ", ".join(f"{display_name(track)} ({track})" for track in matches)
-        return TrackNameError("AMBIGUOUS_TRACK", f"Workshop track {text!r} matches more than one: {options}. Name one.")
-    return TrackNameError("UNKNOWN_TRACK", f"Unknown workshop track: {text}. Valid tracks: {valid_tracks_text()}.")
+        return TrackNameError("AMBIGUOUS_TRACK", f"Workshop track {original!r} matches more than one: {options}. Name one.")
+    return TrackNameError("UNKNOWN_TRACK", f"Unknown workshop track: {original}. Valid tracks: {valid_tracks_text()}.")
