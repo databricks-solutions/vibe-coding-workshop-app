@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { MessageSquare, X, ThumbsUp, ThumbsDown, Send } from 'lucide-react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
@@ -24,15 +24,17 @@ export function FeedbackDialog({
   const [requestFollowup, setRequestFollowup] = useState(false);
   const [errors, setErrors] = useState<{ rating?: string; comment?: string }>({});
 
-  // Reset form when dialog opens
-  useEffect(() => {
+  // Reset form when dialog opens (or its initial values change while open)
+  const [resetFor, setResetFor] = useState({ isOpen, initialRating, initialComment });
+  if (resetFor.isOpen !== isOpen || resetFor.initialRating !== initialRating || resetFor.initialComment !== initialComment) {
+    setResetFor({ isOpen, initialRating, initialComment });
     if (isOpen) {
       setRating(initialRating);
       setComment(initialComment || '');
       setRequestFollowup(false);
       setErrors({});
     }
-  }, [isOpen, initialRating, initialComment]);
+  }
 
   useEscapeKey(isOpen, onClose);
 

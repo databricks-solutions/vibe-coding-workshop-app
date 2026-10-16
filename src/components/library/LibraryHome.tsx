@@ -4,7 +4,8 @@ import { ArrowRight, BadgeCheck, Eye, Grid3x3, Inbox, Layers, Plus, Radio, Spark
 import type { CollectionKind, LibraryCollection, LibraryUseCase } from '../../api/library';
 import { intersect, keyOf, type LibraryModel } from './model';
 import { KINDS, KIND_BY_ID, collectionIcon, collectionTint, relativeTime, tintStyle, iconForUseCase } from './theme';
-import { Avatar, CollectionGlyph, cx } from './ui';
+import { Avatar, CollectionGlyph } from './ui';
+import { cx } from './cx';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
 
 interface Props {

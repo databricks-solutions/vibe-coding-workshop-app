@@ -1,12 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { MoreHorizontal, X } from 'lucide-react';
 import type { CollectionKind, LibraryCollection } from '../../api/library';
 import { cx } from '../skills/uiStyles';
 import { KIND_BY_ID, collectionIcon, collectionTint, initials, tintStyle, type Tint } from './theme';
-
-export { cx };
 
 export function Switch({
   checked,
@@ -76,14 +74,17 @@ export function CollectionGlyph({
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   off?: boolean;
 }) {
-  const Icon = collectionIcon(collection);
   const box = { xs: 'w-5 h-5 rounded-md', sm: 'w-7 h-7 rounded-lg', md: 'w-8 h-8 rounded-lg', lg: 'w-11 h-11 rounded-xl', xl: 'w-14 h-14 rounded-2xl' }[size];
   const icon = { xs: 'w-3 h-3', sm: 'w-3.5 h-3.5', md: 'w-4 h-4', lg: 'w-5 h-5', xl: 'w-7 h-7' }[size];
   return (
     <span style={tintStyle(collectionTint(collection))} className={cx('lib-tile inline-flex items-center justify-center shrink-0 transition-[filter,opacity] duration-300', box, off && 'lib-tile-off')}>
-      <Icon className={icon} strokeWidth={2} />
+      <CollectionIcon collection={collection} className={icon} strokeWidth={2} />
     </span>
   );
+}
+
+function CollectionIcon({ collection, className, strokeWidth }: { collection: Pick<LibraryCollection, 'collection_id' | 'kind' | 'icon' | 'label'>; className: string; strokeWidth: number }) {
+  return createElement(collectionIcon(collection), { className, strokeWidth });
 }
 
 export function KindBadge({ kind, subtle }: { kind: CollectionKind; subtle?: boolean }) {

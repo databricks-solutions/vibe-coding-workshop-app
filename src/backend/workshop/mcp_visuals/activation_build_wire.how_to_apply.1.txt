@@ -1,0 +1,11 @@
+```text
+Analytics design doc
+│
+▼
+Analytics App on Databricks Apps
+│
+▼
+Dashboards + exploration pages
+├─ today ─▶ Mock data
+└─ next step ─▶ Live Lakebase data
+```

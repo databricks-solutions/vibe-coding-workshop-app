@@ -25,7 +25,7 @@ import {
   Mic,
   MicOff,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DiffView } from './DiffView';
 import { ExpandableErrorBanner } from './ExpandableErrorBanner';
@@ -65,44 +65,44 @@ const INDUSTRY_OPTIONS = [
   'Other',
 ];
 
-const markdownComponents = (compact: boolean) => ({
-  h1: ({ children }: any) => (
+const markdownComponents = (compact: boolean): Components => ({
+  h1: ({ children }) => (
     <h1 className={`${compact ? 'text-ui-base' : 'text-ui-md2'} font-semibold text-foreground border-b border-border pb-2 mb-3 mt-1`}>
       {children}
     </h1>
   ),
-  h2: ({ children }: any) => (
+  h2: ({ children }) => (
     <h2 className={`${compact ? 'text-ui-sm' : 'text-ui-md'} font-semibold text-foreground mt-4 mb-2`}>
       {children}
     </h2>
   ),
-  h3: ({ children }: any) => (
+  h3: ({ children }) => (
     <h3 className={`${compact ? 'text-ui-xs' : 'text-ui-base'} font-medium text-foreground mt-3 mb-1.5`}>
       {children}
     </h3>
   ),
-  h4: ({ children }: any) => (
+  h4: ({ children }) => (
     <h4 className="text-ui-sm font-medium text-foreground mt-2 mb-1">{children}</h4>
   ),
-  p: ({ children }: any) => (
+  p: ({ children }) => (
     <p className={`text-muted-foreground ${compact ? 'text-ui-sm' : 'text-ui-base'} leading-relaxed mb-2`}>
       {children}
     </p>
   ),
-  ul: ({ children }: any) => (
+  ul: ({ children }) => (
     <ul className={`list-disc my-2 space-y-1 text-muted-foreground ${compact ? 'text-ui-sm pl-4' : 'text-ui-base pl-5'}`}>
       {children}
     </ul>
   ),
-  ol: ({ children }: any) => (
+  ol: ({ children }) => (
     <ol className={`list-decimal my-2 space-y-1 text-muted-foreground ${compact ? 'text-ui-sm pl-4' : 'text-ui-base pl-5'}`}>
       {children}
     </ol>
   ),
-  li: ({ children }: any) => (
+  li: ({ children }) => (
     <li className="text-muted-foreground leading-relaxed pl-1 [&>p]:inline [&>p]:m-0">{children}</li>
   ),
-  code: ({ className, children }: any) => {
+  code: ({ className, children }) => {
     const isInline = !className;
     if (isInline) {
       return (
@@ -117,24 +117,24 @@ const markdownComponents = (compact: boolean) => ({
       </code>
     );
   },
-  pre: ({ children }: any) => (
+  pre: ({ children }) => (
     <pre className="bg-background text-foreground p-3 rounded overflow-x-auto my-2 border border-border">
       {children}
     </pre>
   ),
-  blockquote: ({ children }: any) => (
+  blockquote: ({ children }) => (
     <blockquote className="border-l-3 border-primary bg-primary/10 pl-3 py-1.5 my-2 text-ui-base italic text-muted-foreground">
       {children}
     </blockquote>
   ),
-  strong: ({ children }: any) => (
+  strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
-  em: ({ children }: any) => (
+  em: ({ children }) => (
     <em className="italic text-muted-foreground">{children}</em>
   ),
   hr: () => <hr className="border-t border-border my-3" />,
-  a: ({ href, children }: any) => (
+  a: ({ href, children }) => (
     <a
       href={href}
       className="text-primary hover:text-primary/80 underline text-ui-base"

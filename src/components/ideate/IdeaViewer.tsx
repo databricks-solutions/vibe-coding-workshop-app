@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { ArrowLeft, ExternalLink, Eye, Lightbulb, Loader2, Lock, Menu, Mountain, Pencil } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { calculateIdeaScore } from '../../constants/scoring';
-import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent';
+import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent.utils';
 import {
   IndustryBadge, MakeItMineButton, Scorecard, SummitTrail, TierBadge, caseFigures, ideaProgressSteps, ideaTrail, money, normalizeIdea, stepMeta,
   type Idea,

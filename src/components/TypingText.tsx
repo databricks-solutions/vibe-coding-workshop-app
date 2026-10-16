@@ -9,9 +9,9 @@
  * that trigger the shared ServicePopover.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { serviceData, ServicePopover } from './ServicePopover';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { ServiceKey } from './ServicePopover';
+import { buildServiceNameMap, renderTextWithServices } from './TypingText.utils';
 
 interface TypingTextProps {
   /** Summary line shown immediately (not typed) */
@@ -28,47 +28,6 @@ interface TypingTextProps {
   onComplete?: () => void;
 }
 
-// Build a map from service display name to service key for text matching
-export function buildServiceNameMap(services: ServiceKey[]): Map<string, ServiceKey> {
-  const map = new Map<string, ServiceKey>();
-  for (const key of services) {
-    const service = serviceData[key];
-    if (service) {
-      map.set(service.name, key);
-    }
-  }
-  return map;
-}
-
-// Render text with clickable service name highlights
-export function renderTextWithServices(
-  text: string,
-  serviceNameMap: Map<string, ServiceKey>
-): React.ReactNode {
-  if (serviceNameMap.size === 0) return text;
-
-  // Build regex from service names (sorted longest first to match greedily)
-  const names = Array.from(serviceNameMap.keys()).sort((a, b) => b.length - a.length);
-  const escapedNames = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const regex = new RegExp(`(${escapedNames.join('|')})`, 'g');
-
-  const parts = text.split(regex);
-  
-  return parts.map((part, idx) => {
-    const serviceKey = serviceNameMap.get(part);
-    if (serviceKey) {
-      return (
-        <ServicePopover key={idx} serviceKey={serviceKey} position="right">
-          <span className="font-semibold text-blue-400 border-b border-dashed border-blue-400/50 cursor-pointer hover:text-blue-300 hover:border-blue-300/70 transition-colors">
-            {part}
-          </span>
-        </ServicePopover>
-      );
-    }
-    return <span key={idx}>{part}</span>;
-  });
-}
-
 export function TypingText({ 
   summary, 
   bullets, 
@@ -83,12 +42,7 @@ export function TypingText({
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
   const completeCalled = useRef(false);
-  const serviceNameMap = useRef(buildServiceNameMap(services));
-
-  // Update service name map when services change
-  useEffect(() => {
-    serviceNameMap.current = buildServiceNameMap(services);
-  }, [services]);
+  const serviceNameMap = useMemo(() => buildServiceNameMap(services), [services]);
 
   // Start delay
   useEffect(() => {
@@ -99,46 +53,46 @@ export function TypingText({
   }, [startDelay]);
 
   // Typing animation using requestAnimationFrame
-  const animate = useCallback((timestamp: number) => {
-    if (currentBulletIndex < 0 || currentBulletIndex >= bullets.length) return;
-    
-    const currentBullet = bullets[currentBulletIndex];
-    
-    if (timestamp - lastTimeRef.current >= speed) {
-      lastTimeRef.current = timestamp;
-      
-      if (currentCharIndex < currentBullet.length) {
-        setCurrentCharIndex(prev => prev + 1);
-      } else {
-        // Current bullet complete, move to next
-        if (currentBulletIndex < bullets.length - 1) {
-          setCurrentBulletIndex(prev => prev + 1);
-          setCurrentCharIndex(0);
+  useEffect(() => {
+    if (currentBulletIndex < 0 || isComplete) return;
+
+    const animate = (timestamp: number) => {
+      if (currentBulletIndex >= bullets.length) return;
+
+      const currentBullet = bullets[currentBulletIndex];
+
+      if (timestamp - lastTimeRef.current >= speed) {
+        lastTimeRef.current = timestamp;
+
+        if (currentCharIndex < currentBullet.length) {
+          setCurrentCharIndex(prev => prev + 1);
         } else {
-          // All bullets complete
-          setIsComplete(true);
-          if (!completeCalled.current) {
-            completeCalled.current = true;
-            onComplete?.();
+          // Current bullet complete, move to next
+          if (currentBulletIndex < bullets.length - 1) {
+            setCurrentBulletIndex(prev => prev + 1);
+            setCurrentCharIndex(0);
+          } else {
+            // All bullets complete
+            setIsComplete(true);
+            if (!completeCalled.current) {
+              completeCalled.current = true;
+              onComplete?.();
+            }
+            return;
           }
-          return;
         }
       }
-    }
-    
-    animationRef.current = requestAnimationFrame(animate);
-  }, [currentBulletIndex, currentCharIndex, bullets, speed, onComplete]);
 
-  useEffect(() => {
-    if (currentBulletIndex >= 0 && !isComplete) {
       animationRef.current = requestAnimationFrame(animate);
-    }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [animate, currentBulletIndex, isComplete]);
+  }, [currentBulletIndex, currentCharIndex, bullets, speed, onComplete, isComplete]);
 
   return (
     <div className="space-y-3">
@@ -162,7 +116,7 @@ export function TypingText({
               <span className="text-slate-200 leading-relaxed">
                 {isCurrentlyTyping 
                   ? <>{displayText}<span className="inline-block w-0.5 h-4 bg-blue-400 ml-0.5 animate-pulse" /></>
-                  : renderTextWithServices(displayText, serviceNameMap.current)
+                  : renderTextWithServices(displayText, serviceNameMap)
                 }
               </span>
             </li>

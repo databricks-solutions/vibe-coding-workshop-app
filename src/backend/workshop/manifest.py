@@ -1,0 +1,320 @@
+"""Typed access to the generated workshop track manifest."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from typing import Any, Literal
+
+Execution = Literal["agent-doable", "ui-driven", "hybrid"]
+Surface = Literal["ui", "mcp"]
+INTERACTION_SLOTS = ("pre", "decision", "post")
+
+# Pre-journey gate (retired as a numbered step). A requiresGate chain that walks
+# back to it terminates AT it — the use-case gate stays as-authored.
+USE_CASE_GATE = "use_case_selection"
+
+
+@dataclass(frozen=True)
+class Step:
+    order: int
+    sectionTag: str
+    title: str
+    why: str | None = None
+    gate: str | None = None
+    requiresGate: str | None = None
+    consumes: list[str] = field(default_factory=list)
+    produces: str | None = None
+    execution: Execution = "agent-doable"
+    surfaces: list[Surface] = field(default_factory=lambda: ["ui", "mcp"])
+    flag: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Step:
+        return cls(
+            order=int(data["order"]),
+            sectionTag=str(data["sectionTag"]),
+            title=str(data["title"]),
+            why=data.get("why"),
+            gate=data.get("gate"),
+            requiresGate=data.get("requiresGate"),
+            consumes=[str(value) for value in data.get("consumes", [])],
+            produces=data.get("produces"),
+            execution=data.get("execution", "agent-doable"),
+            surfaces=[str(value) for value in data.get("surfaces", ["ui", "mcp"])],
+            flag=data.get("flag"),
+        )
+
+
+@dataclass(frozen=True)
+class Section:
+    id: str
+    title: str
+    steps: list[Step]
+    chapter: str | None = None
+    why: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Section:
+        return cls(
+            id=str(data["id"]),
+            title=str(data["title"]),
+            steps=[Step.from_dict(step) for step in data.get("steps", [])],
+            chapter=data.get("chapter"),
+            why=data.get("why"),
+        )
+
+
+@dataclass(frozen=True)
+class Flag:
+    default: bool
+    affectsSteps: list[str] = field(default_factory=list)
+    note: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Flag:
+        return cls(
+            default=bool(data.get("default", False)),
+            affectsSteps=[str(value) for value in data.get("affectsSteps", [])],
+            note=data.get("note"),
+        )
+
+
+@dataclass(frozen=True)
+class Variant:
+    """A composed ordering selected at runtime by matching session inputs.
+
+    ``when`` is a set of ``session_parameters`` key/value conditions (e.g.
+    ``{"chainContext": "app"}`` or ``{"direction": "reverse"}``); a variant is
+    active when every condition matches. ``sections`` is a full alternate section
+    list in the same shape as ``Track.sections`` — the engine applies flag
+    filtering to it exactly as it does the default sections (Phase 3 T3a)."""
+
+    when: dict[str, str]
+    sections: list[Section]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Variant:
+        return cls(
+            when={str(key): str(value) for key, value in data.get("when", {}).items()},
+            sections=[Section.from_dict(section) for section in data.get("sections", [])],
+        )
+
+    def matches(self, inputs: dict[str, str]) -> bool:
+        return all(inputs.get(key) == value for key, value in self.when.items())
+
+
+@dataclass(frozen=True)
+class Track:
+    id: str
+    title: str
+    sections: list[Section]
+    assistants: list[str] = field(default_factory=list)
+    flags: dict[str, Flag] = field(default_factory=dict)
+    variants: list[Variant] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Track:
+        return cls(
+            id=str(data["id"]),
+            title=str(data["title"]),
+            sections=[Section.from_dict(section) for section in data.get("sections", [])],
+            assistants=[str(value) for value in data.get("assistants", [])],
+            flags={
+                str(name): Flag.from_dict(value)
+                for name, value in data.get("flags", {}).items()
+            },
+            variants=[Variant.from_dict(variant) for variant in data.get("variants", [])],
+        )
+
+    def steps(self) -> list[Step]:
+        return [step for section in self.sections for step in section.steps]
+
+    def sections_for(self, inputs: dict[str, str] | None = None) -> list[Section]:
+        """Select the active section list for the given session inputs.
+
+        The first variant whose ``when`` conditions all match wins; otherwise the
+        default sections. Variants carry non-empty ``when``, so absent inputs (the
+        default session) always resolve to the default sections."""
+
+        for variant in self.variants:
+            if variant.matches(inputs or {}):
+                return variant.sections
+        return self.sections
+
+
+@dataclass(frozen=True)
+class Manifest:
+    version: str
+    tracks: dict[str, Track]
+    # Global ALL_STEPS step-number -> sectionTag (T5 PR1). Keyed by the FRONTEND
+    # global number, not the track-local Step.order — the only backend mirror of
+    # the frontend numbering, used to resolve App-origin completed/skipped step
+    # numbers back to tags. Empty for manifests generated before the field existed.
+    step_number_to_tag: dict[int, str] = field(default_factory=dict)
+
+    def track_steps(self, track_id: str) -> list[Step]:
+        return self._track(track_id).steps()
+
+    def outline_order(
+        self,
+        track_id: str,
+        flags: dict[str, bool] | None = None,
+        inputs: dict[str, str] | None = None,
+    ) -> list[Step]:
+        track = self._track(track_id)
+        requested_flags = flags or {}
+        sections = track.sections_for(inputs)
+        steps: list[Step] = []
+        for section in sections:
+            for step in section.steps:
+                if step.flag is None:
+                    steps.append(step)
+                    continue
+                flag_definition = track.flags.get(step.flag)
+                default = flag_definition.default if flag_definition else False
+                if bool(requested_flags.get(step.flag, default)):
+                    steps.append(step)
+        return self._rewire_gates(steps, sections)
+
+    def _rewire_gates(self, steps: list[Step], sections: list[Section]) -> list[Step]:
+        """Rewire gates left dangling by flag filtering (Phase 3 T5 PR A).
+
+        Filtering a flagged step out of the composition does not touch the
+        surviving steps' ``requiresGate``, so a step whose prerequisite was
+        filtered out keeps a gate that can never be satisfied — it stays locked
+        forever and ``next_step`` returns ``Done()`` with steps remaining. Each
+        such gate is rewired to the nearest ancestor that IS in this composed
+        outline, found by walking the required step's own ``requiresGate``
+        chain over the full (unfiltered) active section list. Shared ``Step``
+        objects are never mutated — ``dataclasses.replace`` copies, and only
+        for steps whose gate actually changes. ORDER is untouched."""
+
+        if not steps:
+            return steps
+        outline_tags = {step.sectionTag for step in steps}
+        # Full step universe of the ACTIVE sections (pre-flag-filter): the walk
+        # may pass through steps that exist here but were filtered from the
+        # outline. Variant sections (Phase 3 T3a) are honored via sections_for.
+        active_map = {
+            step.sectionTag: step
+            for section in sections
+            for step in section.steps
+        }
+        rewired: list[Step] = []
+        for step in steps:
+            gate = step.requiresGate
+            if gate is None or gate in outline_tags:
+                rewired.append(step)
+                continue
+            ancestor = _nearest_outline_ancestor(gate, outline_tags, active_map)
+            if ancestor != gate:
+                step = replace(step, requiresGate=ancestor)
+            rewired.append(step)
+        return rewired
+
+    def _track(self, track_id: str) -> Track:
+        try:
+            return self.tracks[track_id]
+        except KeyError as error:
+            available = ", ".join(sorted(self.tracks))
+            raise KeyError(f"Unknown track {track_id!r}; available tracks: {available}") from error
+
+
+def _nearest_outline_ancestor(
+    gate: str,
+    outline_tags: set[str],
+    active_map: dict[str, Step],
+) -> str | None:
+    """Walk ``gate``'s own ``requiresGate`` chain to the nearest outline member.
+
+    Terminals: an ancestor in the outline → that gate; the pre-journey
+    ``use_case_selection`` gate → stays as-authored; a ``None`` link → ``None``;
+    a missing step or a cycle → ``None`` (defensive — 0 occurrences in the
+    manifest today, asserted by the gate-rewiring invariant test)."""
+
+    seen: set[str] = set()
+    current: str | None = gate
+    while current is not None:
+        if current == USE_CASE_GATE:
+            return current
+        if current in outline_tags:
+            return current
+        required = active_map.get(current)
+        if required is None or current in seen:
+            return None
+        seen.add(current)
+        current = required.requiresGate
+    return None
+
+
+def _manifest_path(path: str | None) -> Path:
+    return Path(path) if path is not None else Path(__file__).with_name("manifest.json")
+
+
+def load_manifest(path: str | None = None) -> Manifest:
+    manifest_path = _manifest_path(path)
+    with manifest_path.open(encoding="utf-8") as stream:
+        data = json.load(stream)
+    return Manifest(
+        version=str(data["version"]),
+        tracks={
+            str(track_id): Track.from_dict(track_data)
+            for track_id, track_data in data["tracks"].items()
+        },
+        step_number_to_tag={
+            int(number): str(tag)
+            for number, tag in data.get("step_number_to_tag", {}).items()
+        },
+    )
+
+
+def track_steps(track_id: str, path: str | None = None) -> list[Step]:
+    return load_manifest(path).track_steps(track_id)
+
+
+def step_number_to_tag(path: str | None = None) -> dict[int, str]:
+    """Global ALL_STEPS step-number -> sectionTag map (see ``Manifest``)."""
+
+    return load_manifest(path).step_number_to_tag
+
+
+def _interactions_path(path: str | None) -> Path:
+    return Path(path) if path is not None else Path(__file__).with_name("interactions.json")
+
+
+def load_interactions(path: str | None = None) -> dict[str, dict[str, dict[str, Any] | None]]:
+    interactions_path = _interactions_path(path)
+    with interactions_path.open(encoding="utf-8") as stream:
+        data = json.load(stream)
+    if not isinstance(data, dict):
+        raise TypeError("Interactions must be keyed by sectionTag")
+    return {
+        str(section_tag): {
+            slot: block if isinstance(block, dict) else None
+            for slot, block in section_data.items()
+            if slot in INTERACTION_SLOTS
+        }
+        for section_tag, section_data in data.items()
+        if isinstance(section_data, dict)
+    }
+
+
+def interactions_for(
+    section_tag: str, path: str | None = None
+) -> dict[str, dict[str, Any] | None] | None:
+    return load_interactions(path).get(section_tag)
+
+
+def blocking_interactions(
+    section_tag: str, path: str | None = None
+) -> list[dict[str, Any]]:
+    blocks = interactions_for(section_tag, path) or {}
+    return [
+        block
+        for block in blocks.values()
+        if isinstance(block, dict)
+        and block.get("type") == "confirm"
+        and block.get("skippable") is False
+    ]

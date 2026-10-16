@@ -1,0 +1,12 @@
+```text
+Lakebase (Postgres)
+│ read
+▼
+API routes ─ unreachable ─▶ mock fallback
+│
+▼
+UI pages
+│
+▼
+ConnectionStatus: Mock / Live
+```

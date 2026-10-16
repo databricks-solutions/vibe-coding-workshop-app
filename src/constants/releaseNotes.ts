@@ -47,6 +47,193 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.0',
+    date: '2026-10-15',
+    title: 'Run the workshop from Genie Code',
+    items: [
+      {
+        title: 'Run any workshop track from Genie Code',
+        description:
+          'Add the app as a custom MCP server in Genie Code (the app URL followed by /mcp), then say the line the web app shows, such as "Start a workshop track: Genie Accelerator". Genie Code then walks you through the track one step at a time, showing each prompt and waiting for you to run it. Your progress is saved on the server, so you can switch between Genie Code and the web app at any point.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'terminal',
+      },
+      {
+        title: 'A coach inside Genie Code',
+        description:
+          'Ask what to do now, why a step matters, why you are stuck, or for a recap of what you have built. The coach answers in one short paragraph grounded in your own session, with a table or diagram where it helps.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'New sessions start on the Genie Accelerator, with the Genie Ontology',
+        description:
+          'Every new session now starts on the Genie Accelerator, whichever coding assistant you pick, with the Genie Ontology chapter included. Its tab in the path picker holds the Include Genie Ontology and Include Lakehouse options. If your workspace has no Genie One Pages, untick the ontology in the web app, or say "skip the ontology" in Genie Code. Existing sessions keep their saved path.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'route',
+        beta: true,
+      },
+      {
+        title: 'One session in the web app and Genie Code',
+        description:
+          'Pick Genie Code as your coding assistant and the web app shows the MCP URL, the three connection steps and one line to say in Genie Code, such as "Start a workshop track: Genie Accelerator (session …)". It continues the same session, and Set Up Project repeats it. Start, switch track or save from either side: an open web tab catches up by itself and tells you what changed. Genie Code can also list your sessions and save one under a new name.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'terminal',
+      },
+      {
+        title: 'Ideate approval workflow and inline review',
+        description:
+          'Ideas are submitted and approved per revision before building. Reviewers can approve, request changes, or reject with required notes inline from the idea card and page or from the Library review queue, and approved ideas hand off directly into a fresh build.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'shield',
+      },
+      {
+        title: 'Recommended track and Other tracks',
+        description:
+          'The path picker now has two tabs. The Genie Accelerator tab holds the recommended track; Other tracks shows every other path as before, including Build Forward and Reverse ETL. You can move between them in one click, and Genie Code understands track names such as "Apps + Lakebase" or "lakehouse with AI".',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'The ontology chapter comes before the app',
+        description:
+          'Model the Domain, Author Pages and Write the Routing Page now follow the AI/BI Dashboard, before Choose What to Activate and the Lakebase and app steps. In Genie Code, the two Page steps you do in the Databricks UI ask you to confirm the Page is published before they complete.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Steps always run in order',
+        description:
+          'A step can no longer be skipped by accident. Each one becomes available only after the one before it is done, and your use case is chosen before the PRD step.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'Faster step hand-offs in Genie Code',
+        description:
+          'Genie Code now prepares the next step’s prompt while you work on the current one, so finishing a step such as Set Up Project no longer waits 20–40 seconds for the next prompt.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'rocket',
+      },
+      {
+        title: 'Sessions reopen in the view you left',
+        description:
+          'Each session remembers whether you were in Insights or the Technical workflow. Insights sessions started before this release reopen in Technical once; click Insights and it is remembered from then on.',
+        category: 'fix',
+        audience: 'attendee',
+      },
+      {
+        title: 'New app settings for facilitators',
+        description:
+          'app.yaml gains MCP_MOUNT_ENABLED (the Genie Code MCP server, on by default), VIBE_DEFAULT_GENIE_ONTOLOGY (set "false" if the workspace has no Genie One Pages), VIBE_STEP_PROMPT_PREFETCH, VIBE_MCP_STRICT_OWNER (a Genie Code request without a user identity cannot open another user’s session), and the coach’s VIBE_COACH_ENDPOINT and VIBE_COACH_BUDGET_S. The facilitator guide lists each one with its default.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'wrench',
+      },
+      {
+        title: 'Upgrades keep your data',
+        description:
+          'The table step is now additive by default: it creates what is missing and adds new prompt rows to an existing install, and it never overwrites rows you have edited. A destructive rebuild needs an explicit opt-in. Run the table step before deploying this release.',
+        category: 'improved',
+        audience: 'installer',
+        icon: 'database',
+      },
+      {
+        title: 'Dependency security fixes',
+        description: 'Updated dependencies clear every high-severity advisory in the app’s packages.',
+        category: 'fix',
+        audience: 'installer',
+        icon: 'shield',
+      },
+    ],
+  },
+  {
+    version: '2.7.0',
+    date: '2026-10-15',
+    title: 'The climb, saved ideas, points and leaderboard seasons',
+    items: [
+      {
+        title: 'Your ideas are saved and follow you',
+        description:
+          'Ideas are now saved to your account, so they follow you across browsers. Each idea earns Idea Points on the server for the journey steps you finish, an AI quality judge and its outcome, with tiers and a scorecard.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'The journey is drawn as a climb',
+        description:
+          'The idea journey now opens on a trailhead scene and climbs to a summit flag, with a compact trail in each step header and celebrations at milestones. Named Back and Next buttons sit at the top of every step, and the trail dots show their step on hover.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'Value and feasibility planning',
+        description:
+          'After you pick your data, a value-vs-feasibility matrix places the build in one of four quadrants, such as Quick win or Strategic bet, with confidence ranges and a portfolio comparison. Each axis comes with concrete actions that raise it, and the evidence is saved into the build brief.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Leaderboard seasons and an Insights leaderboard',
+        description:
+          'Facilitators can archive, reset and restore both leaderboards by season without deleting anything, and Insights builds now have a leaderboard of their own.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'database',
+      },
+      {
+        title: 'Builds that promise an app always include it',
+        description:
+          'When the chosen approach promises an app, its app, Lakebase write-back, embedded Genie and deployment steps are always part of the build and can no longer disappear. If a required step is unavailable, Start stops with a clear error instead of quietly dropping it.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'wrench',
+      },
+      {
+        title: 'Clearer idea steps',
+        description:
+          'An approved idea now shows its business case, quality score and next actions in one place and goes straight on to choosing data in Insights. Blueprint results appear only once matching has finished, clarification questions allow one or several answers as fits the question, and loading screens show animated art instead of a blank space.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'A notice when a newer version is deployed',
+        description:
+          'If the app is redeployed while you have it open, a notice on every page asks you to reload. Your saved progress is kept.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'rocket',
+      },
+      {
+        title: 'Sonnet 5.5 is the default model',
+        description:
+          'New deployments default to Claude Sonnet 5.5, falling back to Sonnet 4.6 and then 4.5 before the open models. Deployments that set DATABRICKS_SERVING_ENDPOINT keep their own model.',
+        category: 'improved',
+        audience: 'installer',
+        icon: 'cpu',
+      },
+      {
+        title: 'The completed trail line draws correctly',
+        description: 'The completed part of the trail no longer shows as broken dashes.',
+        category: 'fix',
+        audience: 'attendee',
+      },
+    ],
+  },
+  {
     version: '2.6.0',
     date: '2026-10-13',
     title: 'Insights follows the Genie Accelerator',

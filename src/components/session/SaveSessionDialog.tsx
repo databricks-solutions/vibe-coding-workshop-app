@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Save, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
@@ -27,8 +27,10 @@ export function SaveSessionDialog({
   const [feedbackComment, setFeedbackComment] = useState('');
   const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
 
-  // Reset form when dialog opens
-  useEffect(() => {
+  // Reset form when dialog opens (or its initial values change while open)
+  const [resetFor, setResetFor] = useState({ isOpen, initialName, initialDescription });
+  if (resetFor.isOpen !== isOpen || resetFor.initialName !== initialName || resetFor.initialDescription !== initialDescription) {
+    setResetFor({ isOpen, initialName, initialDescription });
     if (isOpen) {
       setName(initialName || '');
       setDescription(initialDescription || '');
@@ -36,7 +38,7 @@ export function SaveSessionDialog({
       setFeedbackComment('');
       setErrors({});
     }
-  }, [isOpen, initialName, initialDescription]);
+  }
 
   useEscapeKey(isOpen, onClose);
 

@@ -1,0 +1,12 @@
+```text
+Local app (mock data)
+│ deploy
+▼
+Databricks Apps (managed hosting)
+│
+▼
+Public HTTPS URL
+│
+▼
+Users
+```

@@ -1,0 +1,15 @@
+```text
+governed Metric View   PRD-relevant Gold tables
+│                      │
+├──────────────────────┘
+▼
+tile plan (measures + detail)
+│
+▼
+create dashboard (Genie Code native skill)
+│
+▼
+open on canvas (author widgets)
+├─▶ share link + save id to state
+└─▶ table inventory to state (feeds Choose What to Activate)
+```

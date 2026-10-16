@@ -29,6 +29,17 @@ env:
   - name: DATABRICKS_SERVING_ENDPOINT
     value: "__SERVING_ENDPOINT__"
 
+  # Coaching model time budget in seconds, read per call by
+  # services/coaching.py; matches the code default; set to override.
+  - name: VIBE_COACH_BUDGET_S
+    value: "20"
+
+  # Coaching-only serving endpoint, read per call by services/coaching.py;
+  # unset = DATABRICKS_SERVING_ENDPOINT. The app service principal needs
+  # CAN_QUERY on it.
+  - name: VIBE_COACH_ENDPOINT
+    value: "databricks-claude-sonnet-5-5"
+
   # Optional stronger model for Ideate's impact sizing and business case.
   # Blank uses DATABRICKS_SERVING_ENDPOINT.
   - name: IDEATE_ANALYSIS_ENDPOINT
@@ -38,6 +49,25 @@ env:
   # Blank keeps Insights to the Genie space and dashboard; testers can use ?recipes=all.
   - name: INSIGHTS_BUILD_RECIPES
     value: ""
+
+  # Genie Ontology (Beta) for NEW Genie Accelerator sessions, web and MCP; read
+  # per call. Set "false" when the workspace has no Genie One Pages. Stored
+  # sessions keep their own setting.
+  - name: VIBE_DEFAULT_GENIE_ONTOLOGY
+    value: "true"
+
+  # MCP step-prompt prefetch (D-160): start the next step's prompt generation
+  # when a step becomes current, so vibe_complete_step returns it without the
+  # wait. Read per call; unset = on. "false" (or 0/off/no) = render on complete.
+  - name: VIBE_STEP_PROMPT_PREFETCH
+    value: "true"
+
+  # MCP strict owner: a Genie Code request that carries no user identity (no
+  # x-forwarded-email from the Apps proxy) cannot open a session someone owns.
+  # Read per call; unset = on. "false" (or 0/off/no) = the old behaviour, only
+  # for a workspace whose proxy sends no identity header.
+  - name: VIBE_MCP_STRICT_OWNER
+    value: "true"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration
@@ -82,6 +112,24 @@ env:
   # Toggle Lakebase (set to "false" for YAML fallback)
   - name: USE_LAKEBASE
     value: "true"
+
+  # ---------------------------------------------------------------------------
+  # MCP (Model Context Protocol) mount
+  # ---------------------------------------------------------------------------
+  # When "true", the FastMCP server is mounted at /mcp so Genie Code (and other
+  # MCP clients) can drive the interactive workshop track. app.py treats an
+  # unset value as off; this template turns it on. See docs/specs/mcp_design/.
+  # Read by app.py (MCP_MOUNT_ENABLED).
+  - name: MCP_MOUNT_ENABLED
+    value: "true"
+
+  # Cross-origin allowlist for CORS. Genie Code's browser connects from the
+  # workspace origin (…cloud.databricks.com / …azuredatabricks.net) to this
+  # app's /mcp (…databricksapps.com) — a cross-origin, credentialed request.
+  # That origin must be allowlisted or the "Add MCP server" save fails with a
+  # CORS preflight error. Set from the deploy workspace host.
+  - name: ALLOWED_ORIGINS
+    value: "__WORKSPACE_HOST__"
 
 # Health check endpoint
 health_check:

@@ -1,0 +1,15 @@
+```text
+top 2-3 questions (from the brief)
+│
+▼
+exact MEASURE() SQL + correct filters
+│
+▼
+run each once (proves it returns)
+│
+▼
+example_question_sqls on the SPACE
+│
+▼
+Gate: verified queries saved
+```

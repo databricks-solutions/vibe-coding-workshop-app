@@ -229,10 +229,3 @@ export function SkillContentModal({ skill, onClose }: SkillContentModalProps) {
     document.body
   );
 }
-
-/**
- * Returns true if the skill type supports content viewing.
- */
-export function isSkillViewable(type: SkillType): boolean {
-  return type !== 'input' && type !== 'manifest';
-}

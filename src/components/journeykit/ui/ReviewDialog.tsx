@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, CheckCircle2, Hammer, Loader2, RotateCcw, ShieldCheck, X } from 'lucide-react';
 import { apiClient, type IdeaReviewDecision } from '../../../api/client';
-import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent';
+import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent.utils';
 import { setIdeaReview } from '../engine/useIdeas';
 import { caseFigures } from '../engine/ideaContext';
 import { money } from '../engine/businessCase';

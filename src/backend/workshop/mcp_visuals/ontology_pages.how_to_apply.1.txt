@@ -1,0 +1,17 @@
+```text
+brief measure
+│
+▼
+GC drafts Page fields: definition, formula (MV),
+synonyms, at least 1 negative rule, related asset
+│
+▼
+you review the draft
+│ publish in UI
+▼
+published Page
+(grounds Genie One citations)
+│
+▼
+repeat for 2nd measure, save IDs
+```

@@ -1,0 +1,11 @@
+```text
+PRD (personas, pages, journeys)
+│
+▼
+ui_design.md
+│
+▼
+AppKit pages + components
+├─ today ─▶ Mock data
+└─ later ─▶ Live Lakebase data
+```

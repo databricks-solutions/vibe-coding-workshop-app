@@ -1,11 +1,12 @@
-import type { DragEvent } from 'react';
+import { createElement, type DragEvent } from 'react';
 import { motion } from 'framer-motion';
 import { BadgeCheck, Check, CornerDownRight, Star } from 'lucide-react';
-import type { LibraryCollection } from '../../api/library';
+import type { LibraryCollection, LibraryUseCase } from '../../api/library';
 import { deriveValueProp } from '../outcomeMapTheme';
 import { placementsOf, type Entry, type LibraryModel } from './model';
 import { collectionIcon, relativeTime, tintStyle, iconForUseCase, type Tint } from './theme';
-import { CollectionGlyph, Switch, cx } from './ui';
+import { CollectionGlyph, Switch } from './ui';
+import { cx } from './cx';
 
 interface Props {
   entry: Entry;
@@ -25,12 +26,15 @@ interface Props {
   onDragOver?: (e: DragEvent) => void;
 }
 
+function UseCaseIcon({ uc, collection, className }: { uc: LibraryUseCase; collection: LibraryCollection; className: string }) {
+  return createElement(iconForUseCase(uc, collectionIcon(collection)), { className });
+}
+
 export function UseCaseCard({
   entry, model, collection, tint, selected, selectionMode, onToggleSelect, onOpen, onLive, onCertified,
   dragging, dropBefore, onDragStart, onDragEnd, onDragOver,
 }: Props) {
   const { uc } = entry;
-  const Icon = iconForUseCase(uc, collectionIcon(collection));
   const others = placementsOf(model, uc).filter(p => p.id !== entry.collectionId && p.collection);
   const home = model.byId[uc.industry];
   const live = uc.is_active;
@@ -74,7 +78,7 @@ export function UseCaseCard({
         )}
         <div className={cx('flex items-start gap-2.5', !live && 'opacity-70')}>
           <span className="lib-tile w-8 h-8 rounded-lg inline-flex items-center justify-center shrink-0">
-            <Icon className="w-4 h-4" />
+            <UseCaseIcon uc={uc} collection={collection} className="w-4 h-4" />
           </span>
           <div className="flex-1 min-w-0 pr-5">
             <div className="flex items-center gap-1">

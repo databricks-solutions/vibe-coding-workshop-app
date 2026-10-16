@@ -1,0 +1,809 @@
+# D2 — MCP Interface Contract
+
+**Status:** Draft · **Doc ID:** D2 · **Date:** 2026-09-22 · **Target repo:** `vibe-coding-workshop-app`
+**Series:** [`README.md`](./README.md)
+**Depends on:** [D3 domain spec](./workshop-engine-domain.md) (engine functions + payloads this
+contract exposes) · [D1 interactivity](./mcp-workshop-interactivity.md) (the `interaction` block +
+`vibe_submit_answer`).
+**Governs / governed by:** the reusable rules in
+[`designing-mcp-servers-for-genie-code.md` §5–§6](./designing-mcp-servers-for-genie-code.md) and the
+probe constraints in
+[`mcp-interactive-track-doc-plan.md` §1](./mcp-interactive-track-doc-plan.md#1-probe-findings-authoritative-constraints--do-not-re-litigate-without-a-re-probe).
+
+> **What this is.** The authoritative **IDL** the MCP server and the contract tests (D8) bind to:
+> every tool (name, description-as-prompt, `inputSchema`, `outputSchema`, all four annotations,
+> error taxonomy), every resource (URI template, TTL/cacheScope, payload), and every prompt (name,
+> args, resolved messages). The adapter is a thin translator over the D3 engine — **no workshop
+> logic here** (roadmap "one engine, two thin adapters").
+
+---
+
+## 0. Anchors verified live (2026-09-22)
+
+| Symbol | Current location | Roadmap said |
+|---|---|---|
+| Identity endpoint `/api/user/current` | `src/backend/api/routes.py:6557` | `:6400` |
+| `GET /api/section-metadata/{section_tag}` (how_to_apply / expected_output) | `routes.py:2252` | `:2150` |
+| Track overview narrative source | `src/constants/pathDescriptions.ts` | same |
+| Gate ledger convention | `.vibecoding-state.md` (Tier-G READ/RECORD bookends, `../genie-accelerator-prompt-standardization.md` §17 + `../genie-accelerator-locate-daisychain-and-prompt-cleanup.md`) | `.vibecoding-state.md` |
+| SPA catch-all (mount `/mcp` before it) | `app.py:162` | `:162` |
+| FMAPI call (adaptive coaching, §3.7) | `call_databricks_serving_endpoint(prompt, endpoint_name, max_tokens, temperature, system_prompt)` — **async** — `src/backend/services/llm.py:192` | (new) |
+| Default serving endpoint | `SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-6")` `services/llm.py:37` | (new) |
+
+> **Ledger naming.** The live Tier-G convention is `.vibecoding-state.md` — verified in both the
+> prompt-standardization spec (§17, line 74 RECORD bookend) and the Locate daisy-chain spec. This
+> contract and the `vibe://style/vibecoding` resource use that name (§4).
+
+---
+
+## 1. Design principles (normative, from the generic spec)
+
+1. **Tool budget ≤ 7.** Genie Code enforces ~20 tools across *all* connected servers. This contract
+   ships **7 tools** (6 core + `vibe_explain_step`; the Phase-2A coaching consolidation extends `vibe_explain_step` rather than adding an 8th, §9); read-only listings
+   (outline/overview/state) are **resources**, entry points are **prompts** (§9 accounts for the
+   budget). 7 is still comfortably under the ~20 shared ceiling — do not grow it further without a
+   budget re-check (D1 §5, generic §3.4).
+2. **Descriptions are the agent's only documentation** — 200–400 chars, stating *what · when ·
+   params · errors* (generic §5.1).
+3. **Flat `inputSchema`** — < 8 params, enums + defaults (generic §5.2).
+4. **All four annotations** on every tool — `readOnlyHint`, `destructiveHint`, `idempotentHint`,
+   `openWorldHint` (generic §5.3). Every tool touches Lakebase ⇒ `openWorldHint: true`.
+5. **`outputSchema` + `structuredContent` on every tool**, mirrored to a human-readable text block
+   (§7).
+6. **Errors return in-result** (`isError: true`), never as protocol errors (§6).
+7. **Resources carry `ttlMs` / `cacheScope`**; large payloads are resource links, not inlined
+   (generic §5.6–§5.7).
+8. **Stateless.** Every call resolves identity → `session_id` per request (§2.3); no in-process
+   session state (D3 §4.2).
+
+---
+
+## 2. Conventions
+
+### 2.1 Naming
+Tools are prefixed `vibe_` and named `verb_object`. Resources use the `vibe://` scheme.
+
+### 2.2 Shared types
+```jsonc
+// StepStatus (D3 §5.1)
+"StepStatus": { "enum": ["done", "current", "locked", "skipped"] }
+
+// OutlineItem
+{ "sectionTag": "string", "title": "string", "status": StepStatus, "execution": "string" }
+
+// Interaction (D1 §6) — optional; present only when the step asks something
+"Interaction": {
+  "id": "string", "type": { "enum": ["comprehension","decision","confirm"] },
+  "question": "string", "options": [{ "id":"string","label":"string" }],
+  "recommended": ["string","null"], "skippable": "boolean"
+}
+
+// ExplainabilityPayload (D3 §8 + D1 §6)
+{
+  "sectionTag": "string", "title": "string", "why": "string",
+  "prompt": "string",                 // verbatim for bypass_llm (D3 §7.5)
+  "user_trigger_prompt": "string",    // the plain-English ask the learner sends to start the step; "" if none
+  "instruction": ["string","null"],   // per-step "present the trigger, then WAIT" doctrine
+  "gate": ["string","null"], "requiresGate": ["string","null"],
+  "consumes": ["string"], "produces": ["string","null"],
+  "execution": { "enum": ["agent-doable","ui-driven","hybrid"] },
+  "next": { "sectionTag":"string", "title":"string" },
+  "interaction": ["Interaction-map","null"],  // { pre?, decision?, post? } — D1 §6
+  "orientation": ["string","null"],           // first-run preamble on step 1 of a fresh session; else null
+  "available_industries": ["array","null"],   // use_case_selection step only
+  "available_use_cases": ["array","null"],    // use_case_selection step only, once an industry is set
+  "data_location": ["object","null"]          // Locate Data step only: { catalog, schema, is_overridden }
+}
+```
+Shipped as `ExplainabilityPayload` in `src/backend/mcp_server.py`: the `vibe_get_step` output and
+the step member of the `vibe_next_step` union (§3.3). `how_to_apply` and `expected_output` are not
+on it; they moved to `vibe_explain_step` (§3.8).
+
+### 2.3 Identity → session resolution
+Every tool resolves the Databricks caller to a `session_id` server-side (reuse `/api/user/current`,
+`routes.py:6557`). `session_id` may be passed explicitly (dual-surface continuity, roadmap §10.3) or
+resolved from identity. **MCP session ≠ auth** (generic §4.5): never trust the MCP transport as the
+identity source; `clientInfo.name` is the connection name, not the user (probe finding).
+
+### 2.4 Annotation semantics
+`readOnlyHint` = no state change · `destructiveHint` = removes/overwrites data ·
+`idempotentHint` = same args ⇒ same effect (safe to retry) · `openWorldHint` = touches an external
+system. All seven tools set `openWorldHint: true` (Lakebase; plus FMAPI for `vibe_explain_step`
+with `focus`, §3.8).
+
+---
+
+## 3. Tools (the catalog)
+
+Seven tools (6 core + `vibe_explain_step`; the Phase-2A coaching contract of §3.7/§12 folds into `vibe_explain_step` per §9). Each entry is the binding contract:
+description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and the D3/D1/D5 mapping.
+
+### 3.1 `vibe_start_track`
+> **Description (as-prompt):** "Start or resume a guided workshop track (e.g. the Genie
+> Accelerator) for the current user. Call this first, in Agent mode, before any other vibe tool.
+> Args: `track` (required), optional `use_case`/`industry`/`session_id`. Returns the session id, a
+> `session_url` deep link to open the same session in the web UI, and the ordered step outline.
+> Errors if `track` is unknown."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["track"],
+  "properties": {
+    "track":      { "type": "string", "description": "Track id, e.g. 'genie-accelerator'." },
+    "use_case":   { "type": "string" },
+    "industry":   { "type": "string" },
+    "session_id": { "type": "string", "description": "Resume an existing session; omit to start fresh." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": {
+  "type": "object",
+  "required": ["session_id", "track", "outline"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "track":      { "type": "string" },
+    "outline":    { "type": "array", "items": { "$ref": "OutlineItem" } }
+  }
+}
+```
+- **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`
+  (resuming with the same `session_id` is idempotent).
+- **Errors:** `UNKNOWN_TRACK`.
+- **Skills-accelerator lock (D-115, D-120):** on `track="skills-accelerator"` (new session, or a
+  resumed one with no use case yet) the tool locks `industry="sample"`, `use_case="build_skill"`
+  before the first save, so the session stays on that track and the intent beat never appears. Any
+  other `industry`/`use_case` gives `INVALID_PARAMETER`; a catalogue that answers without that pair
+  gives `USE_CASE_UNAVAILABLE`; both create nothing. A catalogue outage starts anyway on the same
+  lock (label "Build a Data Contract Skill") and logs one WARNING.
+- **New-session defaults (genie-default-ontology, R2/D-143):** a NEW session (no stored record)
+  stores `session_parameters.view = "technical"`. On `track="genie-accelerator"` it also takes
+  Genie Ontology from the facilitator switch `VIBE_DEFAULT_GENIE_ONTOLOGY` (read per call; unset =
+  on; `0`/`false`/`off`/`no` = off) and writes that value to all three keys:
+  `include_genie_ontology`, `flags.includeGenieOntology` and top-level `includeGenieOntology`.
+  On, the outline has 27 steps with the ontology at 14-16; off, 24. A resumed session is untouched:
+  it keeps its stored keys and step count. The manifest flag default stays `false`.
+- **Maps to:** D3 `outline(track, session)`; REST twin `GET /api/track/{track}/outline` (roadmap §9).
+
+### 3.2 `vibe_get_step`
+> **Description (as-prompt):** "Fetch one workshop step to present. Returns the prompt to run
+> **verbatim**, why it matters, the gate, the next step, and `user_trigger_prompt` — the
+> plain-English ask you MUST show the learner verbatim BEFORE doing any work, then WAIT for them to
+> send it (never auto-run or chain steps). Call `vibe_explain_step` for how-to or expected output.
+> Args: `session_id`; `sectionTag` (optional)."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "sectionTag": { "type": "string", "description": "Defaults to the current step." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": { "$ref": "ExplainabilityPayload" }
+```
+- **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true`.
+- **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP`, `STEP_LOCKED` (if an explicit locked `sectionTag`
+  is requested; D3 F2).
+- **Maps to:** D3 explainability payload + assembler (D3 §7–§8); REST twin — (not built).
+
+### 3.3 `vibe_next_step`
+> **Description (as-prompt):** "Advance to the first not-yet-completed step in order and return it
+> (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Show its trigger verbatim, then WAIT
+> for the learner to submit it — never auto-run or chain steps. Returns `{done:true}` when complete,
+> or `{blocked:true, blocked_by}` when that step's prerequisite gate is not yet satisfied. Args:
+> `session_id`."
+
+```jsonc
+"inputSchema": { "type":"object", "required":["session_id"],
+  "properties": { "session_id": { "type":"string" } }, "additionalProperties": false }
+"outputSchema": {
+  "oneOf": [ { "$ref": "ExplainabilityPayload" },
+             { "type":"object", "required":["done"], "properties": { "done": { "const": true } } },
+             // Blocked (T5 PR B): the walk is wedged behind a gate it can never satisfy. No
+             // top-level sectionTag/title — a blocked payload must not be mistaken for a step.
+             { "type":"object", "required":["blocked","blocked_by","message"], "additionalProperties": false,
+               "properties": {
+                 "blocked": { "const": true },
+                 "blocked_by": { "type":"object", "required":["sectionTag","title","requiresGate"], "additionalProperties": false,
+                   "properties": { "sectionTag": {"type":"string"}, "title": {"type":"string"}, "requiresGate": {"type":["string","null"]} } },
+                 "message": { "type":"string" } } } ]
+}
+```
+- **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true`.
+- **Errors:** `INVALID_SESSION`.
+- **Blocked variant (T5 PR B):** the invariant is that `vibe_next_step` NEVER reports `{done:true}`
+  while the track is unfinished. The walk is strictly ordered (D-78): the next step is always the
+  first unfinished, unskipped step, and when that step cannot start (its `requiresGate` is not yet
+  satisfied, or can never be) it returns `blocked` — naming that step and its gate — plus a
+  deterministic (no-LLM) `message` telling the agent this is a workshop-configuration
+  defect, not a learner action, and to stop. The server also logs a WARNING (track, flags, dangling
+  gate; no PII). `DoneResult` is unchanged, so an old client keying on `done` never sees a false
+  `done:true`. After the T5 PR A gate rewire this path is unreachable on authored data; it is a
+  safety net for a future gate-data defect. **Scope note:** only `vibe_next_step` surfaces `blocked`
+  — `vibe_get_step`/`vibe_complete_step` are unchanged because the locked-only state is unreachable
+  by construction post-PR-A. No later step jumps the queue; completing one out of order is
+  `vibe_complete_step`'s `STEP_LOCKED` (§3.4).
+- **Maps to:** D3 `next_step(session)`; REST twin — (not built).
+
+### 3.4 `vibe_complete_step`
+> **Description (as-prompt):** "Record that the current step's gate passed and store its captured
+> output (the gate = this call); advances the walk. Call ONLY after the learner triggered and ran the
+> step in a fresh turn — never chain it yourself. If its `interaction` has a `post` check, ask it via
+> `vibe_submit_answer` first. A `ui-driven` step needs its confirm `published`. Args: `session_id`,
+> `sectionTag`, `captured_output`."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id", "sectionTag", "captured_output"],
+  "properties": {
+    "session_id":      { "type": "string" },
+    "sectionTag":      { "type": "string" },
+    "captured_output": { "type": "string", "description": "The step's produced artifact/summary; stored under the step's `produces` key." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": {
+  "type": "object",
+  "required": ["completed_gates", "next"],
+  "properties": {
+    "completed_gates": { "type": "array", "items": { "type": "string" } },
+    "next": { "oneOf": [ { "type":"object","properties":{ "sectionTag":{"type":"string"},"title":{"type":"string"} } },
+                         { "type":"object","required":["done"],"properties":{ "done":{"const":true} } } ] }
+  }
+}
+```
+- **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`
+  (re-completing a done gate is a no-op success, D3 F3).
+- **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP`, `STEP_LOCKED` (D3 F2), `UI_DRIVEN_STEP`
+  (the engine's answer for a ui-driven step without a learner confirmation, D3 §5.4 / D1 §4.3),
+  `GATE_REQUIRED` (Step-9 hard-stop: the confirm answer must be recorded first, D1 §11; and a
+  ui-driven step whose publish confirm is not answered `published`).
+- **ui-driven steps (R1):** `ontology_pages` and `ontology_routing` are done in the Databricks UI.
+  Each carries a non-skippable `decision` confirm (`<tag>.publish_confirmation`, options
+  `published` / `not_yet`, recommended `published`); their `post` checks stay. Until the learner
+  answers `published` via `vibe_submit_answer`, the call returns `GATE_REQUIRED` with a short
+  message: coach the learner through the Databricks UI, then ask the confirm. `not_yet` keeps the
+  step open. A locked or already-done step still answers `STEP_LOCKED` / idempotent success. After
+  `published` the tool calls `engine.complete_step(…, learner_confirmed=True)`, which records the
+  gate and `captured_outputs["ui_confirmed:<sectionTag>"] = "mcp"`. The step payload's
+  `instruction` carries one sentence saying the same.
+- **Maps to:** D3 `complete_step(...)`; REST twin — (not built).
+
+### 3.5 `vibe_submit_answer`  *(net-new, from D1 §5)*
+> **Description (as-prompt):** "Record the learner's answer to a step's `interaction` question — a
+> comprehension check or a recommend-and-proceed decision/override — and return coaching feedback.
+> Optional for skippable questions (silence applies the recommended default). Args: `session_id`,
+> `interaction_id`, `answer` (all required)."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id", "interaction_id", "answer"],
+  "properties": {
+    "session_id":     { "type": "string" },
+    "interaction_id": { "type": "string", "description": "The Interaction.id from the step payload, e.g. 'semlayer_locate.why'." },
+    "answer":         { "type": "string", "description": "Selected option id (for options) or free text." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": {
+  "type": "object",
+  "required": ["recorded", "coaching"],
+  "properties": {
+    "recorded":  { "type": "boolean" },
+    "coaching":  { "type": "string", "description": "Short feedback the agent reads out; empty for pure decision capture." },
+    "unblocks":  { "type": ["string","null"], "description": "sectionTag this answer unblocks, e.g. the Step-9 hard-stop; else null." }
+  }
+}
+```
+- **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`.
+- **Errors:** `INVALID_SESSION`, `UNKNOWN_INTERACTION`.
+- **Maps to:** D1 §4.1/§4.2 patterns + §11 (Step-9 unblock); persists to the interaction/decision
+  log (D6). No REST twin required (UI has its own controls).
+
+### 3.6 `vibe_set_parameters`
+> **Description (as-prompt):** "Set/update session parameters, flags (`include_genie_ontology`:
+> bool), and the use-case lock. Selection: pass `use_case_source` (curated/custom) with `industry`,
+> `use_case`, `use_case_label`; custom also needs `use_case_description`. For a PRD-grade custom
+> brief pass `mode="draft_custom"` (+`use_case_hints`), then confirm by resending
+> `use_case_description`. Args: `session_id`, `params`, `mode`."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id", "params"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "params": {
+      "type": "object",
+      "properties": {
+        "catalog":              { "type": "string" },
+        "schema_prefix":        { "type": "string" },
+        "include_genie_ontology": { "type": "boolean", "description": "Genie Ontology on/off; mirrored to all three keys. Wins over the other two." },
+        "includeGenieOntology": { "type": "boolean", "description": "Top-level camelCase key; also an ontology write, mirrored to all three keys (lowest precedence)." },
+        "includeLakehouse":     { "type": "boolean" },
+        "lakebase_instance":    { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
+"outputSchema": {
+  "type": "object",
+  "required": ["resolved_params", "missing_required"],
+  "properties": {
+    "resolved_params":  { "type": "object", "additionalProperties": true },
+    "missing_required": { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+- **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`.
+- **Errors:** `INVALID_SESSION`, `INVALID_PARAM` (unknown key with a strict flag, else ignored).
+- **Skills-accelerator lock (D-115):** on a session that resolves to skills-accelerator (build_skill
+  locked), a `use_case` other than `build_skill`, an `industry` other than `sample`, or
+  `use_case_source="custom"` gives `INVALID_PARAMETER` and persists nothing; other keys are unaffected.
+- **Genie Ontology (R4, D-149):** `include_genie_ontology` must be a boolean (else
+  `INVALID_PARAMETER`). When a call sets any of the three keys (`include_genie_ontology`,
+  `flags.includeGenieOntology`, top-level `includeGenieOntology`), the same value is written to all
+  three, so a stale top-level key can no longer override it (D-153). If one call carries several
+  and they disagree, the precedence is `include_genie_ontology` > `flags.includeGenieOntology` >
+  top-level `includeGenieOntology`, and the disagreement is logged at INFO (the booleans only). This is the learner's opt-out ("skip the ontology" →
+  `{include_genie_ontology: false}`). Opting in after step 16 makes Model the Domain the current
+  step (strict order, D-78); completed gates stay done.
+- **Reserved keys:** `skipped_gates`, `skippedSteps`, `custom_draft_ready`,
+  `custom_drafted_description`, and any key starting `ui_confirmed:` (the R1 learner-confirm marker
+  only `engine.complete_step` writes) give `INVALID_PARAMETER` and persist nothing.
+- **Maps to:** D3 §4 session_parameters + the outline flag filter (D3 §5.1); reuses
+  `/api/session/{id}/parameters` (`GET` `src/backend/api/routes.py:4433`, `PUT`
+  `src/backend/api/routes.py:4520`) + `lakehouse-params`.
+
+### 3.7 `vibe_coach`  *(net-new, Phase 2A — from D5 §11 adaptive coaching)*
+> Shipped as `vibe_explain_step` (§3.8; §9 Phase 2A amendment). This section is the historical coaching contract.
+> **Description (as-prompt):** "Coach the learner on **what is happening at their current step and
+> why**, grounded in their own progress — call it on demand when they ask 'why does this matter?',
+> 'what do I do now?', or 'I'm stuck'. Read-only; never blocks or advances the track. Args:
+> `session_id` (required), `focus` (optional: what_now | why | unblock | review), `sectionTag`
+> (optional; defaults to the current step)."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "focus":      { "type": "string", "enum": ["what_now","why","unblock","review"], "default": "what_now",
+                    "description": "Coaching lens: orient (what_now), motivate (why), get unstuck (unblock), or recap (review)." },
+    "sectionTag": { "type": "string", "description": "Defaults to the current step." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": { "$ref": "CoachResult" }   // see §12
+```
+- **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true`
+  (`openWorld` because it calls FMAPI + reads Lakebase; `readOnly` because it changes **no** workshop
+  state — progress/gates/answers are untouched. The optional coaching-telemetry row (D6 §3a) is an
+  observability side-channel, like a log line, not workshop state).
+- **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP` (explicit bad `sectionTag`). **Never** raises on an
+  FMAPI failure — coaching is **fail-open**: on any model/timeout error it returns the step's
+  static help with `is_fallback: true`; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`). There is no
+  `COACH_FAILED` code by design.
+- **Grounding (server-assembled, never client-supplied):** the current step's `title`/`why`/
+  `how_to_apply`/`expected_output`/`gate` + the verbatim `prompt` (as *reference to explain*, never
+  to rewrite — §7 / D1 §7), the learner's `captured_outputs`, prior `session_interactions` answers,
+  and `industry`/`use_case` (D5 §11.2). The model call carries `COACH_SYSTEM` (§12) as
+  `system_prompt`.
+- **Maps to:** D5 §11 (pedagogy/doctrine) via `services/llm.py` (extract of
+  `call_databricks_serving_endpoint`, `services/llm.py:192`; D4 §1.2). **No REST twin required** for v1
+  (the SPA renders its own coaching); add `GET /api/track/{track}/coach` later if the UI needs it.
+
+### 3.8 `vibe_explain_step`  *(shipped 2026-09-27; Phase 2A coaching; D12 coach visuals 2026-10-13)*
+The shipped IDL of the seventh tool (D-99 REVISED). It hosts the §3.7/§12 coaching contract (§9
+Phase 2A amendment) and the D12 coach visuals
+([`mcp-workshop-coach-visuals.md`](./mcp-workshop-coach-visuals.md)). Where the shipped code differs
+from the D12 spec, this section follows the code and names the decision (D-101). Source:
+`src/backend/mcp_server.py` (`vibe_explain_step`, `StepHelpResult`).
+
+> **Description (as-prompt):** "Step help: `how_to_apply`, `expected_output`, `why`. Call ONLY when the learner asks about a step; `sectionTag` defaults to current. Pass `focus` (what_now|why|unblock|review) for grounded `coaching` (else `is_fallback`). Pass `visual` (table|diagram) when the learner asks to see, show, draw or map something. Present `coaching`, then `visual` exactly as given, then `visual_caption`."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "sectionTag": { "type": "string", "description": "Defaults to the current step." },
+    "focus":      { "type": "string", "enum": ["what_now","why","unblock","review"],
+                    "description": "Grounded coaching lens (coaching.FOCI). Omit for the static help only." },
+    "visual":     { "type": "string", "enum": ["auto","none","table","diagram"],
+                    "description": "Inline visual (coach_visuals.VISUALS). Defaults to auto when focus is set, else none." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": {
+  "type": "object",
+  "required": ["sectionTag", "title", "why", "how_to_apply", "expected_output"],
+  "properties": {
+    "sectionTag":      { "type": "string" },
+    "title":           { "type": "string" },
+    "why":             { "type": "string" },
+    "how_to_apply":    { "type": "string" },
+    "expected_output": { "type": "string" },
+    "coaching":        { "type": ["string", "null"], "description": "Set only when focus is passed (D-22)." },
+    "focus":           { "enum": ["what_now","why","unblock","review", null] },
+    "grounded_on":     { "type": "array", "items": { "type": "string" } },
+    "is_fallback":     { "type": "boolean", "default": false },
+    "visual":          { "type": ["string", "null"], "description": "A markdown table, or a ```text fenced diagram." },
+    "visual_kind":     { "enum": ["table", "diagram", null] },
+    "visual_caption":  { "type": ["string", "null"], "description": "Takeaway; diagram captions start with the DIAGRAM_CAPTION line." }
+  },
+  "additionalProperties": false
+}
+```
+- **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true` (as
+  registered on `@mcp.tool(name="vibe_explain_step")`).
+- **Errors:** `INVALID_PARAMETER` (a `focus` not in `coaching.FOCI`, or a `visual` not in
+  `coach_visuals.VISUALS`; both checked before the session is loaded), `INVALID_SESSION`,
+  `UNKNOWN_STEP` (an explicit `sectionTag` that does not resolve, or a default lookup on a finished
+  track), and `UNKNOWN_STEP` for a default lookup on a blocked walk (`_blocked_step_error`: the
+  message names the dangling gate as a workshop configuration problem). Coaching and visuals never
+  raise (fail-open, below).
+- **Maps to:** `mcp_server.vibe_explain_step` → `assembler.get_section_input_content(...,
+  render_target="mcp")` (`src/backend/workshop/assembler.py`) for the static help →
+  `coach_visuals.build_visual` (`src/backend/services/coach_visuals.py`) → `coaching.coach`
+  (`src/backend/services/coaching.py`) when `focus` is set.
+
+#### D12 coach visuals (2026-10-13)
+- **Description.** The description above is the shipped one (385 characters). It replaces the
+  2026-09-27 wording rather than appending the spec §3.6 sentence to it, so it stays inside the
+  200–400 character bound (D-92).
+- **inputSchema delta.** One optional argument, invalid values give `INVALID_PARAMETER`:
+
+  ```jsonc
+  "visual": { "type": "string", "enum": ["auto","none","table","diagram"],
+              "description": "Inline visual. Defaults to auto when focus is set, and to none otherwise (spec §3.4)." }
+  ```
+- **outputSchema delta.** `StepHelpResult` gains `visual` (string|null), `visual_kind`
+  ("table"|"diagram"|null) and `visual_caption` (string|null). `extra="forbid"` stays.
+- **Selection matrix** (spec §3.4; `coach_visuals.SELECTION`, `coach_visuals.select_shape`):
+
+  | `focus` | `visual="auto"` | `visual="table"` | `visual="diagram"` |
+  |---|---|---|---|
+  | `what_now` | Progress table | Progress table | Curated diagram, else downstream chain |
+  | `why` | Curated diagram, else downstream chain | Progress table | Curated diagram, else downstream chain |
+  | `unblock` | Unblock checklist | Unblock checklist | Curated diagram, else downstream chain |
+  | `review` | Built-so-far chain | Progress table | Built-so-far chain |
+  | none (static help) | no visual | Progress table | Curated diagram, else downstream chain |
+
+  `visual=none` returns no visual for any `focus`.
+
+  A visual without `focus` makes **no model call**: `vibe_explain_step` returns before
+  `coaching.coach` when `focus` is None.
+- **Shipped specifics.** Labels are manifest step titles and `key_label` of output key names
+  (D-93). The progress table shows the session frontier, not the requested step, and its caption
+  is `<d> of <n> steps done. Now: <title>.` (D-94), where `n` is the full outline with skipped
+  steps included (D-98). When no unfinished step is left, the caption is `All N steps done.` if
+  every outline step is done, else `D of N steps done. The rest were skipped.`, where N is the full
+  outline and D the done steps (D-98, `coach_visuals._progress`). The curated diagram is the step's `how_to_apply.1` twin only when this
+  call actually served it, else the downstream chain (D-95, `coach_visuals._curated`). Diagram
+  captions start with `Diagram only, nothing to run.` (`visuals.DIAGRAM_CAPTION`).
+- **Fail-open.** Any visual error, or a visual that fails `lint_visual`, gives a null triple
+  (`visual`, `visual_kind`, `visual_caption` all null) and one WARNING naming only the section tag
+  and shape; never a tool error (`coach_visuals.build_visual`, plus the guard around it in
+  `vibe_explain_step`).
+- **Kill switch.** `VIBE_COACH_VISUALS_ENABLED`, read per call (`coach_visuals.visuals_enabled`),
+  with the same off values as the coaching switch. When off, the triple is always null. The twin
+  swap below is a defect fix and is not behind this switch.
+- **MCP twin swap.** `vibe_explain_step` calls the assembler with `render_target="mcp"`, which swaps
+  each Mermaid fence in `how_to_apply`/`expected_output` for its hand-converted twin
+  (`src/backend/workshop/mcp_visuals/`), with the plain line `Diagram only, nothing to run.` after
+  diagram twins only (D-84). A fence whose twin is missing, unreadable or stale degrades on its own
+  to `(This step has a diagram in the workshop web UI.)` (`visuals.FALLBACK_LINE`; per fence,
+  D-89), and a post-substitution net catches any fence that arrives later (D-87). No raw Mermaid
+  reaches MCP. Web callers keep the default `render_target="web"` and their output is
+  byte-identical.
+
+---
+
+## 4. Resources (read-only context)
+
+Resources absorb the read-only listings that would otherwise cost tool-budget slots (§9). Each
+declares `ttlMs` + `cacheScope ∈ {global, session}`.
+
+| URI template | Payload | cacheScope | ttlMs |
+|---|---|---|---|
+| `vibe://track/{track}/overview` | Chapter/section narrative from `pathDescriptions.ts` + manifest `why` (D3 §3) | `global` | `3600000` (1 h) |
+| `vibe://session/{session_id}/state` | `{ outline: OutlineItem[], completed_gates: string[], captured_output_keys: string[] }` — the live walk + gate ledger, mirroring `.vibecoding-state.md` | `session` | `0` (no-cache; always fresh, stateless) |
+| `vibe://style/vibecoding` | The `.vibecoding-state.md` gate-ledger convention + Tier-G READ/RECORD bookends (`../genie-accelerator-prompt-standardization.md`) | `global` | `86400000` (24 h) |
+| `vibe://guide/getting-started` | **Self-documenting help** — how the workshop works (answer in chat, silence = recommended default, the hard stops: the benchmark confirm and, with the Genie Ontology on, the Author Pages and Write the Routing Page publish confirms, mirror in the web UI) + the troubleshooting table (20-tool budget, stateless, the 307). The in-product source the agent reads to help a learner **without** a human or D10 (self-serve invariant, D1 §1a). | `global` | `86400000` (24 h) |
+
+Notes:
+- **`outline` is a resource, not a tool** (moved from the roadmap's `vibe_track_outline`) — it is
+  pure read; this keeps the tool count at 6 (§9). The session-state resource carries it for the
+  session's active track.
+- `resources/list` and `resources/read` responses should themselves set sensible `ttlMs` (generic
+  §5.7).
+
+---
+
+## 5. Prompts (user-invoked entry points)
+
+Prompts surface as discoverable slash-style entries; they cost **nothing** against the tool budget
+and are how learners *find* the server.
+
+| Prompt name | Arguments | Resolves to (messages) |
+|---|---|---|
+| `Start the Genie Accelerator` | `use_case?`, `industry?` | Instructs the agent to deliver the **first-run orientation** (D1 §4.5), then call `vibe_start_track {track:"genie-accelerator", …}` then `vibe_get_step`, present `prompt` verbatim, and narrate. Ends with the ontology opt-out: "If your workspace doesn't have Genie One Pages, say skip the ontology" (`vibe_set_parameters {include_genie_ontology: false}`). |
+| `Start a workshop track` | `track?`, `use_case?`, `industry?` | The same on any track; on `genie-accelerator` it ends with the same opt-out sentence. |
+| `Continue where I left off` | — | Instructs the agent to call `vibe_next_step` and resume, reading `vibe://session/{session_id}/state` for context. **Skips** orientation. |
+| `How does this workshop work?` | — | Self-serve orientation on demand: instructs the agent to read `vibe://guide/getting-started` and explain how to answer, how gates work, the hard stops (the benchmark confirm and the two ontology publish confirms), and how to mirror in the web UI (D1 §1a). Costs nothing against the tool budget. |
+
+Each prompt's resolved message MUST restate the **verbatim-first** rendering contract (D1 §6) so the
+agent presents the prompt body before narrating.
+
+---
+
+## 6. Error taxonomy (in-result `isError`)
+
+All expected failures return a result with `isError: true` and a typed body — never a protocol
+error (generic §5.5). Shape:
+
+```jsonc
+{ "isError": true, "error": { "code": "STEP_LOCKED", "message": "…actionable…", "sectionTag": "…" } }
+```
+
+| Code | Meaning | Raised by | D3/D1 ref |
+|---|---|---|---|
+| `UNKNOWN_TRACK` | `track` not in manifest | `start_track` | — |
+| `INVALID_SESSION` | session id unresolvable | all | — |
+| `UNKNOWN_STEP` | `sectionTag` not in track | `get_step`, `complete_step`, `explain_step` | D3 F1 |
+| `STEP_LOCKED` | prerequisite gate not met | `get_step`, `complete_step` | D3 F2 |
+| `UI_DRIVEN_STEP` | step is coached, not agent-completable | `complete_step` | D3 §5.4 / D1 §4.3 |
+| `GATE_REQUIRED` | Step-9 confirm answer not yet recorded, or a ui-driven step's publish confirm not answered `published` | `complete_step` | D1 §11 / D3 §5.4 |
+| `UNKNOWN_INTERACTION` | `interaction_id` not on the current step | `submit_answer` | D1 §6 |
+| `INVALID_PARAM` | unknown/invalid parameter (strict mode) | `set_parameters` | D3 §4 |
+| `USE_CASE_UNAVAILABLE` | skills-accelerator start, but the catalogue has no sample/build_skill | `start_track` | D-115, D-120 |
+
+`complete_step` on an already-completed gate is **not** an error — it is idempotent success
+(D3 F3). `vibe_explain_step` with `focus` **never** returns an FMAPI error — model/timeout
+failures degrade to the static fallback with `is_fallback:true` (§3.8 / D5 §11.4); only
+`INVALID_SESSION`/`UNKNOWN_STEP` (bad inputs, before any model call) are `isError`.
+
+`vibe_next_step`'s `blocked` variant (§3.3, T5 PR B) is likewise **not** an error — it is a
+schema-valid success-channel result (not `isError`), the third `NextStepResult` union member. It
+signals a workshop-configuration defect (an unsatisfiable gate) rather than a bad caller input, so
+it rides the normal output contract and carries an actionable `message`; the defect is additionally
+logged server-side as a WARNING.
+
+---
+
+## 7. Output contract (hard)
+
+Every tool call returns **both**:
+1. `structuredContent` validated against the tool's `outputSchema`; and
+2. a mirrored **text** content block (human-readable) so the agent can read results aloud.
+
+A tool that cannot produce schema-valid `structuredContent` returns an `isError` result (§6) — it
+never returns malformed structured output.
+
+---
+
+## 8. Annotation matrix
+
+| Tool | readOnly | destructive | idempotent | openWorld |
+|---|:--:|:--:|:--:|:--:|
+| `vibe_start_track` | ❌ | ❌ | ✅ | ✅ |
+| `vibe_get_step` | ✅ | ❌ | ✅ | ✅ |
+| `vibe_next_step` | ✅ | ❌ | ✅ | ✅ |
+| `vibe_complete_step` | ❌ | ❌ | ✅ | ✅ |
+| `vibe_submit_answer` | ❌ | ❌ | ✅ | ✅ |
+| `vibe_set_parameters` | ❌ | ❌ | ✅ | ✅ |
+| `vibe_explain_step` | ✅ | ❌ | ✅ | ✅ |
+
+`vibe_coach` was planned (§3.7) and never built; its slot is `vibe_explain_step` (§9).
+
+None are `destructive`: completion/answers are additive and idempotent; coaching mutates no workshop
+state; rollback is a whole-snapshot concern handled elsewhere, never a tool-level destroy.
+
+---
+
+## 9. Tool-budget accounting
+
+| Surface | Count | Items |
+|---|--:|---|
+| **Tools** | **7** | start_track, get_step, next_step, **explain_step**, complete_step, submit_answer, set_parameters |
+| Resources | 4 | track overview, session state (incl. outline), style/vibecoding, guide/getting-started |
+| Prompts | 3 | Start the Genie Accelerator, Continue where I left off, How does this workshop work? |
+
+Resources and prompts cost **nothing** against Genie Code's ~20-tool budget, so the self-serve
+surfaces (the help resource + the orientation prompt, D1 §1a) are free — the tool count is **7**
+(6 core + `vibe_explain_step`, the on-demand help tool shipped 2026-09-27).
+
+> **Phase 2A amendment (2026-09-27):** adaptive coaching is delivered by **extending
+> `vibe_explain_step`** (an optional `focus` arg + an FMAPI path that fails open to the static help it
+> already returns) rather than adding a separate `vibe_coach` tool — so the tool count stays **7**, not
+> 8. Coaching remains tool-shaped (it takes `focus`/`sectionTag` and calls a model per invocation);
+> §3.7/§12 describe the model contract, now hosted on `vibe_explain_step`, and §10's `vibe_coach` row
+> folds into `vibe_explain_step`. Rationale + sequencing: [D9 §1 row 2A](./mcp-workshop-rollout.md).
+
+**Reconciliation with the roadmap §8.2:** the roadmap listed 6 tools *including* `vibe_track_outline`
+but *excluding* `vibe_submit_answer`. D1 requires `submit_answer`; to stay at 6 **core** tools we
+**demote `track_outline` to the session-state resource** (§4). Net: 6 core tools, and the read-only
+listing lives where reads belong (generic §6). The 7th tool is `vibe_explain_step` (shipped
+2026-09-27); **Phase 2A** extended it with `focus` instead of adding the planned `vibe_coach` (§3.7),
+so the total stays **7** — still far under the shared ~20-tool ceiling.
+
+---
+
+## 10. Mapping (contract → engine/interaction/REST)
+
+| Tool | D3 engine fn | D1 interaction | REST twin (roadmap §9) |
+|---|---|---|---|
+| `vibe_start_track` | `outline` | — | `GET /api/track/{track}/outline` |
+| `vibe_get_step` | payload + assembler | carries `interaction` | — (not built) |
+| `vibe_next_step` | `next_step` | — | — (not built) |
+| `vibe_complete_step` | `complete_step` | gate = next-action-as-approval (§4.3) | — (not built) |
+| `vibe_submit_answer` | (writes interaction log) | §4.1/§4.2 + §11 | — (UI-native) |
+| `vibe_set_parameters` | session_parameters + outline filter | §4.4 | `PUT /api/session/{session_id}/parameters` |
+| `vibe_explain_step` | payload + assembler; with `focus`, the `services/coaching.py` model call | D1 §4.6 (adaptive coaching) | — (MCP-only) |
+
+### 10.1 Web session fields and the workshop-defaults route (genie-default-ontology PR 2)
+- **`GET /api/config/workshop-defaults`** → `{"defaultTrack": "genie-accelerator",
+  "includeGenieOntology": <VIBE_DEFAULT_GENIE_ONTOLOGY>}` (next to `/api/config/insights-recipes`;
+  the switch is read per call, unset = `true`; `app.yaml.template` sets `"true"`). The web UI reads
+  it for new sessions (PR 3).
+- **`view`** on `POST /api/session/save` and `POST /api/session/update-metadata`:
+  `"technical"` | `"insights"`, persisted as `session_parameters.view` (D-143). Omitted or `null`
+  leaves the stored value untouched (preserve-on-omit, like the gate fields); any other value is a
+  422.
+- **Ontology mirroring (D-149):** when either request sets `include_genie_ontology` or
+  `flags.includeGenieOntology`, the server writes the same value to `include_genie_ontology`,
+  `flags.includeGenieOntology` and top-level `includeGenieOntology`. A request without `flags`
+  merges the nested key into the stored `flags` object; a request with `flags` replaces it as
+  before. On disagreement the snake key wins (INFO log, the two booleans only). Same rule as
+  `vibe_set_parameters` and `vibe_start_track`.
+
+---
+
+## 11. Open questions (defer to human)
+
+1. **`session_id` in args vs. identity-only.** Exposing `session_id` enables dual-surface handoff
+   (UI → Genie Code) but adds a spoofable arg. Recommend: accept it, but authorize it against the
+   resolved identity server-side.
+2. **Strict vs. lenient `set_parameters`.** Reject unknown keys (`INVALID_PARAM`) or ignore them?
+   Recommend lenient-with-warning to avoid brittle failures as the flag set grows.
+3. **Overview resource freshness.** 1 h TTL assumes track narrative is static between deploys;
+   confirm reseed invalidates it (or drop TTL to session).
+4. **Coaching model + budget knobs (§3.7/§12).** **RESOLVED 2026-09-24 (ship enabled):** endpoint =
+   app default (`DATABRICKS_SERVING_ENDPOINT` → `databricks-claude-sonnet-4-5`), `max_tokens≈400`,
+   `≈8 s` timeout with fail-open, and per-triple caching on `(session_id, sectionTag, focus)`. Gate
+   the live call behind a coaching kill-switch env (default **on**) for rollback (D9 §6).
+5. **Coaching telemetry (D6 §3a).** Persist a `kind='coaching'` row per call (recommended, for the
+   fallback-rate metric) vs. fire-and-forget with no row. Recommend persist, best-effort.
+
+---
+
+## 12. Adaptive-coaching internals (`CoachResult` + `COACH_SYSTEM`) — `CoachResult` is the historical name; the shipped result is `StepHelpResult` (§3.8)
+
+The shape and the model contract behind `vibe_explain_step`'s `focus` (§3.8), first planned for
+`vibe_coach` (§3.7). `CoachResult` below is kept as the historical shape. Bound by the D8 coaching
+tests (§4).
+
+### 12.1 `CoachResult` (output type)
+
+```jsonc
+// CoachResult — the planned vibe_coach outputSchema (historical; shipped fields: StepHelpResult, §3.8)
+"CoachResult": {
+  "type": "object",
+  "required": ["coaching", "focus", "section_tag", "is_fallback"],
+  "properties": {
+    "coaching":    { "type": "string",
+                     "description": "One short paragraph (at most 4 sentences, about 80 words) the agent reads out; explains what's happening and why. Never restates the step prompt." },
+    "focus":       { "type": "string", "enum": ["what_now","why","unblock","review"] },
+    "section_tag": { "type": "string", "description": "The step the coaching is grounded on." },
+    "grounded_on": { "type": "array", "items": { "type": "string" },
+                     "description": "Which context keys fed the answer, e.g. ['why','expected_output','captured_outputs:genie_brief']. For transparency/tests." },
+    "is_fallback": { "type": "boolean",
+                     "description": "true ⇒ the FMAPI call failed/timed out and the step's static help was returned; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`)." }
+  },
+  "additionalProperties": false
+}
+```
+
+Pydantic sketch (mirrors the existing models in `src/backend/mcp_server.py`):
+
+```python
+class CoachResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    coaching: str
+    focus: Literal["what_now", "why", "unblock", "review"]
+    section_tag: str
+    grounded_on: list[str] = Field(default_factory=list)
+    is_fallback: bool = False
+```
+
+> **Shipped surface.** On the shipped tool the coaching fields (`coaching`, `focus`, `grounded_on`,
+> `is_fallback`) live on `StepHelpResult`, the `vibe_explain_step` output (§3.8), and the D12 visual
+> triple (`visual`, `visual_kind`, `visual_caption`) sits beside them. `CoachResult` above stays as
+> the historical contract.
+
+### 12.2 `COACH_SYSTEM` (the model system prompt)
+
+Passed as `system_prompt` to `call_databricks_serving_endpoint` (`services/llm.py:192`,
+D4 §1.2). It is a **server-owned constant** (like `ORIENTATION_PREAMBLE` in `mcp_server.py`), never
+learner- or agent-supplied. The **user message** is the assembled grounding context (§3.7); this
+system prompt fixes the role, the guardrails, and the output shape.
+
+```text
+You are the coach for a hands-on Databricks workshop (the track named in the CONTEXT). A learner is working
+through it inside an AI coding agent. Your job: explain, in plain language, WHAT is happening at
+their current step and WHY it matters — grounded ONLY in the CONTEXT provided in the user message
+(the step's purpose, how-to-apply, expected output, the learner's own prior outputs and answers,
+and their industry/use case).
+
+HARD RULES
+- Ground every claim in the CONTEXT. If the CONTEXT does not support an answer, say what the learner
+  should do or check next — never invent facts, table names, column values, or results.
+- NEVER restate, paraphrase, or "improve" the step's verbatim PROMPT body. It is shown to the
+  learner separately and must remain authoritative. You explain and motivate; you do not re-issue
+  the instruction.
+- NEVER emit benchmark question text, sample data values, literals, secrets, or PII. Speak in terms
+  of concepts and the learner's own artifacts, not raw data. (Firewall — D7 §6.)
+- Respect the learner's recorded decisions: if they chose a non-recommended option, coach that
+  path's trade-offs; do not scold or re-litigate a settled choice.
+
+FOCUS (from the CONTEXT's `focus` field)
+- what_now : orient them — where they are, what this step produces, what to do next.
+- why      : motivate — why this step exists and what breaks downstream if it's skipped or wrong.
+- unblock  : diagnose — the most likely reason they're stuck here and the smallest next action.
+- review   : recap — what they've accomplished so far and how this step builds on it.
+
+STYLE
+- One short paragraph: at most 4 sentences and about 80 words. Confident guide, not a form or a quiz. Recommend, don't interrogate (D5 §3, §7).
+- No emoji, no numbered/decorated headers, no marketing adjectives, no filler (economist/humanizer
+  bars, D5 §7). Precise and literal about tokens, gate names, and definitions — do not vague them.
+- Output prose only. No JSON, no markdown headings — the tool wraps your text into CoachResult.
+- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it ("the table below"). Never draw one, and never describe it line by line. The pointer counts toward the 4 sentences.
+```
+
+> **D12 (2026-10-13):** the last STYLE line was added by D12 coach visuals (`coaching.COACH_SYSTEM`,
+> `src/backend/services/coaching.py`).
+>
+> **D-181 (2026-10-15):** the output scrub enforces the "never restate" rule as a verbatim-overlap
+> check: a run of 12 or more words shared with the step `prompt`, or 8 or more shared with a
+> captured output, rejects the text (`overlap:<label>`; `coaching.PROMPT_OVERLAP_WORDS`,
+> `coaching.OVERLAP_WORDS`). The reject falls back to static help (D7 §6.1).
+
+### 12.3 Grounding context (the user message)
+
+Assembled server-side from the same sources `_step_payload` already uses (`mcp_server.py`), plus
+session history — **never** taken from tool arguments:
+
+| Context key | Source |
+|---|---|
+| `focus` | the `focus` arg (§3.7) |
+| `title`, `why`, `how_to_apply`, `expected_output`, `gate`, `execution` | step payload (D3 §8) |
+| `prompt` (verbatim, **as reference only**) | assembler `bypass_llm` input (D3 §7.5) |
+| `captured_outputs` (relevant `consumes`/`produces` keys) | `engine.resolve_previous_outputs` (D3 §6) |
+| prior answers/decisions | `session_interactions` (D6 §3) |
+| `industry`, `use_case` | `session_parameters` (D6 §4) |
+| `visual` | kind and caption only (`visual: <kind>, <caption>`), never the visual text (`coaching.build_context`) |
+
+`grounded_on` in the result echoes which of these keys were non-empty, for transparency and the
+D8 grounding test (§4).
+
+> **D12 (2026-10-13):** the visual is built before the model call, so the prose can point at it
+> (§3.8). The coaching single-flight, cache and negative cache are keyed by
+> `(session_id, sectionTag, focus, visual_kind or "none")` (D-96, `coaching.coach`), so prose that
+> says "the table below" is never reused with a different or absent visual. The `coaching timings`
+> log line carries a `visual=<kind|none>` field, followed since D-111 by `endpoint=<name|default>`;
+> its format string is
+> `coaching timings section=%s focus=%s db_ms=%d build_ms=%d model_ms=%d total_ms=%d outcome=%s cache=%s visual=%s endpoint=%s`.
+>
+> **D-111/D-113 (2026-10-14):** `VIBE_COACH_ENDPOINT`, read per call, sends the coaching call to that
+> serving endpoint instead of `DATABRICKS_SERVING_ENDPOINT` (unset or blank = the app default; the
+> cache key does not include it), and the call carries no `temperature`.

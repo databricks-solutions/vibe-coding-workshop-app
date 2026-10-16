@@ -18,7 +18,19 @@ db/lakebase/
 │   ├── 03_sessions.sql
 │   ├── 04_workshop_parameters.sql
 │   ├── 05_saved_usecase_descriptions.sql
-│   └── 06_apply_tags.sql
+│   ├── 06_apply_tags.sql
+│   ├── 07_add_coding_assistant_column.sql
+│   ├── 08_step_visibility_overrides.sql
+│   ├── 09_add_category_columns.sql
+│   ├── 10_add_is_certified.sql
+│   ├── 10_hackathons.sql
+│   ├── 11_hackathon_teams_submissions.sql
+│   ├── 12_mcp_engine_state.sql
+│   ├── 13_mcp_coaching.sql
+│   ├── 14_seed_rows_applied.sql
+│   ├── 15_seed_bulk_pending.sql
+│   ├── 16_widen_workshop_level.sql
+│   └── 17_add_user_trigger_prompt.sql
 └── dml_seed/              # Initial seed data (DML)
     ├── 01_seed_usecase_descriptions.sql
     ├── 02_seed_section_input_prompts.sql
@@ -112,10 +124,7 @@ Stores user sessions with workflow progress.
 | step_1_prompt | TEXT | Generated prompt for step 1 |
 | step_prompts | JSONB | Generated prompts for steps 2-31 (keys: "2" to "31"). Default: '{}' |
 | prerequisites_completed | BOOLEAN | Whether prerequisites are done |
-| current_step | INTEGER | Current step number (1-31) |
-| workshop_level | VARCHAR(20) | Workshop level (app, app-database, end-to-end, accelerator, etc.) |
-| completed_steps | TEXT | JSON array of completed step numbers |
-| skipped_steps | TEXT | JSON array of skipped step numbers. Default: '[]' |
+| workshop_level | VARCHAR(64) | Workshop level (app, app-database, end-to-end, accelerator, etc.) |
 | session_parameters | JSONB | Per-session parameter overrides. Default: '{}' |
 
 ### 4. saved_usecase_descriptions

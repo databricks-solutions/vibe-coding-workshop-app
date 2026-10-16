@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS ${schema}.section_input_prompts (
     order_number INTEGER,
     how_to_apply TEXT,
     expected_output TEXT,
+    user_trigger_prompt TEXT,
     how_to_apply_images JSONB DEFAULT '[]'::jsonb,
     expected_output_images JSONB DEFAULT '[]'::jsonb,
     bypass_llm BOOLEAN NOT NULL DEFAULT FALSE,

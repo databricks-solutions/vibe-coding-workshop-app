@@ -24,6 +24,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { GenieCodeStartLine } from './ConnectToGenieCodePanel';
 import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Sparkles, Terminal } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
@@ -55,6 +56,8 @@ interface SetUpProjectStepProps {
    * path. Falls back to '<your_email>' placeholder when null / empty.
    */
   currentUserEmail?: string | null;
+  /** The session's track, for the Genie Code start line (session linking). */
+  workshopLevel?: string;
 }
 
 type SetUpProjectVariant = 'coda' | 'genie-code' | 'desktop';
@@ -215,6 +218,7 @@ export function SetUpProjectStep({
   useCaseLabel,
   codingAssistant,
   currentUserEmail,
+  workshopLevel,
 }: SetUpProjectStepProps) {
   const readOnly = useReadOnly();
   const folderName = deriveFolderName(useCaseLabel);
@@ -225,7 +229,9 @@ export function SetUpProjectStep({
   const [workspaceUrl, setWorkspaceUrl] = useState<string>(DEFAULT_WORKSPACE_URL);
   const [isReloading, setIsReloading] = useState(false);
 
-  const fetchWorkspaceUrl = async () => {
+  // Resolves the workspace URL (session parameter first, then the workshop
+  // parameter); null keeps the current/default URL.
+  const fetchWorkspaceUrl = async (): Promise<string | null> => {
     try {
       if (sessionId) {
         const response = await fetch(`/api/session/${sessionId}/parameters`);
@@ -233,8 +239,7 @@ export function SetUpProjectStep({
           const params = await response.json();
           const wsParam = params.find((p: { param_key: string }) => p.param_key === 'workspace_url');
           if (wsParam?.param_value) {
-            setWorkspaceUrl(wsParam.param_value);
-            return;
+            return wsParam.param_value;
           }
         }
       }
@@ -242,12 +247,13 @@ export function SetUpProjectStep({
       if (response.ok) {
         const data = await response.json();
         if (data.param_value) {
-          setWorkspaceUrl(data.param_value);
+          return data.param_value;
         }
       }
     } catch {
       // Falls back to default workspace URL
     }
+    return null;
   };
 
   // Re-fetch workspace URL when refreshKey or sessionId changes so the
@@ -255,13 +261,16 @@ export function SetUpProjectStep({
   // session / workshop parameters. The Genie Code variant's email comes
   // in as a prop from App.tsx (no extra API call needed here).
   useEffect(() => {
-    fetchWorkspaceUrl();
+    fetchWorkspaceUrl().then((url) => {
+      if (url) setWorkspaceUrl(url);
+    });
   }, [refreshKey, sessionId]);
 
   const handleReload = async () => {
     setIsReloading(true);
     onStepReset?.();
-    await fetchWorkspaceUrl();
+    const url = await fetchWorkspaceUrl();
+    if (url) setWorkspaceUrl(url);
     setIsReloading(false);
   };
 
@@ -627,6 +636,14 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                .assistant/skills load path, and validate. Email is
                auto-injected from getCurrentUser().
                =========================================================== */}
+          {/* Session linking: the line that continues THIS session in Genie Code. */}
+          {variant === 'genie-code' && (
+            <div data-testid="genie-code-start-note" className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2.5 space-y-1">
+              <p className="text-ui-sm font-semibold text-foreground">Using Genie Code over MCP?</p>
+              <GenieCodeStartLine workshopLevel={workshopLevel} sessionId={sessionId} lead="Enter" />
+            </div>
+          )}
+
           {variant === 'genie-code' && (() => {
             const emailForPath = currentUserEmail || '<your_email>';
             const projectPath = `/Workspace/Users/${emailForPath}/vibe-coding-workshop`;

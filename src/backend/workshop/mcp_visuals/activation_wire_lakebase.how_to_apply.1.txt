@@ -1,0 +1,13 @@
+```text
+Lakehouse Gold (analytics)
+│ synced tables
+▼
+Lakebase (operational Postgres)
+│ read-only queries
+▼
+Analytics App
+├─ Lakebase unreachable ─▶ falls back to mock data
+│ Live Data
+▼
+Users
+```

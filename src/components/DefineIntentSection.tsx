@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { PromptGenerator } from './PromptGenerator';
 import { CertifiedBadge } from './CertifiedBadge';
 import type { WorkshopLevel } from '../constants/workflowSections';
@@ -54,30 +54,28 @@ export function DefineIntentSection({
 }: DefineIntentSectionProps) {
   // Tracks user's manual expand/collapse toggle; null = use auto behavior
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
-  const prevForceCollapsed = useRef(forceCollapsed);
+  const [prevForceCollapsed, setPrevForceCollapsed] = useState(forceCollapsed);
 
   // Intent is defined when industry + use case are selected (matches PromptGenerator's "Done" badge)
   // OR when step 1 is formally in completedSteps
   const intentDefined = isComplete || (!!selectedIndustry && !!selectedUseCase);
 
   // Reset user override when forceCollapsed transitions to true
-  useEffect(() => {
-    if (forceCollapsed && !prevForceCollapsed.current) {
-      setUserOverride(null);
-    }
-    prevForceCollapsed.current = forceCollapsed;
-  }, [forceCollapsed]);
+  if (forceCollapsed !== prevForceCollapsed) {
+    setPrevForceCollapsed(forceCollapsed);
+    if (forceCollapsed) setUserOverride(null);
+  }
 
   // forceExpanded is authoritative; forceCollapsed sets the default (user can still override)
   const autoExpanded = isSessionLoaded ? !intentDefined : false;
   const isExpanded = forceExpanded ? true : (userOverride !== null ? userOverride : (forceCollapsed ? false : autoExpanded));
 
   // When intent becomes defined mid-session, reset override so auto-collapse kicks in
-  useEffect(() => {
-    if (intentDefined) {
-      setUserOverride(null);
-    }
-  }, [intentDefined]);
+  const [prevIntentDefined, setPrevIntentDefined] = useState(intentDefined);
+  if (intentDefined !== prevIntentDefined) {
+    setPrevIntentDefined(intentDefined);
+    if (intentDefined) setUserOverride(null);
+  }
 
   const handleToggle = () => setUserOverride(!isExpanded);
 

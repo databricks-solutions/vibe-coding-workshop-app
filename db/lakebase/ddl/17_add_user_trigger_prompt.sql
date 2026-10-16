@@ -1,0 +1,22 @@
+-- =============================================================================
+-- ADD section_input_prompts.user_trigger_prompt (PostgreSQL/Lakebase) - IDEMPOTENT MIGRATION
+-- =============================================================================
+-- Adds the user_trigger_prompt column to section_input_prompts (D-69).
+--
+-- DDL 02 declares the column only inside its CREATE TABLE IF NOT EXISTS, which
+-- is a no-op on a table created before the column existed (an install upgraded
+-- from main), and no ALTER added it. The seed INSERTs and the Lakebase prompt
+-- query (src/backend/api/routes.py) name the column, so on such an install the
+-- INSERTs fail and the query errors and returns no rows.
+--
+--   * Fresh install: DDL 02 already creates the column; this ALTER is a no-op.
+--   * Legacy upgrade from main: adds the missing column.
+-- Safe to re-run: ADD COLUMN IF NOT EXISTS is a no-op once the column exists.
+--
+-- Non-destructive: adds a nullable TEXT column with no default, so no row is
+-- rewritten and existing rows read NULL.
+--
+-- Variable: ${schema} - replaced at runtime
+-- =============================================================================
+
+ALTER TABLE ${schema}.section_input_prompts ADD COLUMN IF NOT EXISTS user_trigger_prompt TEXT;

@@ -1,0 +1,30 @@
+{
+  "contract_red_b.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: \"fixture_b\"`, `require_prior_gate: {prompt_id: \"prior_b\", gate: \"Prior B done\"}`.\n2. @genai-agents/test/fixture-skill/SKILL.md — params:\n   - `key: \"value\"`\n3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: \"fixture_b\"`, `gate: \"Fixture B done\"`.\n\n**Gate:** `Fixture B done` — verification text."
+    ],
+    "placeholders": ["{use_case_slug}"]
+  },
+  "contract_green_b.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: \"fixture_b\"`, `require_prior_gate: {prompt_id: \"prior_b\", gate: \"Prior B done\"}`.\n2. @genai-agents/test/fixture-skill/SKILL.md — params:\n   - `key: \"value\"`\n3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: \"fixture_b\"`, `gate: \"Fixture B done\"`.\n\n**Gate:** `Fixture B done` — verification text."
+    ],
+    "placeholders": ["{use_case_slug}"]
+  },
+  "contract_red_a.md": {
+    "class": "A",
+    "verbatim_substrings": [
+      "```\n## IMPORTANT - READ FIRST\n\nDo X. Do Y. STOP after saving.\n```"
+    ],
+    "placeholders": ["{use_case_slug}"]
+  },
+  "contract_green_a.md": {
+    "class": "A",
+    "verbatim_substrings": [
+      "```\n## IMPORTANT - READ FIRST\n\nDo X. Do Y. STOP after saving.\n```"
+    ],
+    "placeholders": ["{use_case_slug}"]
+  }
+}

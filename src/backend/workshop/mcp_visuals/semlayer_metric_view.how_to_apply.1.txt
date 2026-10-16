@@ -1,0 +1,17 @@
+```text
+signed-off inventory          Tableau / Power BI file
+│                             │
+▼                             ▼
+Path B: author YAML           Path A: /importBI, then
+(review 4a, then create 4b)   promote local view to UC
+│                             │
+├─────────────────────────────┘
+▼
+governed Metric View (your gold schema)
+│
+▼
+MEASURE() query proves each measure returns
+│
+▼
+Gate: MV live
+```

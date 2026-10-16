@@ -10,7 +10,7 @@ import { BusinessCaseSheet, InlineBusinessCase } from '../ui/BusinessCase';
 import { BusinessCaseButton } from '../ui/BusinessCaseButton';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
-import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent';
+import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent.utils';
 import { briefAsMarkdown, caseFigures, chosenShape, placedLeaf } from '../engine/ideaContext';
 import { money, units } from '../engine/businessCase';
 import { DIMENSIONS } from '../engine/types';

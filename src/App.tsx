@@ -21,7 +21,7 @@ const IdeateApp = lazy(() => import('./components/ideate/IdeateApp'));
 const InsightsFlow = lazy(() => import('./components/insights/InsightsFlow'));
 import { ViewModeToggle } from './components/insights/ViewModeToggle';
 import type { InsightsSetup } from './components/insights/types';
-import { isInsightsSession, useWorkflowViewMode } from './hooks/useWorkflowViewMode';
+import { isInsightsSession, useWorkflowViewMode, type WorkflowViewMode } from './hooks/useWorkflowViewMode';
 import { useIdeas } from './components/journeykit/engine/useIdeas';
 import { buildContext } from './components/journeykit/engine/ideaContext';
 import { buildDescription, buildTargetFor, slugOf, useLinkedIdea } from './components/journeykit/engine/handoff';
@@ -33,10 +33,18 @@ import {
   FeedbackDialog, 
   SessionListDialog 
 } from './components/session';
-import { apiClient } from './api/client';
+import { apiClient, FALLBACK_WORKSHOP_DEFAULTS, isPristineSession, newSessionMetadata, type WorkshopDefaults } from './api/client';
 import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
-import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { orderedSectionsForRead, WORKSHOP_LEVELS, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { mergeStatus } from './constants/mergeStatus';
+import type { SessionLoadResponse, TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
+import { deriveCompletedStepNumbers } from './constants/deriveProgress';
+import { emptyGateBase, hydrateGateBase, gateBaseFields, applyGateWriteResult, type GateBase, type GateWrite } from './utils/gateBase';
+import { ALL_SYNC_GROUPS, canApplyRefresh, changedGroups, groupsDifferingFromLocal, sessionViewFrom, syncSnapshot, type LocalSessionState, type SyncGroup } from './utils/sessionSync';
+import { SessionSyncNotice, type SessionSyncMessage } from './components/SessionSyncNotice';
+import { TRACK_DISPLAY_NAMES } from './constants/trackNames';
+import { hasStartedWorkflow as workflowStarted } from './constants/levelLock';
 
 /** The step prompt API only stores steps 1 to 30. */
 const MAX_SAVED_STEP = 30;
@@ -59,8 +67,6 @@ export default function App() {
 
   // Mobile sidebar overlay state (for screens < md)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-
-  const [viewMode, setViewMode, adoptSessionView] = useWorkflowViewMode();
 
   // Determine current page from URL
   const isConfigPage = location.pathname.startsWith('/config') || location.pathname.startsWith('/library');
@@ -125,7 +131,6 @@ export default function App() {
   const [currentUserResolved, setCurrentUserResolved] = useState(false);
   const [sessionOwner, setSessionOwner] = useState<string | null>(null);
   const [defaultCatalog, setDefaultCatalog] = useState('');
-  const [initialExpandedStep, setInitialExpandedStep] = useState<number>(1);
 
   // Visibility state (fetched per coding_assistant from backend). The Set is
   // the list of disabled section_tags. `prerequisitesVisible` controls whether
@@ -135,6 +140,75 @@ export default function App() {
   const [disabledSectionTags, setDisabledSectionTags] = useState<Set<string>>(new Set());
   const [prerequisitesVisible, setPrerequisitesVisible] = useState<boolean>(true);
   const [disabledWorkshopLevels, setDisabledWorkshopLevels] = useState<Set<WorkshopLevel>>(new Set());
+
+  // Engine-composed outline for the active track (Phase 3 T3c; extended in T5 PR2
+  // Work B). The full ordered TrackOutlineItem[] from GET /api/track/{track}/outline
+  // — carrying per-step `status` — or null until it first resolves (kept on
+  // transient error). While null the read path renders a loading skeleton (never
+  // blanks, never re-composes client-side).
+  const [outline, setOutline] = useState<TrackOutlineItem[] | null>(null);
+
+  // ORDER source for the read path (T3c), derived from the full outline: the flat
+  // `sectionTag` sequence, unchanged. ORDER still comes from the endpoint outline;
+  // Work B adds STATUS consumption (projectedCompletedSteps below), not ordering.
+  const outlineTags = useMemo(
+    () => (outline ? outline.map(item => item.sectionTag) : null),
+    [outline],
+  );
+
+  // Engine outline fetch (Phase 3 T3c). `fetchOutline` is the single shared fetch
+  // used by (a) the dep-driven effect, (b) refetch-after-persist in the write
+  // handlers, and (c) the poller — all defined below. A monotonic sequence guard
+  // makes the LATEST-issued request win, so a refetch-after-persist (issued after
+  // the PUT resolves) always supersedes the effect's earlier, possibly-stale
+  // request — this is what lets the endpoint order reflect just-persisted
+  // direction/variant BEFORE render and closes the old reverse/coverage fallbacks.
+  // Errors keep the prior outline (log, never blank); an unresolved outline
+  // degrades to the read-path skeleton.
+  const outlineReqSeq = useRef(0);
+  // The gate sets the SPA last received from or successfully wrote to the
+  // server (D-12). Every gate write sends them as base_* so the server removes
+  // only gates the App saw and dropped, never one an MCP tool added meanwhile.
+  const lastServerGatesRef = useRef<GateBase>(emptyGateBase());
+  const fetchOutline = useCallback((track: string, sid: string) => {
+    const seq = ++outlineReqSeq.current;
+    return apiClient
+      .getTrackOutline(track, sid)
+      .then(resp => {
+        if (seq !== outlineReqSeq.current) return; // superseded by a newer request
+        setOutline(resp.outline);
+      })
+      .catch(err => {
+        if (seq !== outlineReqSeq.current) return;
+        console.error('Error fetching track outline:', err);
+        // Keep the prior outline; the read path shows a skeleton if none has
+        // resolved and the poller retries. Never blank the sidebar.
+      });
+  }, []);
+
+  // outlineReady gates the returning-user restore (WorkflowDiagram) so it navigates
+  // using the engine order, not a provisional pre-fetch value.
+  const outlineReady = outlineTags != null;
+
+  // Work B (Phase 3 T5 PR2): project the endpoint's per-step `status: 'done'`
+  // onto the Set<number> done-set the sidebar/step surfaces render from, UNIONed
+  // with the LOCAL optimistic `completedSteps` so a just-completed step never
+  // flickers back to not-done in the persist -> refetch window. Endpoint status is
+  // the truth; the local optimistic overlay only ADDS on top and converges to the
+  // endpoint set once the refetch lands (see mergeStatus).
+  //
+  // NOTE: `projectedCompletedSteps` is passed as WorkflowDiagram's `completedSteps`
+  // prop, which is BOTH the render source AND the mutation seed its toggle handlers
+  // read (`new Set(completedSteps)` at WorkflowDiagram.tsx ~715/753/828). So the
+  // union — not the raw local set — is what a toggle grows/shrinks and then
+  // persists back as the gate set (mapped from the step numbers via
+  // stepNumbersToGates). This is BENIGN CONVERGENCE: the endpoint `done` set is
+  // derived from the authoritative `completed_gates`, so only genuinely-completed
+  // steps can enter the union and nothing false/foreign is ever written.
+  const projectedCompletedSteps = useMemo(
+    () => mergeStatus(completedSteps, outline ?? [], SECTION_TAG_TO_STEP_NUMBER),
+    [completedSteps, outline],
+  );
 
   // Client-side AI sub-module selection (Genie / Agent / Dashboard chips).
   // Kept SEPARATE from `disabledSectionTags` so the per-coding-assistant visibility
@@ -158,9 +232,20 @@ export default function App() {
   // so the default Genie path starts from existing / uploaded / synthetic data.
   const [includeLakehouse, setIncludeLakehouse] = useState<boolean>(false);
 
-  // Genie Accelerator only: opt-in Genie Ontology block. Defaults OFF so the
-  // default Genie path skips the Beta Discover ontology arc.
+  // Genie Accelerator only: the optional Genie Ontology block. A new session and
+  // a switch into Genie Accelerator take the facilitator default
+  // (VIBE_DEFAULT_GENIE_ONTOLOGY); a resumed session keeps what it stored
+  // (absent = off), so the initial value stays false until a session loads.
   const [includeGenieOntology, setIncludeGenieOntology] = useState<boolean>(false);
+
+  // New-session defaults from GET /config/workshop-defaults. Until (or unless)
+  // they load, the template defaults apply: Genie Accelerator, ontology ON.
+  const [workshopDefaults, setWorkshopDefaults] = useState<WorkshopDefaults>(FALLBACK_WORKSHOP_DEFAULTS);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getWorkshopDefaults().then(d => { if (!cancelled) setWorkshopDefaults(d); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Combined disabled-tag set used everywhere downstream. The backend visibility
   // set is unioned with tags derived from chip state; this keeps both sources of
@@ -173,6 +258,39 @@ export default function App() {
     if (aiTags.length === 0 && medTags.length === 0 && lakeTags.length === 0 && ontologyTags.length === 0) return disabledSectionTags;
     return new Set<string>([...disabledSectionTags, ...aiTags, ...medTags, ...lakeTags, ...ontologyTags]);
   }, [workshopLevel, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, disabledSectionTags]);
+
+  // Build the COMPLETE engine `flags` object (Phase 3 T3b-2b write path) from the
+  // explicit axis values. The backend replaces the nested flags object wholesale
+  // (routes.py), so every persist sends all keys. A module/layer present in the
+  // set => its flag is ON (step included); the engine ignores flags a track's
+  // steps don't reference, so the full set is safe on every track. Genie-only
+  // includeLakehouse / includeGenieOntology are carried camelCase alongside.
+  const engineFlagsFrom = useCallback((
+    ai: Set<AIAgentModule>,
+    med: Set<MedallionLayer>,
+    lakehouse: boolean,
+    ontology: boolean,
+  ): Record<string, boolean> => ({
+    includeLakehouse: lakehouse,
+    includeGenieOntology: ontology,
+    'ai.genie': ai.has('genie'),
+    'ai.agent': ai.has('agent'),
+    'ai.dashboard': ai.has('dashboard'),
+    'medallion.bronze': med.has('bronze'),
+    'medallion.silver': med.has('silver'),
+    'medallion.gold': med.has('gold'),
+  }), []);
+
+  // The composition payload from CURRENT live state — spread into save/progress
+  // writes so GET /outline composes the same variant/sub-toggle outline the UI
+  // shows. `chain_context` is sent only when non-null (accelerators have no chain;
+  // the only variant-selecting tracks, lakehouse/lakehouse-di, always carry a
+  // non-null chain). Handlers that change an axis build the payload explicitly
+  // from the NEW value instead (state isn't updated yet within the handler).
+  const compositionParams = useMemo(() => ({
+    ...(chainContext ? { chain_context: chainContext } : {}),
+    flags: engineFlagsFrom(aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology),
+  }), [chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom]);
 
   // Selected options
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
@@ -210,6 +328,15 @@ export default function App() {
     && sessionOwner !== null
     && sessionOwner !== ''
     && currentUser !== sessionOwner;
+
+  // The learner's own view switch is stored on the session (D-143) so it
+  // reopens in that view; programmatic view changes go through setViewMode.
+  const persistView = useCallback((view: WorkflowViewMode) => {
+    if (readOnly || !sessionId) return;
+    apiClient.updateSessionMetadata({ session_id: sessionId, view })
+      .catch(err => console.error('Error saving the session view:', err));
+  }, [readOnly, sessionId]);
+  const [viewMode, setViewMode, adoptSessionView, switchViewMode] = useWorkflowViewMode(persistView);
 
   // Session loading state - for professional loading overlay
   const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -333,6 +460,68 @@ export default function App() {
     }
   }, [readOnly, isSessionLoading, assistantConfigLoaded, codingAssistantExplicit, codingAssistant, defaultAssistantId]);
 
+  // The last stored session the UI was hydrated from, one string per sync group
+  // (utils/sessionSync), and when it was last updated on the server.
+  const serverSnapshotRef = useRef<Record<SyncGroup, string> | null>(null);
+  const serverUpdatedAtRef = useRef<string | undefined>(undefined);
+
+  /**
+   * Apply a stored session to the UI: every group on a load, only the changed
+   * groups on a background refresh. Setters only, never the write handlers, so
+   * hydrating writes nothing back.
+   */
+  const hydrateFromResponse = (response: SessionLoadResponse, id: string, groups: SyncGroup[] = ALL_SYNC_GROUPS) => {
+    const view = sessionViewFrom(response);
+    const sessionParams = response.session_parameters || {};
+    const has = (group: SyncGroup) => groups.includes(group);
+    if (has('name')) {
+      setSessionSaved(response.is_saved || false);
+      setSessionName(response.session_name);
+      setSessionDescription(response.session_description);
+    }
+    if (has('intent')) {
+      setSelectedIndustry(response.industry || '');
+      setSelectedIndustryLabel(response.industry_label || '');
+      setSelectedUseCase(response.use_case || '');
+      setSelectedUseCaseLabel(response.use_case_label || '');
+      setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
+      setCustomDescription(sessionParams.custom_use_case_description || '');
+      setBrandUrl(sessionParams.company_brand_url || '');
+    }
+    if (has('prereq')) setPrerequisitesCompleted(response.prerequisites_completed || false);
+    if (has('progress')) {
+      // Gate-first (R4b): completed/skipped steps come from the sectionTag gates.
+      setCompletedSteps(view.completedSteps);
+      setSkippedSteps(view.skippedSteps);
+      lastServerGatesRef.current = hydrateGateBase(id, response.completed_gates, response.skipped_gates);
+    }
+    if (has('prompts')) setStepPrompts(response.step_prompts || {});
+    if (has('track')) {
+      // Use-case lock > real persisted workshop_level > corrected assistant
+      // fallback > system default (resolveRestoredLevel).
+      setUseCaseLockedLevel(view.useCaseLockedLevel);
+      setWorkshopLevel(view.level);
+      setLevelExplicitlySelected(view.levelExplicitlySelected);
+    }
+    if (has('track') || has('composition')) {
+      // The stored chain context and chips are what GET /outline composes from.
+      setChainContext(view.chainContext);
+    }
+    if (has('composition')) {
+      if (view.direction) setDirection(view.direction);
+      setAiAgentsModules(view.aiAgentsModules);
+      setMedallionLayers(view.medallionLayers);
+      setIncludeLakehouse(view.includeLakehouse);
+      setIncludeGenieOntology(view.includeGenieOntology);
+    }
+    if (has('assistant')) {
+      setCodingAssistant(view.codingAssistant);
+      setCodingAssistantExplicit(!!view.codingAssistant);
+    }
+    serverSnapshotRef.current = syncSnapshot(response);
+    serverUpdatedAtRef.current = response.updated_at;
+  };
+
   // Get or create the user's default session (continues where they left off)
   const getOrCreateDefaultSession = async () => {
     try {
@@ -340,56 +529,18 @@ export default function App() {
       if (response.success) {
         setSessionId(response.session_id);
         setSessionOwner(null);
-        setSessionSaved(response.is_saved || false);
-        setSessionName(response.session_name);
-        setSessionDescription(response.session_description);
-        setSelectedIndustry(response.industry || '');
-        setSelectedIndustryLabel(response.industry_label || '');
-        setSelectedUseCase(response.use_case || '');
-        setSelectedUseCaseLabel(response.use_case_label || '');
-        setPrerequisitesCompleted(response.prerequisites_completed || false);
-        
-        // Re-derive use-case-driven path lock from restored use case
-        const restoredLock = USE_CASE_LEVEL_LOCK[response.use_case || ''];
-        setUseCaseLockedLevel(restoredLock ?? null);
-
-        // Restore workshop level — use-case lock takes precedence over saved value
-        const restoredLevel = restoredLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        setWorkshopLevel(!restoredLock && restoredLevel === 'skills-accelerator' ? 'end-to-end' : restoredLevel);
-        
-        // Restore completed steps and skipped steps
-        const completedStepsArray: number[] = response.completed_steps || [];
-        const restoredCompleted = new Set(completedStepsArray);
-        // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
-        if (response.industry && response.use_case) {
-          restoredCompleted.add(1);
-        }
-        setCompletedSteps(restoredCompleted);
-        const skippedStepsArray = response.skipped_steps || [];
-        setSkippedSteps(new Set(skippedStepsArray));
-        
-        // Restore step prompts
-        setStepPrompts(response.step_prompts || {});
-        
-        // Restore custom use case overrides from session_parameters
+        hydrateFromResponse(response, response.session_id);
         const sessionParams = response.session_parameters || {};
-        setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
-        setCustomDescription(sessionParams.custom_use_case_description || '');
-        setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
-        setBrandUrl(sessionParams.company_brand_url || '');
-        if (sessionParams.direction) {
-          setDirection(sessionParams.direction as WorkflowDirection);
+        adoptSessionView(isInsightsSession(sessionParams.view));
+        // A first-time user's default session has nothing stored yet, so it starts
+        // on the new-session defaults like an explicitly created one.
+        if (isPristineSession(response)) {
+          applyNewSessionDefaults(response.session_id, await apiClient.getWorkshopDefaults(), 'technical');
         }
-        setIncludeLakehouse(!!sessionParams.include_lakehouse);
-        setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
-        setCodingAssistant(sessionParams.coding_assistant || null);
-        setCodingAssistantExplicit(!!sessionParams.coding_assistant);
-        adoptSessionView(isInsightsSession(restoredLevel, sessionParams.coding_assistant));
-        
-        // Find the next incomplete step using the actual section order for this workshop level
-        const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
-        setInitialExpandedStep(nextStep);
-        
+
+        // initialExpandedStep is a memo (T3c) derived from the engine outline; it
+        // resolves once the outline lands, so no imperative set here.
+
         window.history.replaceState({}, '', `?sessionId=${response.session_id}${window.location.hash}`);
       }
       // Trigger fade-out animation
@@ -401,24 +552,56 @@ export default function App() {
       const localSessionId = crypto.randomUUID();
       setSessionId(localSessionId);
       setSessionSaved(false);
-      setInitialExpandedStep(1);
+      // New-session track with ontology and lakehouse off, and no metadata write
+      // (D-165): once the backend recovers, progress saves store only the level,
+      // and a session without a stored ontology reloads with it off.
+      applyNewSessionState(newSessionLevel(FALLBACK_WORKSHOP_DEFAULTS), false);
       window.history.replaceState({}, '', `?sessionId=${localSessionId}${window.location.hash}`);
       // Still finish loading even on error
       finishSessionLoading();
     }
   };
 
+  /**
+   * New-session defaults (R2/R3, every assistant): the facilitator's default
+   * track with its ontology default, persisted at once with the complete engine
+   * flags and the view marker, so a reload and GET /outline match what the UI
+   * shows. Not an explicit level pick: path-lock semantics are unchanged.
+   */
+  const newSessionLevel = (defaults: WorkshopDefaults): WorkshopLevel => (
+    defaults.defaultTrack in WORKSHOP_LEVELS ? defaults.defaultTrack as WorkshopLevel : 'genie-accelerator'
+  );
+  /** The UI half of the new-session defaults, shared with the failed-default-session path. */
+  const applyNewSessionState = (level: WorkshopLevel, ontology: boolean) => {
+    setWorkshopLevel(level);
+    setIncludeLakehouse(false);
+    setIncludeGenieOntology(ontology);
+  };
+  const applyNewSessionDefaults = (id: string, defaults: WorkshopDefaults, view: WorkflowViewMode): WorkshopLevel => {
+    const level = newSessionLevel(defaults);
+    const ontology = level === 'genie-accelerator' && defaults.includeGenieOntology;
+    applyNewSessionState(level, ontology);
+    apiClient.updateSessionMetadata(newSessionMetadata(
+      id,
+      { defaultTrack: level, includeGenieOntology: ontology },
+      engineFlagsFrom(new Set(ALL_AI_MODULES), new Set(ALL_MEDALLION_LAYERS), false, ontology),
+      view,
+    ))
+      .then(() => fetchOutline(level, id))
+      .catch(err => console.error('Error saving the new-session defaults:', err));
+    return level;
+  };
+
   // Create a brand new session (user explicitly wants to start fresh)
   /** `onCreated` runs with the new id before any state changes, so linked ideas are ready when the view renders. */
-  const createNewSession = async (
-    onCreated?: (id: string) => void,
-    initialView: 'technical' | 'insights' = 'technical',
-  ): Promise<string | null> => {
+  const createNewSession = async (onCreated?: (id: string) => void, view: WorkflowViewMode = 'technical'): Promise<string | null> => {
     setIsCreatingNewSession(true);
-    setViewMode(initialView);
+    setViewMode(view);
     try {
-      const response = await apiClient.createNewSession();
+      const [response, defaults] = await Promise.all([apiClient.createNewSession(), apiClient.getWorkshopDefaults()]);
       onCreated?.(response.session_id);
+      serverSnapshotRef.current = null;
+      serverUpdatedAtRef.current = undefined;
       setSessionId(response.session_id);
       setSessionOwner(null);
       setSessionSaved(false);
@@ -428,15 +611,14 @@ export default function App() {
       setStepPrompts({});
       setCompletedSteps(new Set());
       setSkippedSteps(new Set());
+      lastServerGatesRef.current = emptyGateBase(response.session_id);
       setPrerequisitesCompleted(false);
       setCodingAssistant(null);
       setLevelExplicitlySelected(false);
       setUseCaseLockedLevel(null);
-      setWorkshopLevel('end-to-end');
       setChainContext(null);
       setAiAgentsModules(new Set(ALL_AI_MODULES));
       setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
-      setInitialExpandedStep(1);
       setSelectedIndustry('');
       setSelectedIndustryLabel('');
       setSelectedUseCase('');
@@ -444,8 +626,7 @@ export default function App() {
       setCustomUseCaseLabel('');
       setCustomDescription('');
       setDirection('forward');
-      setIncludeLakehouse(false);
-      setIncludeGenieOntology(false);
+      applyNewSessionDefaults(response.session_id, defaults, view);
       window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
       return response.session_id;
     } catch (err) {
@@ -462,8 +643,13 @@ export default function App() {
     }
   };
 
-  // Helper to find the next incomplete step
-  const getNextIncompleteStep = (
+  // Helper to find the next incomplete step. ORDER is engine-authoritative (T3c):
+  // the step order comes from the endpoint outline (via orderedSectionsForRead),
+  // never the legacy client-side composer. While the outline is unresolved it
+  // returns [] and this yields 1 — the `initialExpandedStep` memo recomputes once
+  // the outline lands, and the returning-user restore is gated on `outlineReady` so
+  // it never navigates off that provisional value.
+  const getNextIncompleteStep = useCallback((
     completed: number[],
     skipped: number[] = [],
     level?: WorkshopLevel,
@@ -473,17 +659,17 @@ export default function App() {
     const skippedSet = new Set(skipped);
     const effectiveLevel = level || workshopLevel;
     const effectiveChain = chainOverride ?? chainContext;
-    // Use cumulative overrides so app-chain users who progressed to lakehouse
-    // see the full step list (including step 9 which requires ch2 visibility)
+    // Cumulative overrides supply the section chrome for climbed columns so an
+    // app-chain user who progressed into lakehouse resolves those tags' sections.
     const cumOverrides = getCumulativeOverrides(effectiveLevel, completedSet, effectiveChain);
-    const sections = getFilteredSections(
-      effectiveLevel,
+    const sections = orderedSectionsForRead(
+      outlineTags,
       effectiveDisabledTags,
+      effectiveLevel,
       cumOverrides ?? undefined,
-      direction,
     );
     const stepOrder = sections.flatMap(s => s.steps.map(st => st.number));
-    
+
     for (const step of stepOrder) {
       if (!completedSet.has(step) && !skippedSet.has(step)) {
         return step;
@@ -491,7 +677,17 @@ export default function App() {
     }
     // All steps complete - return last visible step
     return stepOrder[stepOrder.length - 1] || 1;
-  };
+  }, [workshopLevel, chainContext, outlineTags, effectiveDisabledTags]);
+
+  // The step to auto-expand/restore. Derived (T3c) rather than snapshot-at-load so
+  // it recomputes SYNCHRONOUSLY once the engine outline resolves — the returning-
+  // user restore effect (gated on outlineReady) then reads the correct value in the
+  // same render, never a stale provisional. Recomputing as the user progresses is
+  // harmless: the restore effect is one-shot per session.
+  const initialExpandedStep = useMemo(
+    () => getNextIncompleteStep(Array.from(completedSteps), Array.from(skippedSteps), workshopLevel, chainContext),
+    [getNextIncompleteStep, completedSteps, skippedSteps, workshopLevel, chainContext],
+  );
 
   const loadSession = async (id: string) => {
     try {
@@ -499,65 +695,16 @@ export default function App() {
       if (response.success) {
         setSessionId(id);
         setSessionOwner(response.created_by || null);
-        setSessionSaved(response.is_saved);
-        setSessionName(response.session_name);
-        setSessionDescription(response.session_description);
-        setSelectedIndustry(response.industry || '');
-        setSelectedIndustryLabel(response.industry_label || '');
-        setSelectedUseCase(response.use_case || '');
-        setSelectedUseCaseLabel(response.use_case_label || '');
-        setStepPrompts(response.step_prompts || {});
-        const loadedCompletedSteps: number[] = response.completed_steps || [];
-        const loadedCompleted = new Set(loadedCompletedSteps);
-        // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
-        if (response.industry && response.use_case) {
-          loadedCompleted.add(1);
-        }
-        setCompletedSteps(loadedCompleted);
-        const loadedSkippedSteps = response.skipped_steps || [];
-        setSkippedSteps(new Set(loadedSkippedSteps));
-        setPrerequisitesCompleted(response.prerequisites_completed || false);
-        
-        // Re-derive use-case-driven path lock from restored use case
-        const loadedLock = USE_CASE_LEVEL_LOCK[response.use_case || ''];
-        setUseCaseLockedLevel(loadedLock ?? null);
-
-        // Restore workshop level — use-case lock takes precedence over saved value
-        const loadedLevel = loadedLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        const effectiveRestoredLevel: WorkshopLevel =
-          !loadedLock && loadedLevel === 'skills-accelerator' ? 'end-to-end' : loadedLevel;
-        setWorkshopLevel(effectiveRestoredLevel);
-        // Reconstruct the additive-chain context from the saved level + completed
-        // steps. Without an explicit persisted chainContext we fall back to the
-        // legacy "any APP_LAKEBASE_STEPS completed → APP_CHAIN" heuristic for
-        // ambiguous lakehouse/lakehouse-di states.
-        const restoredChain = deriveInitialChainContext(effectiveRestoredLevel, loadedCompleted);
-        setChainContext(restoredChain);
-        
-        // Restore custom use case overrides from session_parameters
+        // One hydration for every load and refresh (utils/sessionSync): the
+        // stored chain context and chips, not a re-derivation, so the UI matches
+        // what GET /outline composes.
+        hydrateFromResponse(response, id);
         const sessionParams = response.session_parameters || {};
-        setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
-        setCustomDescription(sessionParams.custom_use_case_description || '');
-        setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
-        setBrandUrl(sessionParams.company_brand_url || '');
-        if (sessionParams.direction) {
-          setDirection(sessionParams.direction as WorkflowDirection);
-        }
-        setIncludeLakehouse(!!sessionParams.include_lakehouse);
-        setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
-        setCodingAssistant(sessionParams.coding_assistant || null);
-        setCodingAssistantExplicit(!!sessionParams.coding_assistant);
-        adoptSessionView(isInsightsSession(effectiveRestoredLevel, sessionParams.coding_assistant));
-        
-        // Navigate to the next incomplete step using the actual section order
-        const nextStep = getNextIncompleteStep(
-          Array.from(loadedCompleted),
-          loadedSkippedSteps,
-          loadedLevel,
-          restoredChain,
-        );
-        setInitialExpandedStep(nextStep);
-        
+        adoptSessionView(isInsightsSession(sessionParams.view));
+
+        // initialExpandedStep is a memo (T3c) derived from the engine outline; the
+        // returning-user restore (gated on outlineReady) navigates once it lands.
+
         // Trigger fade-out animation
         finishSessionLoading();
       } else {
@@ -584,7 +731,7 @@ export default function App() {
   const handleWorkshopLevelChange = useCallback((level: WorkshopLevel, force = false) => {
     if (readOnly) return;
     if (!force) {
-      const hasStartedWorkflow = Array.from(completedSteps).some(s => s >= 2);
+      const hasStartedWorkflow = workflowStarted(completedSteps);
       if (hasStartedWorkflow && level !== workshopLevel) {
         if (!isForwardProgression(workshopLevel, level)) return;
       }
@@ -598,13 +745,15 @@ export default function App() {
     setChainContext(nextChain);
     // Whenever the user changes paths, reset the AI sub-module chips back to
     // the inclusive default. Keeps re-entering AI predictable ("all on by default").
+    // Genie Accelerator's optional Genie Ontology takes the facilitator default on
+    // (re)entry; every other path has no ontology.
+    const entryOntology = level === 'genie-accelerator' && workshopDefaults.includeGenieOntology;
     if (level !== workshopLevel) {
       setAiAgentsModules(new Set(ALL_AI_MODULES));
       setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
       // Genie Accelerator's optional Lakehouse defaults OFF on (re)entry.
       setIncludeLakehouse(false);
-      // Genie Accelerator's optional Genie Ontology defaults OFF on (re)entry.
-      setIncludeGenieOntology(false);
+      setIncludeGenieOntology(entryOntology);
     }
     if (!levelExplicitlySelected) {
       setLevelExplicitlySelected(true);
@@ -616,12 +765,28 @@ export default function App() {
       }
     }
     if (sessionId) {
+      // Persist the NEW level's composition (T3b-2b): chain_context = nextChain,
+      // and the complete flags for the post-change chip state (a path switch
+      // resets chips to the inclusive default; otherwise they carry over) so GET
+      // /outline composes the level the UI now shows.
+      const levelChanged = level !== workshopLevel;
+      const nextAi = levelChanged ? new Set<AIAgentModule>(ALL_AI_MODULES) : aiAgentsModules;
+      const nextMed = levelChanged ? new Set<MedallionLayer>(ALL_MEDALLION_LAYERS) : medallionLayers;
+      const nextLake = levelChanged ? false : includeLakehouse;
+      const nextOnto = levelChanged ? entryOntology : includeGenieOntology;
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         workshop_level: level,
-      }).catch(err => console.error('Error saving workshop level:', err));
+        ...(nextChain ? { chain_context: nextChain } : {}),
+        flags: engineFlagsFrom(nextAi, nextMed, nextLake, nextOnto),
+      })
+        // Refetch AFTER the persist resolves so GET /outline composes the NEW
+        // level/variant (T3c). Sequenced via the seq guard in fetchOutline.
+        .then(() => fetchOutline(level, sid))
+        .catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom, fetchOutline, workshopDefaults]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
     if (readOnly) return;
@@ -645,15 +810,37 @@ export default function App() {
     if (readOnly) return;
     setCompletedSteps(newSteps);
     
-    // Auto-save completed steps to backend (piggyback workshop level)
+    // Auto-save completed steps to backend (piggyback workshop level + the
+    // complete composition from live state, T3b-2b, so GET /outline stays in sync
+    // even for users who never touch a composition chip explicitly).
     if (sessionId) {
+      const sid = sessionId;
+      // Gate write (T5): the COMPLETE completed gate set, derived from the live
+      // completed-step numbers. The legacy numeric progress write was retired in
+      // R4a. This write must ALSO carry the complete skipped_gates (from live
+      // skippedSteps): the backend read path keys off gates, so a completion
+      // write that omitted skipped_gates would drop skipped progress.
+      const gateWrite: GateWrite = {
+        completed_gates: stepNumbersToGates(Array.from(newSteps)),
+        skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
+      };
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
-        completed_steps: Array.from(newSteps),
+        session_id: sid,
+        ...gateWrite,
+        ...gateBaseFields(lastServerGatesRef.current, sid, gateWrite),
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
-      }).catch(err => console.error('Error saving completed steps:', err));
+        ...compositionParams,
+      })
+        // Refetch after the STATUS-changing persist so a climb that admits new
+        // steps is reflected in the outline order (T3c; closes the old coverage
+        // fallback). Optimistic checkmarks already updated above.
+        .then((res) => {
+          lastServerGatesRef.current = applyGateWriteResult(lastServerGatesRef.current, sid, gateWrite, res.success);
+          return fetchOutline(workshopLevel, sid);
+        })
+        .catch(err => console.error('Error saving completed steps:', err));
     }
-  }, [sessionId, workshopLevel, readOnly]);
+  }, [sessionId, workshopLevel, readOnly, skippedSteps, compositionParams, fetchOutline]);
 
   // Handle skipped steps change and auto-save to backend
   const handleSkippedStepsChange = useCallback((newSkipped: Set<number>) => {
@@ -661,10 +848,24 @@ export default function App() {
     setSkippedSteps(newSkipped);
     
     if (sessionId) {
+      const sid = sessionId;
+      // Gate write (T5): the COMPLETE skipped gate set, derived from the live
+      // skipped-step numbers (persisted under session_parameters.skipped_gates,
+      // where the read path reads it). The legacy numeric progress write was
+      // retired in R4a. completed_gates is intentionally omitted here so the
+      // existing completed gates are COALESCE-preserved.
+      const gateWrite: GateWrite = {
+        skipped_gates: stepNumbersToGates(Array.from(newSkipped)),
+      };
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
-        skipped_steps: Array.from(newSkipped),
-      }).catch(err => console.error('Error saving skipped steps:', err));
+        session_id: sid,
+        ...gateWrite,
+        ...gateBaseFields(lastServerGatesRef.current, sid, gateWrite),
+      })
+        .then((res) => {
+          lastServerGatesRef.current = applyGateWriteResult(lastServerGatesRef.current, sid, gateWrite, res.success);
+        })
+        .catch(err => console.error('Error saving skipped steps:', err));
     }
   }, [sessionId, readOnly]);
 
@@ -688,8 +889,9 @@ export default function App() {
   // Per-assistant cold-start default: some assistants (currently Genie Code,
   // which is in active beta and can't yet drive the full Apps + Lakebase
   // chapters) prefer a narrower default workshop level than the generic
-  // `end-to-end`. We apply that override ONLY when the user hasn't yet
-  // explicitly chosen a level — saved sessions and any explicit pick win.
+  // `end-to-end`. We apply that override ONLY on a legacy `end-to-end` session
+  // where the user hasn't explicitly chosen a level — saved sessions, any
+  // explicit pick and the new-session default (genie-accelerator) all win.
   const handleCodingAssistantChange = useCallback((assistantId: string) => {
     if (readOnly) return;
     setCodingAssistant(assistantId);
@@ -697,6 +899,7 @@ export default function App() {
     const assistantDefault = DEFAULT_LEVEL_BY_ASSISTANT[assistantId as keyof typeof DEFAULT_LEVEL_BY_ASSISTANT];
     const shouldApplyAssistantDefault =
       !levelExplicitlySelected &&
+      workshopLevel === 'end-to-end' &&
       assistantDefault !== undefined &&
       assistantDefault !== workshopLevel;
     if (shouldApplyAssistantDefault) {
@@ -736,40 +939,105 @@ export default function App() {
       'skills-accelerator',
       'agents-accelerator',
     ];
-    if (newDirection === 'reverse' && ACCELERATOR_LEVELS.includes(workshopLevel)) {
-      setWorkshopLevel('app-database');
+    // The track picker's Other tracks tab puts Reverse ETL one click from the
+    // Genie Accelerator, so the fallback level is saved in the SAME write as the
+    // direction and the outline is refetched for it: a level set only locally
+    // would compose GET /outline for the old track and be lost on reload.
+    const nextLevel: WorkshopLevel =
+      newDirection === 'reverse' && ACCELERATOR_LEVELS.includes(workshopLevel) ? 'app-database' : workshopLevel;
+    if (nextLevel !== workshopLevel) {
+      setWorkshopLevel(nextLevel);
     }
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         direction: newDirection,
-      }).catch(err => console.error('Error persisting direction:', err));
+        ...(nextLevel !== workshopLevel ? { workshop_level: nextLevel } : {}),
+        // Complete composition (T3b-2b) so GET /outline recomposes for the new
+        // direction. The engine reads persisted `direction` to select the reverse
+        // variant; flags/chain_context reflect current live state.
+        ...compositionParams,
+      })
+        // Refetch after direction persists so the reverse order lands BEFORE the
+        // next render (T3c; closes the old reverse-order fallback).
+        .then(() => fetchOutline(nextLevel, sid))
+        .catch(err => console.error('Error persisting direction:', err));
     }
-  }, [directionLocked, sessionId, workshopLevel]);
+  }, [directionLocked, sessionId, workshopLevel, compositionParams, fetchOutline]);
 
   // Genie Accelerator: toggle the optional Lakehouse (Bronze -> Gold) block.
   const handleIncludeLakehouseChange = useCallback((next: boolean) => {
     if (readOnly) return;
     setIncludeLakehouse(next);
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         include_lakehouse: next,
-      }).catch(err => console.error('Error persisting include_lakehouse:', err));
+        // Complete flags (T3b-2b) built with the NEW lakehouse value so GET
+        // /outline re-admits/drops the opt-in Lakehouse arc to match the UI.
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(aiAgentsModules, medallionLayers, next, includeGenieOntology),
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting include_lakehouse:', err));
     }
-  }, [readOnly, sessionId]);
+  }, [readOnly, sessionId, workshopLevel, chainContext, aiAgentsModules, medallionLayers, includeGenieOntology, engineFlagsFrom, fetchOutline]);
 
   // Genie Accelerator: toggle the optional Genie Ontology block.
   const handleIncludeGenieOntologyChange = useCallback((next: boolean) => {
     if (readOnly) return;
     setIncludeGenieOntology(next);
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         include_genie_ontology: next,
-      }).catch(err => console.error('Error persisting include_genie_ontology:', err));
+        // Complete flags (T3b-2b) built with the NEW ontology value.
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(aiAgentsModules, medallionLayers, includeLakehouse, next),
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting include_genie_ontology:', err));
     }
-  }, [readOnly, sessionId]);
+  }, [readOnly, sessionId, workshopLevel, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, engineFlagsFrom, fetchOutline]);
+
+  // AI-module chips (Genie / Agent / Dashboard). Previously client-only; now also
+  // persist the complete flags (T3b-2b) so GET /outline drops/keeps the gated AI
+  // steps to match the UI. Built with the NEW module set (state not yet updated).
+  const handleAIModulesChange = useCallback((next: Set<AIAgentModule>) => {
+    if (readOnly) return;
+    setAiAgentsModules(next);
+    if (sessionId) {
+      const sid = sessionId;
+      apiClient.updateSessionMetadata({
+        session_id: sid,
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(next, medallionLayers, includeLakehouse, includeGenieOntology),
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting AI modules:', err));
+    }
+  }, [readOnly, sessionId, workshopLevel, chainContext, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom, fetchOutline]);
+
+  // Bronze/Silver/Gold medallion chips. Same rationale; the set is normalized
+  // (Gold->Silver->Bronze cascade) before both the setter and the persisted flags.
+  const handleMedallionLayersChange = useCallback((next: Set<MedallionLayer>) => {
+    if (readOnly) return;
+    const normalized = normalizeMedallionLayers(next);
+    setMedallionLayers(next); // setter normalizes internally; keep behavior
+    if (sessionId) {
+      const sid = sessionId;
+      apiClient.updateSessionMetadata({
+        session_id: sid,
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(aiAgentsModules, normalized, includeLakehouse, includeGenieOntology),
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting medallion layers:', err));
+    }
+  }, [readOnly, sessionId, workshopLevel, chainContext, aiAgentsModules, includeLakehouse, includeGenieOntology, engineFlagsFrom, setMedallionLayers, fetchOutline]);
 
   // Updating a build from its idea: every prompt after the brief was written from the old
   // answers, so it is emptied and regenerates when opened. Completed steps stay completed.
@@ -822,7 +1090,8 @@ export default function App() {
         direction: 'forward',
         include_lakehouse: false,
         include_genie_ontology: false,
-        completed_steps: Array.from(nextCompleted),
+        view: 'insights',
+        completed_gates: stepNumbersToGates(Array.from(nextCompleted)),
       }).catch(err => console.error('Error saving Insights setup:', err));
       apiClient.updateStepPrompt({
         session_id: sessionId,
@@ -837,6 +1106,25 @@ export default function App() {
     if (!sessionId || readOnly) return;
     
     setIsSaving(true);
+    const sid = sessionId;
+    // The save writes the whole session from this tab's state. If Genie Code (or
+    // another tab) changed anything but the name since the last refresh, take
+    // those changes first and ask for the save again, rather than writing the
+    // older state over them. The name typed here still wins over a remote one.
+    const refreshed = await syncFromServer();
+    if (refreshed.some(group => group !== 'name')) {
+      setIsSaving(false);
+      setSyncMessage({ kind: 'updated', text: 'This session changed in Genie Code. Check it, then save again.' });
+      return;
+    }
+    // Gate write (T5): the COMPLETE completed/skipped gate sets, derived from
+    // the live step numbers, so a saved web session reads back through the
+    // gates-present path with no progress loss. The legacy numeric progress
+    // writes were retired in R4a.
+    const gateWrite: GateWrite = {
+      completed_gates: stepNumbersToGates(Array.from(completedSteps)),
+      skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
+    };
     try {
       const response = await apiClient.saveSession({
         session_id: sessionId,
@@ -848,14 +1136,19 @@ export default function App() {
         session_description: description,
         feedback_rating: rating || null,
         feedback_comment: comment,
-        current_step: Math.max(...Array.from(completedSteps), 1),
         workshop_level: workshopLevel,
         direction,
         include_lakehouse: includeLakehouse,
         include_genie_ontology: includeGenieOntology,
-        completed_steps: Array.from(completedSteps),
+        // Engine composition inputs (T3b-2b) so GET /outline composes the same
+        // climb/reverse/AI/medallion outline the UI shows. Snake_case direction/
+        // include_* stay above for other consumers.
+        ...compositionParams,
+        ...gateWrite,
+        ...gateBaseFields(lastServerGatesRef.current, sid, gateWrite),
         step_prompts: stepPrompts
       });
+      lastServerGatesRef.current = applyGateWriteResult(lastServerGatesRef.current, sid, gateWrite, response.success);
       
       if (response.success) {
         setSessionSaved(true);
@@ -863,6 +1156,8 @@ export default function App() {
         setSessionDescription(description);
         setShareUrl(response.share_url || null);
         setShowSaveDialog(false);
+        // T3c: refetch the outline after the save persists the full composition.
+        fetchOutline(workshopLevel, sessionId);
         if (pendingNewSession) {
           setPendingNewSession(false);
           window.history.replaceState({}, '', window.location.pathname);
@@ -953,7 +1248,7 @@ export default function App() {
         use_case_label: label,
         custom_use_case_label: label,
         custom_use_case_description: description,
-        completed_steps: completed,
+        completed_gates: stepNumbersToGates(completed),
       }).catch(err => console.error('Error saving the idea as the use case:', err)),
       apiClient.updateStepPrompt({ session_id: id, step_number: 1, prompt_text: description, workshop_level: level })
         .catch(err => console.error('Error saving the idea brief:', err)),
@@ -986,7 +1281,7 @@ export default function App() {
     setIsCreatingNewSession(true);
     try {
       const current = await apiClient.getDefaultSession();
-      const steps: number[] = current.completed_steps || [];
+      const steps: number[] = deriveCompletedStepNumbers(current.completed_gates);
       if (current.success && !current.is_saved && (steps.length > 0 || current.use_case)) {
         await apiClient.saveSession({
           session_id: current.session_id,
@@ -996,9 +1291,10 @@ export default function App() {
           use_case_label: current.use_case_label,
           session_name: current.session_name && current.session_name !== 'New Session' ? current.session_name : `${current.use_case_label || 'My project'} (autosaved)`,
           session_description: current.session_description,
-          current_step: Math.max(1, ...steps),
           workshop_level: current.workshop_level,
-          completed_steps: steps,
+          // Gates-only progress (T5): carry the session's own gates through unchanged.
+          completed_gates: current.completed_gates || [],
+          skipped_gates: current.skipped_gates || [],
           step_prompts: current.step_prompts || {},
         });
       }
@@ -1034,6 +1330,8 @@ export default function App() {
     finishSessionLoading();
     if (!newId) return;
     setViewMode(target);
+    // The new project keeps the new-session default track.
+    const level = newSessionLevel(await apiClient.getWorkshopDefaults());
 
     const { industry, industryLabel, label } = technicalUseCaseOf(idea);
     const description = buildDescription(idea);
@@ -1048,7 +1346,7 @@ export default function App() {
       setCustomDescription(description);
       setStepPrompts({ 1: description });
       setCompletedSteps(new Set([1]));
-      void writeTechnicalBrief(idea, newId, [1]);
+      void writeTechnicalBrief(idea, newId, [1], level);
       updateIdea(idea.id, { builtRevision: idea.revision ?? 0 });
     }
     apiClient.saveSession({
@@ -1059,9 +1357,8 @@ export default function App() {
       use_case_label: technical ? label : undefined,
       session_name: idea.title,
       session_description: idea.spark?.statement ?? idea.seed,
-      current_step: 1,
-      workshop_level: 'end-to-end',
-      completed_steps: technical ? [1] : [],
+      workshop_level: level,
+      completed_gates: stepNumbersToGates(technical ? [1] : []),
       step_prompts: technical ? { 1: description } : {},
     }).then(r => {
       if (!r.success) return;
@@ -1084,7 +1381,8 @@ export default function App() {
       setIsSessionLoading(true);
       try {
         const current = await apiClient.loadSession(idea.sessionId);
-        const done: number[] = current.completed_steps?.length ? current.completed_steps : [1];
+        const loadedDone = deriveCompletedStepNumbers(current.completed_gates);
+        const done: number[] = loadedDone.length ? loadedDone : [1];
         await clearLaterPrompts(idea.sessionId, current.step_prompts || {});
         await writeTechnicalBrief(idea, idea.sessionId, done.includes(1) ? done : [1, ...done], current.workshop_level || undefined);
         updateIdea(idea.id, i => ({
@@ -1167,6 +1465,148 @@ export default function App() {
       cancelled = true;
     };
   }, [codingAssistant, dataRefreshKey]);
+
+  // Dep-driven fetch: refires when the track (workshopLevel) or persisted direction
+  // changes. Live sub-toggle chips are NOT a dep — the endpoint reflects persisted
+  // flags and orderedSectionsForRead applies the live disabled-tag filter on top.
+  useEffect(() => {
+    if (!sessionId) {
+      outlineReqSeq.current++; // invalidate any in-flight request
+      setOutline(null);
+      return;
+    }
+    fetchOutline(workshopLevel, sessionId);
+  }, [sessionId, workshopLevel, direction, fetchOutline]);
+
+  // Session sync (one engine, two interfaces): re-read the stored session on the
+  // poll and on focus, and apply only the groups that changed on the server
+  // (Genie Code or another tab). A read a session write could have overtaken is
+  // dropped; the next poll retries. Refs keep the poller's closure current.
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const workshopLevelRef = useRef(workshopLevel);
+  workshopLevelRef.current = workshopLevel;
+  const isSessionLoadingRef = useRef(isSessionLoading);
+  isSessionLoadingRef.current = isSessionLoading;
+  const [syncMessage, setSyncMessage] = useState<SessionSyncMessage | null>(null);
+  // What the tab shows now: a refresh applies only what differs from it, so the
+  // tab's own writes are never re-applied or announced as Genie Code's.
+  const localSessionRef = useRef<LocalSessionState | null>(null);
+  localSessionRef.current = {
+    sessionName, sessionSaved, sessionDescription,
+    industry: selectedIndustry, industryLabel: selectedIndustryLabel,
+    useCase: selectedUseCase, useCaseLabel: selectedUseCaseLabel,
+    customUseCaseLabel, customDescription, brandUrl,
+    level: workshopLevel, useCaseLockedLevel, levelExplicitlySelected,
+    direction, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology,
+    completedSteps, skippedSteps, stepPrompts, codingAssistant, prerequisitesCompleted,
+  };
+  const dismissedNewerRef = useRef<Set<string>>(new Set());
+  const syncFromServer = async (): Promise<SyncGroup[]> => {
+    const sid = sessionIdRef.current;
+    if (!sid || isSessionLoadingRef.current) return [];
+    const before = apiClient.sessionWriteState();
+    if (before.inflight > 0) return [];
+    let response: SessionLoadResponse;
+    try {
+      response = await apiClient.loadSession(sid);
+    } catch {
+      return [];
+    }
+    if (!response.success || !canApplyRefresh(sid, sessionIdRef.current, before, apiClient.sessionWriteState())) return [];
+    const snapshot = syncSnapshot(response);
+    const changed = changedGroups(serverSnapshotRef.current, snapshot);
+    if (changed.length === 0) return [];
+    const groups = localSessionRef.current
+      ? groupsDifferingFromLocal(changed, response, localSessionRef.current)
+      : changed;
+    if (groups.length === 0) {
+      // Only this tab's own writes: the server now matches what the tab shows.
+      serverSnapshotRef.current = snapshot;
+      serverUpdatedAtRef.current = response.updated_at;
+      return [];
+    }
+    const remoteLevel = sessionViewFrom(response).level;
+    if (groups.includes('track') && remoteLevel !== workshopLevelRef.current) {
+      setSyncMessage({ kind: 'updated', text: `Now on ${TRACK_DISPLAY_NAMES[remoteLevel]}.` });
+    } else if (groups.includes('name') && response.is_saved && response.session_name) {
+      setSyncMessage({ kind: 'updated', text: `Saved as "${response.session_name}".` });
+    }
+    hydrateFromResponse(response, sid, groups);
+    return groups;
+  };
+  const syncFromServerRef = useRef(syncFromServer);
+  syncFromServerRef.current = syncFromServer;
+
+  // A session started (or worked on) in Genie Code after this one last changed:
+  // offer to open it. Only names Genie Code gives, once per session.
+  const checkNewerSession = async () => {
+    const sid = sessionIdRef.current;
+    const since = serverUpdatedAtRef.current;
+    if (!sid || !since || isSessionLoadingRef.current) return;
+    try {
+      const sessions = await apiClient.getUserSessions();
+      const newer = sessions.find(item =>
+        item.session_id !== sid
+        && !dismissedNewerRef.current.has(item.session_id)
+        && !!item.updated_at && item.updated_at > since
+        && !!item.session_name && (item.session_name === 'Genie Code Workshop' || item.session_name.startsWith('Genie Code — ')),
+      );
+      if (newer && sessionIdRef.current === sid) {
+        setSyncMessage({ kind: 'newer', sessionId: newer.session_id, text: `"${newer.session_name}" was started in Genie Code.` });
+      }
+    } catch {
+      // The session list is a convenience; the next focus retries.
+    }
+  };
+  const checkNewerSessionRef = useRef(checkNewerSession);
+  checkNewerSessionRef.current = checkNewerSession;
+
+  // Polling v1 (NOT SSE): keep the outline live so cross-surface (MCP) progress and
+  // any server-side recomposition surface without a manual refresh. Pauses while
+  // the tab is hidden; refetches (debounced) on focus / visibility regain.
+  useEffect(() => {
+    if (!sessionId) return;
+    const POLL_MS = 30000;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    let debounceId: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      if (document.hidden) return;
+      fetchOutline(workshopLevel, sessionId);
+      void syncFromServerRef.current();
+    };
+    const kick = () => {
+      if (document.hidden) return;
+      clearTimeout(debounceId);
+      debounceId = setTimeout(() => {
+        fetchOutline(workshopLevel, sessionId);
+        // Coming back from Genie Code: pick up its changes, and any session it started.
+        void syncFromServerRef.current();
+        void checkNewerSessionRef.current();
+      }, 300);
+    };
+    const startInterval = () => {
+      clearInterval(intervalId);
+      intervalId = setInterval(poll, POLL_MS);
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        clearInterval(intervalId); // pause when hidden
+      } else {
+        kick();          // catch up immediately
+        startInterval(); // resume steady polling
+      }
+    };
+    startInterval();
+    window.addEventListener('focus', kick);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(debounceId);
+      window.removeEventListener('focus', kick);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [sessionId, workshopLevel, fetchOutline]);
 
   // Show config hint after scrolling past step 3
   useEffect(() => {
@@ -1333,7 +1773,7 @@ export default function App() {
                   
                   {/* View mode & Session Menu in Header */}
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                    <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                    <ViewModeToggle mode={viewMode} onChange={switchViewMode} />
                     {readOnly ? (
                       <div className="flex items-center gap-2 text-muted-foreground text-ui-base">
                         <Eye className="w-3.5 h-3.5" />
@@ -1394,14 +1834,14 @@ export default function App() {
                         onSkippedStepsChange={handleSkippedStepsChange}
                         onStart={handleInsightsStart}
                         onNewSession={() => setShowNewSessionConfirm(true)}
-                        onSwitchToTechnical={() => setViewMode('technical')}
+                        onSwitchToTechnical={() => switchViewMode('technical')}
                       />
                     </Suspense>
                   ) : (
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}
-                    completedSteps={completedSteps}
+                    completedSteps={projectedCompletedSteps}
                     selectedIndustry={selectedIndustry}
                     selectedIndustryLabel={selectedIndustryLabel}
                     selectedUseCase={selectedUseCase}
@@ -1422,9 +1862,11 @@ export default function App() {
                     directionLocked={directionLocked}
                     onDirectionChange={handleDirectionChange}
                     aiAgentsModules={aiAgentsModules}
-                    onAIModulesChange={setAiAgentsModules}
+                    onAIModulesChange={handleAIModulesChange}
                     medallionLayers={medallionLayers}
-                    onMedallionLayersChange={setMedallionLayers}
+                    onMedallionLayersChange={handleMedallionLayersChange}
+                    outlineTags={outlineTags}
+                    outlineReady={outlineReady}
                     includeLakehouse={includeLakehouse}
                     onIncludeLakehouseChange={handleIncludeLakehouseChange}
                     includeGenieOntology={includeGenieOntology}
@@ -1638,6 +2080,14 @@ export default function App() {
           </button>
         </div>
       )}
+      <SessionSyncNotice
+        message={syncMessage}
+        onOpen={id => { setSyncMessage(null); window.history.replaceState({}, '', `?sessionId=${id}`); loadSession(id); }}
+        onDismiss={() => {
+          if (syncMessage?.kind === 'newer') dismissedNewerRef.current.add(syncMessage.sessionId);
+          setSyncMessage(null);
+        }}
+      />
       <BundleUpdateNotice />
     </div>
   );

@@ -21,10 +21,7 @@ CREATE TABLE IF NOT EXISTS ${schema}.sessions (
     step_1_prompt TEXT,
     step_prompts JSONB DEFAULT '{}',
     prerequisites_completed BOOLEAN DEFAULT FALSE,
-    current_step INTEGER DEFAULT 1,
-    workshop_level VARCHAR(20) DEFAULT '300',
-    completed_steps TEXT,
-    skipped_steps TEXT DEFAULT '[]',
+    workshop_level VARCHAR(64) DEFAULT '300',
     session_parameters JSONB DEFAULT '{}',
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP

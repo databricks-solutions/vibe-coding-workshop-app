@@ -37,16 +37,15 @@ function ensureTemplatesLoaded(): Promise<void> {
  * for steps not in the static map.
  */
 export function useSkillBlueprint(sectionTag: string): SkillBlueprintConfig | null {
-  const [ready, setReady] = useState(fetchDone);
+  const [loaded, setLoaded] = useState(fetchDone);
+  // Another instance may have finished the shared fetch since this one mounted.
+  const ready = loaded || fetchDone;
 
   useEffect(() => {
-    if (fetchDone) {
-      setReady(true);
-      return;
-    }
+    if (fetchDone) return;
     let cancelled = false;
     ensureTemplatesLoaded().then(() => {
-      if (!cancelled) setReady(true);
+      if (!cancelled) setLoaded(true);
     });
     return () => { cancelled = true; };
   }, [sectionTag]);

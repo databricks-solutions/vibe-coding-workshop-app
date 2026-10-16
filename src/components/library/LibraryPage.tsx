@@ -15,7 +15,8 @@ import { CollectionDialog, type CollectionDraft } from './CollectionDialog';
 import { NewUseCaseOverlay } from './NewUseCaseOverlay';
 import { AttendeePreview } from './AttendeePreview';
 import { LibrarySearch } from './LibrarySearch';
-import { EmptyState, Kbd, Modal, cx } from './ui';
+import { EmptyState, Kbd, Modal } from './ui';
+import { cx } from './cx';
 import { BTN_GHOST, BTN_PRIMARY } from '../skills/uiStyles';
 import './library.css';
 

@@ -149,6 +149,10 @@ A full deploy (`./vibe2value deploy --full`) runs these steps:
 4. Create and seed Lakebase tables
 5. Final forced app deploy — stop, redeploy, start, verify RUNNING
 
+**Reseed safety:** the tables step (step 4, and `./vibe2value deploy --tables`) is additive: it creates missing tables and seeds with `ON CONFLICT DO NOTHING`, so existing rows and admin edits are kept. A destructive drop + recreate + reseed runs only with the explicit `--tables-recreate` flag on `scripts/deploy.sh` **and** `VIBE_CONFIRM_DESTRUCTIVE_RESEED=<target schema>`; otherwise it refuses before connecting.
+
+**New seed rows on an existing install:** in the default create mode, `01_seed_usecase_descriptions.sql` / `02_seed_section_input_prompts.sql` bulk-run only when their own table is empty. On a populated install, only rows added after the committed baseline (`scripts/seed_baseline.json`) are inserted, with `ON CONFLICT DO NOTHING`. Each one is recorded in `seed_rows_applied`, so a row an admin deletes stays deleted after a redeploy. A seed row whose ID an admin-created row already uses is skipped with a WARNING and never overwritten. Seed edits to existing rows still reach fresh installs only (see `scripts/seed_new_rows.py`, D-37).
+
 The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscaling is the default; it uses a Lakebase project that scales to zero when idle and auto-discovers its endpoint during deploy.
 
 ---

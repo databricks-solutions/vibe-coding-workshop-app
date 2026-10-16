@@ -136,6 +136,15 @@ sync:
     - "__pycache__/**"
     - "*.pyc"
     - ".git/**"
+    # Agent/tooling transients + local caches — never ship these (they can be
+    # hundreds of MB and stall/blow up the workspace upload).
+    - ".worktrees/**"
+    - ".polly/**"
+    - ".venv/**"
+    - ".venv-test/**"
+    - ".databricks/**"
+    - "tests/**"
+    - "docs/**"
     - "deploy.py"
     - "*.template"
     - "user-config.yaml*"

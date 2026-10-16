@@ -1,0 +1,12 @@
+```text
+User Browser (HTTPS)
+│
+▼
+Databricks Cloud:
+Databricks Apps (Managed Hosting)
+│
+▼
+AppKit Server (Node.js)
+├─ all data operations ─▶ Lakebase PostgreSQL
+└─ OAuth refresh, automatic every 58 min ─▶ Databricks Auth
+```

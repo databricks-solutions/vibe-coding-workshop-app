@@ -15,8 +15,9 @@ import {
 } from 'lucide-react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { CHAPTER_LEARNING } from '../constants/chapterLearning';
-import { buildServiceNameMap, renderTextWithServices } from './TypingText';
-import { ServicePopover, serviceData } from './ServicePopover';
+import { buildServiceNameMap, renderTextWithServices } from './TypingText.utils';
+import { ServicePopover } from './ServicePopover';
+import { serviceData } from './ServicePopover.utils';
 import type { ServiceKey } from './ServicePopover';
 import { apiClient } from '../api/client';
 import { ConfettiBurst } from './celebration/ConfettiBurst';

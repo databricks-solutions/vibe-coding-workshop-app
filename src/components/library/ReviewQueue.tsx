@@ -8,7 +8,7 @@ import { caseFigures } from '../journeykit/engine/ideaContext';
 import { money } from '../journeykit/engine/businessCase';
 import { assessPriority } from '../insights/priorityAssessment';
 import { PriorityMatrix } from '../insights/priority/PriorityMatrix';
-import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent';
+import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent.utils';
 import { EmptyState } from './ui';
 
 interface Props {

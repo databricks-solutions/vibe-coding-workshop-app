@@ -13,10 +13,11 @@ import { DefineIntentSection } from './DefineIntentSection';
 import { SetUpProjectStep } from './SetUpProjectStep';
 import { useCelebration } from '../hooks/useCelebration';
 import { PathAndArchitecture } from './PathAndArchitecture';
-import { 
-  WORKFLOW_SECTIONS, 
+import { WorkflowReadSkeleton } from './WorkflowReadSkeleton';
+import {
+  WORKFLOW_SECTIONS,
   getSectionForStep,
-  getFilteredSections,
+  orderedSectionsForRead,
   getCumulativeOverrides,
   ALL_STEPS,
   type WorkshopLevel,
@@ -131,6 +132,14 @@ interface WorkflowDiagramProps {
   onIncludeLakehouseChange?: (next: boolean) => void;
   includeGenieOntology?: boolean;
   onIncludeGenieOntologyChange?: (next: boolean) => void;
+  /** Engine-composed ordered sectionTag list from GET /api/track/{track}/outline
+   * (Phase 3 T3c). It drives the read-path section ORDER; null/undefined => the
+   * outline is unresolved and the read path renders a loading skeleton. */
+  outlineTags?: string[] | null;
+  /** True once the outline has resolved for the active session (T3c). Gates the
+   * one-shot returning-user restore so it navigates using the engine order, not a
+   * provisional pre-fetch value. */
+  outlineReady?: boolean;
   readOnly?: boolean;
 }
 
@@ -217,6 +226,8 @@ export function WorkflowDiagram({
   onIncludeLakehouseChange,
   includeGenieOntology = false,
   onIncludeGenieOntologyChange,
+  outlineTags = null,
+  outlineReady = false,
   readOnly = false,
 }: WorkflowDiagramProps) {
   // UI option is now always cursor (Figma option removed from UI)
@@ -357,11 +368,19 @@ export function WorkflowDiagram({
     () => getCumulativeOverrides(workshopLevel, completedSteps, chainContext),
     [workshopLevel, completedSteps, chainContext],
   );
-  const rawSections = getFilteredSections(
-    workshopLevel,
-    disabledSectionTags,
-    cumulativeOverrides ?? undefined,
-    direction,
+  // ORDER is engine-authoritative (T3c): orderedSectionsForRead projects the
+  // endpoint's outline order onto the track's sections (chrome from the track's
+  // own sectionIds — no client-side composer), filtering disabled tags on top. It
+  // returns [] while the outline is unresolved/errored — the skeleton below covers
+  // that so the sidebar never blanks.
+  const rawSections = useMemo(
+    () => orderedSectionsForRead(
+      outlineTags,
+      disabledSectionTags,
+      workshopLevel,
+      cumulativeOverrides ?? undefined,
+    ),
+    [outlineTags, disabledSectionTags, workshopLevel, cumulativeOverrides],
   );
   const visibleSections = useMemo(() => {
     if (workshopLevel === 'genie-accelerator' && step22Mode === 'upload') {
@@ -526,6 +545,10 @@ export function WorkflowDiagram({
   useEffect(() => {
     if (!isSessionLoaded) return;
     if (!sessionId) return;
+    // Wait for the engine outline to resolve so initialExpandedStep reflects the
+    // engine order (T3c) — not a provisional pre-fetch value. Without this gate
+    // the restore could fire once (guarded) against a stale step and never correct.
+    if (!outlineReady) return;
     if (!initialExpandedStep) return;
     if (restoredSessionIdRef.current === sessionId) return;
 
@@ -598,7 +621,7 @@ export function WorkflowDiagram({
       cancelled = true;
       cancelAnimationFrame(outerRaf);
     };
-  }, [isSessionLoaded, sessionId, initialExpandedStep, completedSteps.size, sectionForStep]);
+  }, [isSessionLoaded, sessionId, outlineReady, initialExpandedStep, completedSteps.size, sectionForStep]);
 
   // Auto-expand section when a step becomes active
   useEffect(() => {
@@ -1249,6 +1272,7 @@ export function WorkflowDiagram({
                     sessionId={sessionId}
                     useCaseLabel={customUseCaseLabel || selectedUseCaseLabel}
                     codingAssistant={codingAssistant}
+                    workshopLevel={workshopLevel}
                     currentUserEmail={
                       // Only forward the email once it's actually resolved to
                       // a real value. We filter:
@@ -3469,6 +3493,8 @@ export function WorkflowDiagram({
         hideConfirm={wizardStage < 1}
         highlightConfirm={!!codingAssistant && wizardStage === 1}
         isLocked={codingAssistantConfirmed || readOnly}
+        workshopLevel={workshopLevel}
+        sessionId={sessionId}
       />
 
       {/* Stage 2: Prerequisites -- visibility per coding_assistant (admin toggle).
@@ -3582,10 +3608,18 @@ export function WorkflowDiagram({
           isWorkflowExpanded ? 'max-h-none opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
         }`}>
           <div className="border-t border-border">
+            {/* T3c: while the engine outline is unresolved (or errored with no
+               prior result), render the loading skeleton — never an empty diagram
+               and never a client-side re-compose (guardrail #3). The poller
+               retries; a transient error keeps the last-good outline (outlineReady
+               stays true) so this only shows on a genuine cold/unresolved fetch. */}
+            {sessionId && !outlineReady ? (
+              <WorkflowReadSkeleton />
+            ) : (
             <div id="workflow-main-area" className="flex gap-4 h-[calc(100vh-280px)] min-h-[500px] p-4">
               {/* Left Sidebar - Sectioned Navigation */}
               <div className="hidden lg:block w-64 flex-shrink-0 h-full overflow-hidden">
-                <SectionedWorkflowSidebar 
+                <SectionedWorkflowSidebar
                   completedSteps={completedSteps}
                   skippedSteps={skippedSteps}
                   expandedStep={expandedStep}
@@ -3629,6 +3663,7 @@ export function WorkflowDiagram({
                 )}
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>

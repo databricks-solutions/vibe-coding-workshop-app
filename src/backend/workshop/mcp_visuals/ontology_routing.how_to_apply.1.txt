@@ -1,0 +1,13 @@
+```text
+signed-off inventory
+│
+▼
+phrasing to (Metric View, measure)
+formal, acronym, informal, legacy
+│
+▼
+review draft + name owner
+│ publish in UI
+▼
+Routing Page (lookup beats inference)
+```

@@ -31,6 +31,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.backend.api import routes  # noqa: E402
+from src.backend.services import llm  # noqa: E402
 
 
 class TestExtractText(unittest.TestCase):
@@ -71,8 +72,8 @@ class TestExtractText(unittest.TestCase):
 class TestBestAvailableEndpoint(unittest.TestCase):
     def _run(self, primary, available, env=None):
         env = env or {}
-        with patch.object(routes, "SERVING_ENDPOINT_NAME", primary), \
-             patch.object(routes, "get_available_serving_endpoints", return_value=available), \
+        with patch.object(llm, "SERVING_ENDPOINT_NAME", primary), \
+             patch.object(llm, "get_available_serving_endpoints", return_value=available), \
              patch.dict(os.environ, env, clear=False):
             return routes.get_best_available_endpoint()
 
@@ -134,12 +135,13 @@ class TestEndpointSelection(unittest.TestCase):
         self.assertFalse(routes._supports_temperature("databricks-gpt-5-mini"))
 
     def test_resolve_keeps_available_preferred_and_falls_back_otherwise(self):
-        with patch.object(routes, "get_available_serving_endpoints", return_value=["a", "b"]), \
-             patch.object(routes, "get_best_available_endpoint", return_value="best"):
+        # resolve_endpoint lives in services.llm (D-20), so patch its helpers there.
+        with patch.object(llm, "get_available_serving_endpoints", return_value=["a", "b"]), \
+             patch.object(llm, "get_best_available_endpoint", return_value="best"):
             self.assertEqual(routes.resolve_endpoint("a"), "a")
             self.assertEqual(routes.resolve_endpoint("missing"), "best")
             self.assertEqual(routes.resolve_endpoint(""), "best")
-        with patch.object(routes, "get_available_serving_endpoints", return_value=[]):
+        with patch.object(llm, "get_available_serving_endpoints", return_value=[]):
             self.assertEqual(routes.resolve_endpoint("unlisted"), "unlisted")
 
 

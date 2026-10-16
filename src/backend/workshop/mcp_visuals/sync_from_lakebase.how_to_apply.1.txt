@@ -1,0 +1,12 @@
+```text
+Lakebase Postgres (operational tables)
+├─ clone, one-time (Genie default)
+│  ─▶ your Lakebase clone schema (Delta) ───┐
+├─ CDF, continuous (Genie opt-in)           │
+│  ─▶ lb_TABLE_history (Delta CDC) ─────────┤
+├─ register UC catalog (IDE)                │
+│  ─▶ your Lakebase UC catalog (read-only) ─┤
+┌───────────────────────────────────────────┘
+▼
+SQL / Notebooks / BI
+```

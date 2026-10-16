@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Database, Lock, Save, X } from 'lucide-react';
 
 export interface GoldTableTarget {
@@ -20,14 +20,14 @@ export function GoldTableTargetEditor({ value, onChange, defaultValues }: GoldTa
   const [editSchema, setEditSchema] = useState(value.schema);
   const [editPrefix, setEditPrefix] = useState(value.prefix);
 
-  // Keep edit fields in sync when parent auto-derives new defaults (only while not editing)
-  useEffect(() => {
-    if (!isEditing) {
-      setEditCatalog(value.catalog);
-      setEditSchema(value.schema);
-      setEditPrefix(value.prefix);
-    }
-  }, [value.catalog, value.schema, value.prefix, isEditing]);
+  // Edit fields start from the current value each time editing begins, so they
+  // pick up defaults the parent auto-derived while not editing.
+  const handleStartEdit = () => {
+    setEditCatalog(value.catalog);
+    setEditSchema(value.schema);
+    setEditPrefix(value.prefix);
+    setIsEditing(true);
+  };
 
   const handleSave = () => {
     onChange({ catalog: editCatalog.trim(), schema: editSchema.trim(), prefix: editPrefix.trim() });
@@ -65,7 +65,7 @@ export function GoldTableTargetEditor({ value, onChange, defaultValues }: GoldTa
             )}
           </div>
           <button
-            onClick={() => setIsEditing(true)}
+            onClick={handleStartEdit}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors flex-shrink-0"
           >
             <Lock className="w-3.5 h-3.5" />

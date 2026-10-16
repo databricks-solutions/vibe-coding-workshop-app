@@ -1,0 +1,13 @@
+```text
+User question
+│
+▼
+Chat panel
+│ /api/chat
+▼
+Analytics App ◀──────────────────────────────────────┐
+├─ Genie unreachable ─▶ falls back to mock answer    │
+│ Conversation API (SP-served, OBO toggle)           │
+▼                                                    │
+Genie space ─ answer + SQL ──────────────────────────┘
+```

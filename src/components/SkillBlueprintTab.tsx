@@ -26,7 +26,8 @@ import {
   type SkillSection,
   type SkillType,
 } from '../constants/skillTreeMapping';
-import { SkillContentModal, isSkillViewable } from './SkillContentModal';
+import { SkillContentModal } from './SkillContentModal';
+import { isSkillViewable } from './SkillContentModal.utils';
 
 interface SkillBlueprintTabProps {
   config: SkillBlueprintConfig;
