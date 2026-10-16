@@ -14,6 +14,8 @@ if str(REPO_ROOT) not in sys.path:
 from src.backend import mcp_server  # noqa: E402
 from src.backend.api import routes  # noqa: E402
 
+_real_disabled_paths = mcp_server._disabled_paths
+
 SID = "0f8e2c1a-1111-4222-8333-944455556666"  # a real session id shape
 OWNER = "ada.lovelace@acme.com"
 
@@ -340,3 +342,60 @@ def test_start_prompt_lists_names_for_an_unknown_track():
 
 def test_continue_prompt_points_at_the_session_list():
     assert "vibe_list_sessions" in mcp_server.continue_where_left_off()
+
+
+# --- review follow-ups ------------------------------------------------------------
+
+
+def test_a_saved_name_shaped_like_ours_is_still_the_learners(env):
+    store, _ = env
+    _web_session(store, level="app-database")
+    mcp_server.vibe_save_session(SID, "Genie Code — Q3 demo")
+    assert store[SID]["session_parameters"]["session_name_chosen"] is True
+    mcp_server.vibe_switch_track(SID, "lakehouse")
+    assert store[SID]["session_name"] == "Genie Code — Q3 demo"
+
+
+def test_moving_off_an_accelerator_takes_the_use_case_schema_back(env):
+    store, _ = env
+    _web_session(store, level="genie-accelerator", user_schema_prefix="ada_l_vibe_coding")
+    store[SID]["use_case"] = "ai_driven_booking"
+    mcp_server.vibe_switch_track(SID, "Apps + Lakebase")
+    assert store[SID]["session_parameters"]["user_schema_prefix"] == "ada_l_ai_driven_booking"
+
+
+def test_disabled_paths_are_genie_codes_whatever_the_session_stored(env, monkeypatch):
+    store, _ = env
+    _web_session(store, level="genie-accelerator", coding_assistant="cursor")
+    seen = []
+
+    def get_disabled_path_levels(assistant):
+        seen.append(assistant)
+        return ["lakehouse"]
+
+    monkeypatch.setattr(routes, "get_disabled_path_levels", get_disabled_path_levels)
+    monkeypatch.setattr(mcp_server, "_disabled_paths", _real_disabled_paths)
+    assert _code(mcp_server.vibe_switch_track(SID, "lakehouse")) == "TRACK_SWITCH_BLOCKED"
+    assert seen == ["genie-code"]
+
+
+def test_a_stale_stored_chain_on_an_accelerator_is_ignored():
+    from src.backend.workshop.track_switch import evaluate_switch
+
+    record = {
+        "session_id": SID,
+        "workshop_level": "genie-accelerator",
+        "completed_gates": ["project_setup"],
+        "session_parameters": {"chainContext": "app"},  # left by an earlier Apps pick
+    }
+    for target in ("app-only", "lakehouse", "agents-accelerator"):
+        assert not evaluate_switch(record, target).allowed, target
+
+
+def test_switch_and_save_refuse_an_anonymous_http_caller(env, monkeypatch):
+    store, saves = env
+    _web_session(store)
+    monkeypatch.setattr(mcp_server, "_anonymous_http_caller", lambda ctx: True)
+    assert _code(mcp_server.vibe_switch_track(SID, "lakehouse")) == "IDENTITY_UNKNOWN"
+    assert _code(mcp_server.vibe_save_session(SID, "Mine")) == "IDENTITY_UNKNOWN"
+    assert saves == []

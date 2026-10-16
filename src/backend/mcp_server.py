@@ -563,7 +563,7 @@ def _request_user(context: Context | None) -> str:
                 ):
                     value = request.headers.get(header, "")
                     if "@" in value:
-                        logger.info("MCP caller identity source: %s", header)
+                        _log_identity_source(request, header)
                         return value
         except (LookupError, ValueError, AttributeError):
             pass
@@ -571,8 +571,33 @@ def _request_user(context: Context | None) -> str:
 
     value = os.getenv("PGUSER", "")
     if context is not None:
-        logger.info("MCP caller identity source: %s", "pguser" if "@" in value else "none")
+        try:
+            request = context.request_context.request
+        except (LookupError, ValueError, AttributeError):
+            request = None
+        if isinstance(request, Request):
+            _log_identity_source(request, "pguser" if "@" in value else "none")
     return value if "@" in value else "unknown"
+
+
+def _log_identity_source(request: Request, source: str) -> None:
+    """Log which identity source a request used, once per request."""
+    if getattr(request.state, "mcp_identity_logged", False):
+        return
+    request.state.mcp_identity_logged = True
+    logger.info("MCP caller identity source: %s", source)
+
+
+def _anonymous_http_caller(context: Context | None) -> bool:
+    """An HTTP request that carries no user identity. In-process calls (no context:
+    tests, local tooling) are trusted, as the owner check trusts them."""
+    if context is None:
+        return False
+    try:
+        request = context.request_context.request
+    except (LookupError, ValueError, AttributeError):
+        return False
+    return isinstance(request, Request) and _request_user(context) == "unknown"
 
 
 def _request_base_url(context: Context | None) -> str | None:
@@ -748,10 +773,17 @@ def _session_name(track: str, use_case: str | None) -> str:
 UNSAVED_SESSION_NAME = "New Session"
 
 
-def _is_auto_name(name: str | None) -> bool:
-    """True for a name nobody chose: empty, the web placeholder, or one of ours. Only
-    these may be replaced by an automatic name; a learner's name never is."""
+# Set by vibe_save_session: the learner chose this name, even one shaped like ours.
+SESSION_NAME_CHOSEN_KEY = "session_name_chosen"
 
+
+def _is_auto_name(name: str | None, params: dict[str, Any] | None = None) -> bool:
+    """True for a name nobody chose: empty, the web placeholder, or one of ours (and
+    not saved by the learner). Only these may be replaced by an automatic name; a
+    learner's name never is."""
+
+    if (params or {}).get(SESSION_NAME_CHOSEN_KEY):
+        return False
     return (
         not name
         or name == UNSAVED_SESSION_NAME
@@ -1644,15 +1676,15 @@ def vibe_start_track(
 
 
 def _disabled_paths(state: engine.SessionState) -> set[str]:
-    """Tracks the facilitator turned off for this session's assistant (the web
-    picker's ``disabledWorkshopLevels``). Fails open: an unreadable admin table
-    must not block a learner."""
+    """Tracks the facilitator turned off for Genie Code (the web picker's
+    ``disabledWorkshopLevels`` for that assistant): MCP is only ever the Genie Code
+    client, whatever assistant the web session stored. Fails open: an unreadable
+    admin table must not block a learner."""
 
     from .api.routes import get_disabled_path_levels
 
-    assistant = state.session_parameters.get("coding_assistant") or DEFAULT_CODING_ASSISTANT
     try:
-        return set(get_disabled_path_levels(assistant))
+        return set(get_disabled_path_levels(DEFAULT_CODING_ASSISTANT))
     except Exception:  # noqa: BLE001
         logger.warning("disabled-path lookup failed; allowing the switch", exc_info=True)
         return set()
@@ -1693,7 +1725,15 @@ def _apply_track_switch(
     )
     caller = _request_user(context)
     owner = caller if "@" in caller else record.get("created_by")
-    prefix = derive_user_schema_prefix(owner, None, target in ACCELERATOR_SCHEMA_LEVELS)
+    # The use-case name, so a move off an accelerator gets the use-case schema back
+    # rather than keeping the accelerator's (the web derives it the same way).
+    uc_name = (
+        str(params.get("custom_use_case_label") or "").strip()
+        or record.get("use_case")
+        or record.get("use_case_label")
+        or params.get("use_case")
+    )
+    prefix = derive_user_schema_prefix(owner, uc_name, target in ACCELERATOR_SCHEMA_LEVELS)
     if prefix:
         params["user_schema_prefix"] = prefix
     state.session_parameters.clear()
@@ -1716,7 +1756,9 @@ def _persist_linked_session(
 
     stored_name = record.get("session_name")
     name = None
-    if _is_auto_name(stored_name) and (switched_from or not stored_name or stored_name == UNSAVED_SESSION_NAME):
+    if _is_auto_name(stored_name, record.get("session_parameters")) and (
+        switched_from or not stored_name or stored_name == UNSAVED_SESSION_NAME
+    ):
         label = (
             state.session_parameters.get("use_case_label")
             or record.get("use_case_label")
@@ -1758,6 +1800,11 @@ def vibe_switch_track(
     match = resolve_track_name(track)
     if isinstance(match, TrackNameError):
         return _error_result(match.code, match.message)  # type: ignore[return-value]
+    if _anonymous_http_caller(context):
+        return _error_result(  # type: ignore[return-value]
+            "IDENTITY_UNKNOWN",
+            "This request carries no user identity, so the session's track cannot be changed.",
+        )
     records: list[dict[str, Any]] = []
     loaded = _load_session_and_track(session_id, context, _record_out=records)
     if loaded is None:
@@ -1839,16 +1886,25 @@ def vibe_save_session(
             "INVALID_PARAMETER",
             f"Keep the description to {_SESSION_DESCRIPTION_MAX} characters.",
         )
+    if _anonymous_http_caller(context):
+        return _error_result(  # type: ignore[return-value]
+            "IDENTITY_UNKNOWN",
+            "This request carries no user identity, so the session cannot be renamed.",
+        )
     records: list[dict[str, Any]] = []
     loaded = _load_session_for_request(session_id, context, _record_out=records)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _ = loaded
+    before = copy.deepcopy(state)
+    # The learner chose this name: no automatic rename may replace it later.
+    state.session_parameters[SESSION_NAME_CHOSEN_KEY] = True
     # Without Lakebase (local dev) there is nothing to save to: report unsaved.
     if records and not _persist_mcp_delta(
         session_id,
-        copy.deepcopy(state),
+        before,
         state,
+        session_parameters=state.session_parameters,
         session_name=clean,
         session_description=clean_description,
     ):
@@ -2574,7 +2630,7 @@ def vibe_complete_step(
     # and None when the learner named the session (a non-None name always wins the
     # save's COALESCE, so only an automatic name may be replaced).
     _refined_name = None
-    if sectionTag == "use_case_selection" and _is_auto_name(stored_name):
+    if sectionTag == "use_case_selection" and _is_auto_name(stored_name, before.session_parameters):
         _label = (
             state.session_parameters.get("use_case_label")
             or state.session_parameters.get("use_case")
@@ -2927,7 +2983,7 @@ def vibe_set_parameters(
         # gate is newly resolved and nobody named the session (a non-None name
         # always wins the save's COALESCE).
         refined_name = None
-        if newly and _is_auto_name(stored_name):
+        if newly and _is_auto_name(stored_name, before.session_parameters):
             label = resolved_params.get("use_case_label") or resolved_params.get("use_case")
             if label:
                 refined_name = _session_name(track, label)

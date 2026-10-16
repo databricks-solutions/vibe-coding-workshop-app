@@ -104,9 +104,25 @@ def has_started(completed: set[int]) -> bool:
     return any(number >= 2 for number in completed)
 
 
+# The only levels whose chain varies (an Apps climb or standalone); every other
+# level's chain follows from the level, whatever chainContext was left stored
+# (the SPA never clears it on a move to an accelerator).
+CHAIN_VARIABLE_LEVELS = frozenset({"lakehouse", "lakehouse-di"})
+
+
 def stored_chain_context(record: dict[str, Any]) -> str | None:
     value = (record.get("session_parameters") or {}).get("chainContext")
     return value if value in CHAIN_CONTEXTS else None
+
+
+def session_chain_context(record: dict[str, Any], level: str, completed: set[int]) -> str | None:
+    """The chain the session is on: the stored one on a lakehouse level, else derived
+    (as utils/sessionSync chainFromParams reads it in the web UI)."""
+
+    stored = stored_chain_context(record)
+    if stored and level in CHAIN_VARIABLE_LEVELS:
+        return stored
+    return derive_initial_chain_context(level, completed)
 
 
 @dataclass(frozen=True)
@@ -128,7 +144,7 @@ def evaluate_switch(record: dict[str, Any], target: str, disabled_paths: set[str
         return SwitchDecision(True, current, target, "same")
     completed = completed_numbers(record)
     started = has_started(completed)
-    chain = active_chain(current, completed, stored_chain_context(record) or derive_initial_chain_context(current, completed)) if started else None
+    chain = active_chain(current, completed, session_chain_context(record, current, completed)) if started else None
     allowed_targets = _allowed_targets(current, chain) if started else ()
 
     if target in disabled_paths:
