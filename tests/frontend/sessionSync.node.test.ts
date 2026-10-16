@@ -132,3 +132,42 @@ test('the API client counts session writes, in flight and issued', async () => {
     globalThis.fetch = realFetch;
   }
 });
+
+const localFrom = (r: Resp, over: Partial<Parameters<SyncModule['groupsDifferingFromLocal']>[2]> = {}) => {
+  const view = sync.sessionViewFrom(r);
+  const p = (r.session_parameters ?? {}) as Record<string, string>;
+  return {
+    sessionName: r.session_name, sessionSaved: r.is_saved, sessionDescription: r.session_description,
+    industry: r.industry ?? '', industryLabel: r.industry_label ?? '', useCase: r.use_case ?? '', useCaseLabel: r.use_case_label ?? '',
+    customUseCaseLabel: p.custom_use_case_label ?? '', customDescription: p.custom_use_case_description ?? '', brandUrl: p.company_brand_url ?? '',
+    level: view.level, useCaseLockedLevel: view.useCaseLockedLevel, levelExplicitlySelected: view.levelExplicitlySelected,
+    direction: view.direction ?? 'forward', chainContext: view.chainContext,
+    aiAgentsModules: view.aiAgentsModules, medallionLayers: view.medallionLayers,
+    includeLakehouse: view.includeLakehouse, includeGenieOntology: view.includeGenieOntology,
+    completedSteps: view.completedSteps, skippedSteps: view.skippedSteps,
+    stepPrompts: r.step_prompts, codingAssistant: view.codingAssistant, prerequisitesCompleted: !!r.prerequisites_completed,
+    ...over,
+  };
+};
+
+test('the tab\'s own writes are not changes from Genie Code', () => {
+  const before = resp({ session_name: 'New Session' });
+  // The tab completed Set Up Project and saved a name: the server now says so, and so does the tab.
+  const after = resp({ session_name: 'My demo', is_saved: true, completed_gates: ['project_setup'] });
+  const changed = sync.changedGroups(sync.syncSnapshot(before), sync.syncSnapshot(after));
+  assert.deepEqual(changed.sort(), ['name', 'progress']);
+  assert.deepEqual(sync.groupsDifferingFromLocal(changed, after, localFrom(after)), []);
+});
+
+test('a change Genie Code made is kept', () => {
+  const base = resp({ workshop_level: 'genie-accelerator' });
+  const remote = resp({ workshop_level: 'app-database', session_name: 'Genie Code — Databricks Apps + Lakebase', is_saved: true }, { level_explicitly_selected: true });
+  const changed = sync.changedGroups(sync.syncSnapshot(base), sync.syncSnapshot(remote));
+  assert.deepEqual(sync.groupsDifferingFromLocal(changed, remote, localFrom(base)).sort(), ['name', 'track']);
+});
+
+test('a stale stored chain counts only on the lakehouse levels', () => {
+  assert.equal(sync.chainFromParams({ chainContext: 'app' }, 'genie-accelerator', new Set([2])), null);
+  assert.equal(sync.chainFromParams({ chainContext: 'lakehouse' }, 'app-database', new Set()), 'app');
+  assert.equal(sync.chainFromParams({ chainContext: 'app' }, 'lakehouse-di', new Set()), 'app');
+});

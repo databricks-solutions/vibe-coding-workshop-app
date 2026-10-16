@@ -41,7 +41,7 @@ import type { SessionLoadResponse, TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 import { deriveCompletedStepNumbers } from './constants/deriveProgress';
 import { emptyGateBase, hydrateGateBase, gateBaseFields, applyGateWriteResult, type GateBase, type GateWrite } from './utils/gateBase';
-import { ALL_SYNC_GROUPS, canApplyRefresh, changedGroups, sessionViewFrom, syncSnapshot, type SyncGroup } from './utils/sessionSync';
+import { ALL_SYNC_GROUPS, canApplyRefresh, changedGroups, groupsDifferingFromLocal, sessionViewFrom, syncSnapshot, type LocalSessionState, type SyncGroup } from './utils/sessionSync';
 import { SessionSyncNotice, type SessionSyncMessage } from './components/SessionSyncNotice';
 import { TRACK_DISPLAY_NAMES } from './constants/trackNames';
 
@@ -1460,6 +1460,18 @@ export default function App() {
   const isSessionLoadingRef = useRef(isSessionLoading);
   isSessionLoadingRef.current = isSessionLoading;
   const [syncMessage, setSyncMessage] = useState<SessionSyncMessage | null>(null);
+  // What the tab shows now: a refresh applies only what differs from it, so the
+  // tab's own writes are never re-applied or announced as Genie Code's.
+  const localSessionRef = useRef<LocalSessionState | null>(null);
+  localSessionRef.current = {
+    sessionName, sessionSaved, sessionDescription,
+    industry: selectedIndustry, industryLabel: selectedIndustryLabel,
+    useCase: selectedUseCase, useCaseLabel: selectedUseCaseLabel,
+    customUseCaseLabel, customDescription, brandUrl,
+    level: workshopLevel, useCaseLockedLevel, levelExplicitlySelected,
+    direction, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology,
+    completedSteps, skippedSteps, stepPrompts, codingAssistant, prerequisitesCompleted,
+  };
   const dismissedNewerRef = useRef<Set<string>>(new Set());
   const syncFromServer = async (): Promise<SyncGroup[]> => {
     const sid = sessionIdRef.current;
@@ -1473,8 +1485,18 @@ export default function App() {
       return [];
     }
     if (!response.success || !canApplyRefresh(sid, sessionIdRef.current, before, apiClient.sessionWriteState())) return [];
-    const groups = changedGroups(serverSnapshotRef.current, syncSnapshot(response));
-    if (groups.length === 0) return [];
+    const snapshot = syncSnapshot(response);
+    const changed = changedGroups(serverSnapshotRef.current, snapshot);
+    if (changed.length === 0) return [];
+    const groups = localSessionRef.current
+      ? groupsDifferingFromLocal(changed, response, localSessionRef.current)
+      : changed;
+    if (groups.length === 0) {
+      // Only this tab's own writes: the server now matches what the tab shows.
+      serverSnapshotRef.current = snapshot;
+      serverUpdatedAtRef.current = response.updated_at;
+      return [];
+    }
     const remoteLevel = sessionViewFrom(response).level;
     if (groups.includes('track') && remoteLevel !== workshopLevelRef.current) {
       setSyncMessage({ kind: 'updated', text: `Now on ${TRACK_DISPLAY_NAMES[remoteLevel]}.` });

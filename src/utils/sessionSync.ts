@@ -62,10 +62,20 @@ export function chipsFromParams(params: Params): {
   };
 }
 
-/** The stored chain context (what GET /outline composes with), else the legacy derivation. */
+// The only levels whose chain varies (an Apps climb or standalone Lakehouse).
+const CHAIN_VARIABLE_LEVELS: ReadonlySet<WorkshopLevel> = new Set<WorkshopLevel>(['lakehouse', 'lakehouse-di']);
+
+/**
+ * The chain the session is on: the stored chain context (what GET /outline
+ * composes with) on a lakehouse level, else the derivation. A path change to an
+ * accelerator never clears the stored value, so on every other level it is
+ * stale; their chain follows from the level. Mirrors track_switch.session_chain_context.
+ */
 export function chainFromParams(params: Params, level: WorkshopLevel, completed: Set<number>): ChainContext {
   const stored = params.chainContext;
-  if (typeof stored === 'string' && CHAIN_CONTEXTS.has(stored)) return stored as ChainContext;
+  if (CHAIN_VARIABLE_LEVELS.has(level) && typeof stored === 'string' && CHAIN_CONTEXTS.has(stored)) {
+    return stored as ChainContext;
+  }
   return deriveInitialChainContext(level, completed);
 }
 
@@ -143,6 +153,79 @@ export function changedGroups(
 ): SyncGroup[] {
   if (!base) return [...ALL_SYNC_GROUPS];
   return ALL_SYNC_GROUPS.filter(group => base[group] !== next[group]);
+}
+
+/** What the tab shows now, to tell a remote change from the tab's own write. */
+export interface LocalSessionState {
+  sessionName?: string;
+  sessionSaved: boolean;
+  sessionDescription?: string;
+  industry: string;
+  industryLabel: string;
+  useCase: string;
+  useCaseLabel: string;
+  customUseCaseLabel: string;
+  customDescription: string;
+  brandUrl: string;
+  level: WorkshopLevel;
+  useCaseLockedLevel: WorkshopLevel | null;
+  levelExplicitlySelected: boolean;
+  direction: WorkflowDirection;
+  chainContext: ChainContext;
+  aiAgentsModules: Set<AIAgentModule>;
+  medallionLayers: Set<MedallionLayer>;
+  includeLakehouse: boolean;
+  includeGenieOntology: boolean;
+  completedSteps: Set<number>;
+  skippedSteps: Set<number>;
+  stepPrompts: Record<number, string>;
+  codingAssistant: string | null;
+  prerequisitesCompleted: boolean;
+}
+
+const sameSet = <T,>(a: Set<T>, b: Set<T>) => a.size === b.size && [...a].every(x => b.has(x));
+const promptEntries = (prompts: Record<string | number, string> | undefined) =>
+  JSON.stringify(Object.keys(prompts ?? {}).sort().map(k => [k, (prompts as Record<string, string>)[k]]));
+
+/**
+ * Of the groups that changed on the server, those that also differ from what the
+ * tab shows. The tab's own writes change the server too, but match the tab, so
+ * they are neither re-applied nor announced as a change from Genie Code.
+ */
+export function groupsDifferingFromLocal(
+  groups: SyncGroup[],
+  resp: SessionLoadResponse,
+  local: LocalSessionState,
+): SyncGroup[] {
+  const view = sessionViewFrom(resp);
+  const p = paramsOf(resp);
+  const str = (value: unknown) => (typeof value === 'string' ? value : '');
+  const differs: Record<SyncGroup, () => boolean> = {
+    name: () => (resp.session_name ?? '') !== (local.sessionName ?? '')
+      || !!resp.is_saved !== local.sessionSaved
+      || (resp.session_description ?? '') !== (local.sessionDescription ?? ''),
+    intent: () => (resp.industry ?? '') !== local.industry
+      || (resp.industry_label ?? '') !== local.industryLabel
+      || (resp.use_case ?? '') !== local.useCase
+      || (resp.use_case_label ?? '') !== local.useCaseLabel
+      || str(p.custom_use_case_label) !== local.customUseCaseLabel
+      || str(p.custom_use_case_description) !== local.customDescription
+      || str(p.company_brand_url) !== local.brandUrl,
+    track: () => view.level !== local.level
+      || view.useCaseLockedLevel !== local.useCaseLockedLevel
+      || view.levelExplicitlySelected !== local.levelExplicitlySelected,
+    composition: () => (view.direction ?? local.direction) !== local.direction
+      || view.chainContext !== local.chainContext
+      || !sameSet(view.aiAgentsModules, local.aiAgentsModules)
+      || !sameSet(view.medallionLayers, local.medallionLayers)
+      || view.includeLakehouse !== local.includeLakehouse
+      || view.includeGenieOntology !== local.includeGenieOntology,
+    progress: () => !sameSet(view.completedSteps, local.completedSteps) || !sameSet(view.skippedSteps, local.skippedSteps),
+    prompts: () => promptEntries(resp.step_prompts) !== promptEntries(local.stepPrompts),
+    assistant: () => view.codingAssistant !== local.codingAssistant,
+    prereq: () => !!resp.prerequisites_completed !== local.prerequisitesCompleted,
+  };
+  return groups.filter(group => differs[group]());
 }
 
 /**
