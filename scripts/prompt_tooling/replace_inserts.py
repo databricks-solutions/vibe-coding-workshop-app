@@ -8,12 +8,15 @@ and replaces the matched blocks in-place.
 
 Usage:
     cd apps_lakebase/prompts
-    python replace_inserts.py
+    python replace_inserts.py --i-know-this-overwrites-the-seed
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
+
+from _seed_guard import add_flag, refused
 
 SEED_FILE = "02_seed_section_input_prompts.sql"
 
@@ -102,6 +105,14 @@ def read_source(path: Path) -> tuple[int, str, list[str]]:
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Replace seed INSERT blocks with the NN-*.sql source files."
+    )
+    add_flag(parser)
+    args = parser.parse_args()
+    if refused(args.overwrite_seed):
+        sys.exit(2)
+
     script_dir = Path(__file__).parent
     seed_path = script_dir / SEED_FILE
 

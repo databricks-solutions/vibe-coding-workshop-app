@@ -25,8 +25,8 @@ Usage
 -----
     cd apps_lakebase/prompts
     python splice_genie_to_app_seed.py --dry-run    # preview diff
-    python splice_genie_to_app_seed.py              # apply
-    python splice_genie_to_app_seed.py --app-seed-dir /path/to/dml_seed
+    python splice_genie_to_app_seed.py --i-know-this-overwrites-the-seed  # apply
+    python splice_genie_to_app_seed.py --dry-run --app-seed-dir /path/to/dml_seed
 """
 
 import argparse
@@ -34,6 +34,7 @@ import difflib
 import sys
 from pathlib import Path
 
+from _seed_guard import add_flag, refused
 from _seed_parser import SEED_FILE, find_blocks, read_seed
 from sync_markdown_to_seed import SECTIONS_DIR, build_insert_block, parse_markdown
 
@@ -98,7 +99,10 @@ def main() -> int:
         default=None,
         help="Directory containing the app repo's 02_seed_section_input_prompts.sql",
     )
+    add_flag(parser)
     args = parser.parse_args()
+    if not args.dry_run and refused(args.overwrite_seed):
+        return 2
 
     script_dir = Path(__file__).parent
     sections_dir = script_dir / SECTIONS_DIR

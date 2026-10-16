@@ -7,7 +7,7 @@ and replaces the matching block (by input_id) in the seed SQL.
 
 Usage:
     cd apps_lakebase/prompts
-    python sync_markdown_to_seed.py              # apply changes
+    python sync_markdown_to_seed.py --i-know-this-overwrites-the-seed  # apply changes
     python sync_markdown_to_seed.py --dry-run    # preview diff only
 """
 
@@ -17,6 +17,7 @@ import re
 import sys
 from pathlib import Path
 
+from _seed_guard import add_flag, refused
 from _seed_parser import SEED_FILE, read_seed, sql_escape
 
 SECTIONS_DIR = "sections"
@@ -274,7 +275,10 @@ def main():
         action="store_true",
         help="Print diff without modifying the seed file.",
     )
+    add_flag(parser)
     args = parser.parse_args()
+    if not args.dry_run and refused(args.overwrite_seed):
+        sys.exit(2)
 
     script_dir = Path(__file__).parent
     seed_path = script_dir / SEED_FILE

@@ -8,14 +8,20 @@ Each prompt becomes a markdown file in sections/ with YAML frontmatter
 Usage:
     cd apps_lakebase/prompts
     python extract_to_markdown.py
+    python extract_to_markdown.py --seed path/to/seed.sql --out path/to/sections
+
+The seed defaults to 02_seed_section_input_prompts.sql next to this script; when
+there is none, the app repo's seed (../../db/lakebase/dml_seed/, read only).
 """
 
+import argparse
 import sys
 from pathlib import Path
 
-from _seed_parser import SEED_FILE, extract_sql_strings, read_seed
+from _seed_parser import SEED_FILE, extract_sql_strings, find_blocks
 
 SECTIONS_DIR = "sections"
+APP_SEED = Path("..", "..", "db", "lakebase", "dml_seed", SEED_FILE)
 
 
 def _yaml_str(value: str) -> str:
@@ -96,12 +102,36 @@ def build_markdown(fields: dict, columns: list[str], comment_lines: list[str]) -
     return "\n".join(parts)
 
 
-def main():
-    script_dir = Path(__file__).parent
-    seed_lines, blocks = read_seed(script_dir)
+def _default_seed(script_dir: Path) -> Path:
+    local = script_dir / SEED_FILE
+    return local if local.is_file() else script_dir / APP_SEED
 
-    sections_dir = script_dir / SECTIONS_DIR
-    sections_dir.mkdir(exist_ok=True)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Extract the seed's INSERT blocks into section markdown files."
+    )
+    parser.add_argument(
+        "--seed",
+        type=Path,
+        help=f"Seed SQL to read (default: {SEED_FILE} next to this script, else {APP_SEED}).",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help=f"Directory for the section files (default: {SECTIONS_DIR}/ next to this script).",
+    )
+    args = parser.parse_args()
+
+    script_dir = Path(__file__).parent
+    seed_path = args.seed or _default_seed(script_dir)
+    if seed_path != script_dir / SEED_FILE:
+        print(f"Seed: {seed_path}")
+    seed_lines = seed_path.read_text().splitlines()
+    blocks = find_blocks(seed_lines)
+
+    sections_dir = args.out or script_dir / SECTIONS_DIR
+    sections_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Parsed {len(blocks)} INSERT blocks from {SEED_FILE}")
     print(f"Output directory: {sections_dir}\n")
