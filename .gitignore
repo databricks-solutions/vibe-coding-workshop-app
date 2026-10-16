@@ -55,3 +55,10 @@ venv/
 
 # Local user-config backups (per-workshop snapshots)
 user-config.yaml.backup.*
+
+# Prompt tooling outputs (scripts/prompt_tooling); the app seed is the source of truth
+scripts/prompt_tooling/sections/
+scripts/prompt_tooling/02_seed_section_input_prompts.sql
+scripts/prompt_tooling/seed.sql
+scripts/prompt_tooling/[0-9][0-9]-*.md
+scripts/prompt_tooling/[0-9][0-9]-*.sql

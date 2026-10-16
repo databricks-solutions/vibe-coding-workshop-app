@@ -1,0 +1,1022 @@
+{
+  "38-agent_spec_design.md": {
+    "class": "A",
+    "verbatim_substrings": [
+      "## IMPORTANT - READ FIRST\n\nYour ONLY task is to create `docs/agent_spec.yaml`. Do NOT generate application code, create Databricks resources, install MCP servers, create UC connections, wire tools into an agent, deploy anything, modify app code, modify SQL seed files, or create/configure AI Gateway endpoints.\n\n**DO NOT predict tool selections.** Tools are not chosen at this step \u2014 that's prompt 39. Therefore:\n\n- \u274c DO NOT author tool-shaped scorers (`ka_citation_present`, `RetrievalGroundedness`, `genie_sql_correctness`, `sql_readonly_compliance`, `genie_response_grounded_in_table`, `uc_function_signature_match`).\n- \u274c DO NOT add tool-specific assertions to `agent.benchmark_seeds.seed_examples[]` or `governance.verification.smoke_test_cases[]` (no \"use Genie to look up X\", no \"expect a KA citation\").\n- \u274c DO NOT add Genie-shaped, KA-shaped, Vector-Search-shaped, or SQL-shaped buckets to `agent.benchmark_seeds.coverage_buckets[]`. Buckets are use-case categories (\"policy compliance\", \"edge case: empty input\"), not tool categories.\n- \u2705 Author only domain-shaped content from the use-case context (`{industry_name}`, `{use_case_title}`, personas, journeys, capabilities). Tool-shaped content lives in `docs/agent_tool_plan.yaml` and is appended by prompt 39.\n\nYou MUST:\n- Read `docs/design_prd.md` (step 03 \u2014 business intent); compute its sha256 and record both path and digest as `source_prd`\n- Read `docs/ui_design.md` (step 04 \u2014 pages, personas, navigation, user journeys); align Agent Spec personas with this UI\n- Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` (steps 04-07 \u2014 APP_NAME, app URL, workspace URL, DB_SCHEMA, API routes, frontend pages)\n- Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the contract\n- Set `agent.model` to `{agent_model}`. If `{agent_model}` is blank, missing, or still a literal `{agent_model}` placeholder, default to `databricks-claude-sonnet-4-6`. Never record vague labels like \"Claude\" or \"best model\".\n- Bronze, Gold, Genie, and Data Intelligence artifacts are NOT prerequisites. If external structured data is needed, record it as optional `mcp_research` candidates and let the Tool Plan (step 39) decide.\n- Create ONLY `docs/agent_spec.yaml` and STOP",
+      "Save it to: docs/agent_spec.yaml\nSTOP after saving. Do NOT create code, install MCPs, create UC connections, or proceed with other tasks."
+    ],
+    "placeholders": [
+      "{agent_model}",
+      "{industry_name}",
+      "{use_case_description}",
+      "{use_case_slug}",
+      "{use_case_title}"
+    ]
+  },
+  "39-agent_tool_selection.md": {
+    "class": "A",
+    "verbatim_substrings": [
+      "## IMPORTANT - READ FIRST\n\nYour ONLY task is to create `docs/agent_tool_plan.yaml`. Do NOT generate application code, create Databricks resources, install MCP servers, create UC connections, wire tools into an agent, or deploy anything.\n\n### Placeholder Handling\n\nThe Tool Plan MUST NEVER contain placeholder literals (anything matching `^\\{[a-z_]+\\}$`). The names `agent_sql_catalog`, `agent_sql_schema`, `agent_sql_table_allowlist`, `genie_space_id`, `vs_endpoint`, and `vs_index` may arrive still wrapped in `{...}`. Treat any value that is blank, missing, or still wrapped in `{...}` as a question for the user.\n\nYou MUST:\n- Read `docs/agent_spec.yaml` \u2014 inherit the agent's purpose, model endpoint, and recommended tools\n- Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the contract\n- ASK ME for any value that is blank, missing, or still wrapped in `{...}` (for example `{agent_sql_catalog}`, `{agent_sql_schema}`, `{agent_sql_table_allowlist}`, `{genie_space_id}`, `{vs_endpoint}`, `{vs_index}`) before writing the Tool Plan. NEVER write a placeholder literal (regex `^\\{[a-z_]+\\}$`) into `docs/agent_tool_plan.yaml` under any circumstance.\n- If a tool family is not selected, OMIT its keys from `selected_mcp_servers[]` and `selected_tools[]` entirely instead of writing placeholder strings, `\"n/a\"`, or empty scope fields.\n- Copy the SCALAR value of `docs/agent_spec.yaml.agent.model` into `runtime_config.llm.endpoint` AND into every `resource_grants.databricks_yml.serving_endpoints[].name`. NEVER write the YAML-path string `docs/agent_spec.yaml.agent.model` as the endpoint value \u2014 that string is a documentation reference, never the value itself. Writing it verbatim would cause DAB to attempt `CAN_QUERY` against a serving endpoint with that literal name and fail.\n- If `docs/agent_spec.yaml.agent.model` is empty, missing, or still wrapped in `{...}`, ASK ME for the endpoint name before writing the Tool Plan. Do not invent a default here \u2014 the Agent Spec already defaulted it to `databricks-claude-sonnet-4-6` if it was unset.\n- Do NOT create or configure AI Gateway in this step. The runtime route is intentionally Gateway-ready so a future pre-provisioned Gateway endpoint can be introduced by changing only `provider`, `endpoint`, and `api_base_url` without changing agent code.\n- Create ONLY `docs/agent_tool_plan.yaml` and STOP",
+      "Save it to: docs/agent_tool_plan.yaml\nSTOP after saving. Do not generate any code, install MCPs, create UC connections, or proceed with other tasks."
+    ],
+    "placeholders": [
+      "{agent_sql_catalog}",
+      "{agent_sql_schema}",
+      "{agent_sql_table_allowlist}",
+      "{default_warehouse}",
+      "{genie_space_id}",
+      "{industry_name}",
+      "{use_case_slug}",
+      "{use_case_title}",
+      "{vs_endpoint}",
+      "{vs_index}"
+    ]
+  },
+  "40-uc_resources_foundation.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"uc_resources_foundation\"`, `require_prior_gate: [{prompt_id: \"workspace_setup_deploy\", gate: \"Infrastructure healthy\"}, {prompt_id: \"agent_tool_selection\", gate: \"Agent tool plan ready\"}]` (accepts `\"Infrastructure healthy with warnings\"`).\n2. `genai-agents/vibecoding-state` op `hydrate_from_files` \u2014 params: `agent_spec_yaml: \"docs/agent_spec.yaml\"`, `agent_tool_plan_yaml: \"docs/agent_tool_plan.yaml\"`, `ui_design_md: \"docs/ui_design.md\"`, `prd_path: \"docs/design_prd.md\"`, `state_path: \"apps_lakebase/$APP_NAME/.vibecoding-state.md\"`. This populates `state://AgentSpec`, `state://AppSpec` (UI), and `state://Spec Provenance` from the design pair so downstream MLflow SDLC prompts (50\u201356) can keep reading `state://AgentSpec.*` / `state://AppSpec.*` without rewrites. `state://DataSpec` is stamped `optional: true` when no Lakehouse track has populated it. The operation is idempotent: re-running with the same YAML files is a no-op (the `resolved_at` timestamp may drift). It halts only if a required input file is missing, if `agent_spec.yaml.agent.model` is empty, or if any value in the design pair is still wrapped in `{...}` \u2014 in those cases re-run prompts 38 / 39 with real values.\n3. @genai-agents/foundation/00-uc-resources-foundation/SKILL.md \u2014 params:\n   - `uc_catalog: \"{lakehouse_default_catalog}\"`\n   - `agent_schema: \"{db_schema}_agent\"`\n   - `ops_schema: \"{db_schema}_ops\"`\n   - `warehouse_id: \"{default_warehouse}\"`\n   - `required_volumes:` default list, extended by `docs/agent_tool_plan.yaml.resource_grants.required_volumes[]` after applying the same `{db_schema}_` prefix to each extra volume name.\n     - `{ name: \"{db_schema}_knowledge_sources\", schema: \"agent\", comment: \"KA + retrieval source files\" }`\n     - `{ name: \"{db_schema}_agent_outputs\",     schema: \"agent\", comment: \"Tool-generated artifacts (CSV, charts)\" }`\n   - **Returns:** `agent_schema`, `ops_schema`, `uc_volumes` (map of actual volume name \u2192 `/Volumes/...` path), and convenience aliases `knowledge_source_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`) and `agent_outputs_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs`).\n   - **Idempotency contract:** every operation is idempotent \u2014 `CREATE SCHEMA IF NOT EXISTS`, and `WorkspaceClient.volumes.create(...)` wrapped to treat `databricks.sdk.errors.AlreadyExists` as success. Pre-existing schemas/volumes (whether created by a prior run, by a use-case asset bundle, or by another user) MUST NOT cause a failure. The skill MUST always emit the captured map even on a warm workspace where every resource already exists.\n4. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"uc_resources_foundation\"`, `gate: \"UC resources ready\"`, `captured: {app_name, db_schema, agent_app_name, agent_resource_prefix, agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path, hydrated_from_files: true, resolver_version: \"3.0\"}`.\n\n**Gate:** `UC resources ready` \u2014 both schemas exist (`SHOW SCHEMAS IN {lakehouse_default_catalog}` lists them), every entry in `uc_volumes` is reachable via `WorkspaceClient.volumes.read(...)`, and `knowledge_source_path` points to `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`. Pre-existing resources are explicitly acceptable \u2014 the gate proves *existence*, not *first-time creation*.\n\nIf a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{app_name}",
+      "{db_schema}",
+      "{default_warehouse}",
+      "{lakehouse_default_catalog}",
+      "{use_case_slug}"
+    ]
+  },
+  "41-mlflow_agent_tracing_uc.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_agent_tracing_uc\"`, `require_prior_gate: {prompt_id: \"uc_resources_foundation\", gate: \"UC resources ready\"}`.\n2. @genai-agents/foundation/01-mlflow-genai-foundation/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `mlflow_min_version: \"3.10.1\"`\n   - `enable_openai_autolog: true`\n   - `workspace_client_pool: true`\n   - `detect_environment_helper: true`\n   - `environments: [\"local_dev\", \"databricks_apps\", \"model_serving\", \"notebook\"]`\n3. @genai-agents/foundation/02-experiment-tracing-and-uc-storage/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `experiment_path: \"{mlflow_experiment_path}\"`\n   - `uc_catalog: \"{lakehouse_default_catalog}\"`\n   - `uc_schema: \"{db_schema}_agent\"`\n   - `warehouse_id: \"{default_warehouse}\"`\n   - `otel_table_prefix: \"{agent_resource_prefix}_otel\"`\n   - `enable_trace_decorator: true`\n   - `experiment_tags: [\"mlflow.promptRegistryLocation\"]`\n   - `emit_grant_sql: true`\n   - `verification: {test_trace_visible_in_uc: true, otel_tables_count: 4}`\n4. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_agent_tracing_uc\"`, `gate: \"Tracing live; UC OTel tables ready\"`, `captured: {mlflow_experiment_path}`.\n\n**Gate:** `Tracing live; UC OTel tables ready` \u2014 `mlflow[databricks] >= 3.10.1` installed, autolog enabled, experiment visible at `{mlflow_experiment_path}`, 4 UC OTel Delta tables created in `{lakehouse_default_catalog}.{db_schema}_agent`, test trace visible in UC."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{db_schema}",
+      "{default_warehouse}",
+      "{lakehouse_default_catalog}",
+      "{mlflow_experiment_path}",
+      "{use_case_slug}"
+    ]
+  },
+  "42-knowledge_assistant_create.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"knowledge_assistant_create\"`, `require_prior_gate: [{prompt_id: \"uc_resources_foundation\", gate: \"UC resources ready\"}, {prompt_id: \"agent_tool_selection\", gate: \"Agent tool plan ready\"}]`.\n2. @genai-agents/foundation/05-knowledge-assistant/SKILL.md \u2014 execute Step 5_0 (source-markdown staging only) \u2192 5a\u20135d. Params:\n   - `agent_tool_plan_ref: \"docs/agent_tool_plan.yaml\"`\n   - `ka_source: docs/agent_tool_plan.yaml.knowledge_assistant.ka_source`\n   - `run_only_if: docs/agent_tool_plan.yaml.knowledge_assistant.selected == true`\n   - `ka_display_name: \"{agent_app_name}-knowledge\"`  -- **idempotency key** for Step 5a get-or-create\n   - `volume_path: \"/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources\"`  -- set by F0\n   - `poll_until_ready: true`\n   - **Idempotency contract (whole skill):** every step must succeed cleanly on a second run with no input changes. Step 5_0 uses `overwrite=True` on file uploads. Step 5a does **get-or-create** on `ka_display_name` (re-uses the matching KA from `list_knowledge_assistants` instead of creating a duplicate). Step 5b does **get-or-create** on each knowledge source `display_name` (re-uses matching sources from `list_knowledge_sources`). Step 5c (`sync_knowledge_sources`) is incremental and safe to re-call. A second run must produce zero new KAs and zero new knowledge sources.\n   - **Step 5_0 responsibility (KA-specific):** stage source markdown into the F0-provisioned volume \u2014 branch (A) skip if the volume is already non-empty; branch (B) upload the contents of `ka_source` if it points to a local `.md` directory; branch (C) auto-generate a minimal corpus from `docs/design_prd.md` (extract any glossary, key-terms, or business-context sections \u2014 fall back to the PRD's executive summary if none are explicitly marked) plus `docs/agent_spec.yaml.agent.capabilities` and upload. Do **not** consult `state://DataSpec.*`: the Agents Accelerator visible path may not have run a Lakehouse track, so `## Resources` will be `optional: true` (set by `vibecoding-state.hydrate_from_files` in step 40). The `docs/*` files are the single source of truth for branch (C). **No schema or volume DDL** \u2014 if `volume_path` is unreachable, fail with a pointer to F0 (input_id 200).\n   - **Steps 5a\u20135d:** get-or-create KA \u2192 get-or-create `files` source at `volume_path` \u2192 sync \u2192 poll \u2192 capture handoff values.\n   - **Returns:** `knowledge_source_path`, `knowledge_source_file_count`, `knowledge_source_origin` (`pre_staged` | `local_dir` | `prd_generated`), `ka_endpoint_name`, `knowledge_assistant_id`, `knowledge_source_type`, `sync_status`. (`agent_schema` and `knowledge_source_volume` come from F0's state, not from this prompt.)\n3. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"knowledge_assistant_create\"`, `gate: \"KA READY\"`, `captured: {doc_qa_backend: \"knowledge_assistant\", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`.\n\n**Gate:** `KA READY` \u2014 `sync_status = READY`, `knowledge_source_file_count >= 1`, `ka_endpoint_name` and `knowledge_assistant_id` captured into state, KA reachable from a quick `WorkspaceClient.serving_endpoints.get()` smoke call.\n\nIf a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{db_schema}",
+      "{lakehouse_default_catalog}",
+      "{use_case_slug}"
+    ]
+  },
+  "43-track_a_agent_app_clone_framework.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"track_a_agent_app_clone_framework\"`, `require_prior_gate: [{prompt_id: \"mlflow_agent_tracing_uc\", gate: \"Tracing live; UC OTel tables ready\"}, {prompt_id: \"agent_tool_selection\", gate: \"Agent tool plan ready\"}]`.\n2. @genai-agents/tracks/A-custom-agent-apps/01-clone-and-run/SKILL.md \u2014 params:\n   - `template: \"agent-openai-advanced\"` (canonical: short-term + long-term Lakebase memory built in)\n   - `agent_name: \"{agent_app_name}\"`\n   - `install_deps: true`\n   - `start_dev_server: true`\n   - `walkthrough_project_structure: true`\n   - `smoke_test_prompt: \"Hello\"`\n3. @genai-agents/tracks/A-custom-agent-apps/02-agent-framework/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"docs/agent_spec.yaml\"`\n   - `agent_tool_plan_ref: \"docs/agent_tool_plan.yaml\"`\n   - `runtime_model_ref: \"docs/agent_tool_plan.yaml.runtime_config.llm\"`\n   - `config_file: \"config.yml\"`\n   - `model_config_keys: [\"llm_endpoint\", \"llm_api_base_url\", \"llm_api_mode\"]`\n   - `sdk: \"openai-agents-sdk\"`\n   - `option: \"B\"` (canonical for Databricks Apps: module-level `@mlflow.genai.agent_server.invoke` + `@stream` handlers; **not** `mlflow.pyfunc.ResponsesAgent`)\n   - `mlflow_experiment_path: \"{mlflow_experiment_path}\"`\n   - `streaming_runner: true`\n   - `verification: {mlflow_agent_spans_visible: true, invoke_handler_present: true, stream_handler_present: true}`\n   - The skill reads `agent.system_prompt` (paste verbatim into `Agent(instructions=...)`), `agent.capabilities[]` (chat-panel capability list), and `docs/agent_tool_plan.yaml.runtime_config.llm` (write `endpoint`, `api_base_url`, and `api_mode` into `config.yml` as `llm_endpoint`, `llm_api_base_url`, and `llm_api_mode`). No model endpoint may be hardcoded in Python.\n4. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"track_a_agent_app_clone_framework\"`, `gate: \"Agent framework live\"`.\n\n**Gate:** `Agent framework live` \u2014 template chat UI responds to \"Hello\" locally; `config.yml` contains `llm_endpoint`, `llm_api_base_url`, and `llm_api_mode` from `docs/agent_tool_plan.yaml.runtime_config.llm`; the agent uses `ModelConfig(development_config=\"config.yml\")` and `model=config.get(\"llm_endpoint\")`; MLflow AGENT spans are visible for `{agent_app_name}` at `{mlflow_experiment_path}`.\n\nIf a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{mlflow_experiment_path}",
+      "{use_case_slug}"
+    ]
+  },
+  "44-track_a_agent_ka_genie_tools.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"track_a_agent_ka_genie_tools\"`, `require_prior_gate: {prompt_id: \"track_a_agent_app_clone_framework\", gate: \"Agent framework live\"}`.\n2. @genai-agents/tracks/A-custom-agent-apps/03-tools-and-mcp/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"docs/agent_spec.yaml\"`\n   - `agent_tool_plan_ref: \"docs/agent_tool_plan.yaml\"`\n   - `selected_tools: \"docs/agent_tool_plan.yaml.selected_tools\"`\n   - `selected_mcp_servers: \"docs/agent_tool_plan.yaml.selected_mcp_servers\"`\n   - `resource_grants: \"docs/agent_tool_plan.yaml.resource_grants\"`\n   - `runtime_model_ref: \"docs/agent_tool_plan.yaml.runtime_config.llm\"`\n   - `model_grant_policy: \"Read the SCALAR value at docs/agent_tool_plan.yaml.runtime_config.llm.endpoint (e.g. 'databricks-claude-sonnet-4-6') and grant CAN_QUERY on THAT endpoint name when runtime_config.llm.provider == 'databricks'. NEVER grant on the literal YAML path string 'docs/agent_tool_plan.yaml.runtime_config.llm.endpoint' or 'docs/agent_spec.yaml.agent.model' \u2014 those are paths, not endpoint names. If the resolved value is empty or still wrapped in {...}, STOP and re-run prompt 39 (agent_tool_selection). Skip Gateway provisioning when provider == 'ai_gateway'.\"`\n   - `ka_endpoint_name`: read from state captured by `knowledge_assistant_create` (input_id 202) when `docs/agent_tool_plan.yaml.knowledge_assistant.selected == true`; otherwise `\"n/a\"`. KA is the only tool family whose ID flows through workshop state \u2014 every other family below is bring-your-own from the Tool Plan.\n   - `genie_space_id`: read from `docs/agent_tool_plan.yaml.selected_tools[? type == \"genie\"].meta.genie_space_id` when Genie was selected; otherwise `\"n/a\"`. Do NOT consume `{genie_space_id}` from a rendered global \u2014 Genie is bring-your-own at this point and no upstream Agents Accelerator step provisions it.\n   - Vector Search: read endpoint + index from `docs/agent_tool_plan.yaml.selected_tools[? type == \"vector_search\"].meta` (`endpoint`, `index`) when selected; otherwise skip the Vector Search tool family.\n   - UC Functions: read fully qualified function names from `docs/agent_tool_plan.yaml.selected_tools[? type == \"uc_function\"].target` when selected; otherwise skip.\n   - External MCP: read UC connection name and registry-backed candidate from `docs/agent_tool_plan.yaml.selected_mcp_servers[? type == \"external\"]` when selected; otherwise skip.\n   - If a required BYO field for a selected family is blank, missing, or still wrapped in `{...}`, STOP and ask the user \u2014 do not proceed with placeholder literals.\n   - `warehouse_id: \"{default_warehouse}\"`\n   - SQL MCP wiring uses `selected_mcp_servers[].meta.warehouse_id` and the read-only guardrails from `selected_tools[].guardrails`. Default policy: `readonly: true`; allowed statements `SELECT, DESCRIBE, EXPLAIN`; require fully qualified `catalog.schema.table` names; `CAN_USE` on the warehouse plus `USE_CATALOG`, `USE_SCHEMA`, and `SELECT` on each table in `selected_mcp_servers[].scope.allowed_tables`. Tool families not present in `selected_tools[]` (e.g. KA when `knowledge_assistant.selected: false`, Genie when not selected) are skipped, not failed.\n   - The configured model route is also a runtime resource. Include the entries from `docs/agent_tool_plan.yaml.resource_grants.databricks_yml.serving_endpoints[]` verbatim \u2014 those entries already carry the scalar endpoint name (e.g. `name: \"databricks-claude-sonnet-4-6\"`, `permission: \"CAN_QUERY\"`). Do NOT substitute the YAML-path string `docs/agent_spec.yaml.agent.model` or `docs/agent_tool_plan.yaml.runtime_config.llm.endpoint` for the endpoint name; those are file paths, not Databricks serving-endpoint names. The model route must be exposed to the app runtime through `config.yml` / `ModelConfig` keys (`llm_endpoint`, `llm_api_base_url`, `llm_api_mode`), again populated from the SCALAR `runtime_config.llm.endpoint` value, not by hardcoding the endpoint or base URL in Python.\n3. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"track_a_agent_ka_genie_tools\"`, `gate: \"Tools wired\"`.\n\n**Gate:** `Tools wired` - MLflow traces show TOOL spans for every selected tool in `docs/agent_tool_plan.yaml.selected_tools[]`; skipped tool families are marked skipped, not failed; SQL MCP smoke tests use read-only queries with fully qualified table names.\n\nIf a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{default_warehouse}",
+      "{genie_space_id}",
+      "{use_case_slug}"
+    ]
+  },
+  "45-track_a_agent_auth_memory.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"track_a_agent_auth_memory\"`, `require_prior_gate: {prompt_id: \"track_a_agent_ka_genie_tools\", gate: \"Tools wired\"}`.\n2. @genai-agents/tracks/A-custom-agent-apps/04-authentication/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `app_level_auth: \"service_principal\"`\n   - `user_level_auth: \"obo\"`\n   - `obo_helper: \"databricks_app.utils.get_user_workspace_client\"` (called inside `@invoke` / `@stream` handlers)\n   - `user_api_scopes:` derived from `docs/agent_tool_plan.yaml.resource_grants.app_yaml_oauth_scopes`, with default fallback `[\"serving.serving-endpoints\", \"sql\", \"unity-catalog\"]`. If Genie is selected, include `dashboards.genie`. If external MCP UC connections are selected, include `catalog.connections`.\n   - `reuse_detect_environment_helper: true`\n   - `verification: [\"obo_local\", \"sp_local\", \"user_api_scopes_in_app_yaml\"]`\n3. @genai-agents/tracks/A-custom-agent-apps/05-lakebase-memory/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `lakebase_instance: \"{lakebase_instance}\"`\n   - `lakebase_database: \"{lakebase_database}\"`\n   - `pattern: \"agent-openai-advanced\"` (canonical: two-layer memory \u2014 `AsyncDatabricksSession` for short-term, `LongTermMemory` for long-term)\n   - `embedding_endpoint: \"databricks-gte-large-en\"`\n   - `embedding_dims: 1024`\n   - `obo_scoped: true` (sessions instantiated inside `@invoke` via `get_user_workspace_client(http_request)`)\n   - `thread_id_resolver: \"request.custom_inputs.thread_id || request.conversation_id\"`\n   - `pre_llm_search_long_term: true`\n   - `post_llm_persist_facts: true`\n   - `graceful_degradation: true`\n   - `verification: {memory_persists_across_turns: true, long_term_recall_after_new_thread: true}`\n4. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"track_a_agent_auth_memory\"`, `gate: \"Auth + Memory verified\"`, `captured: {lakebase_instance, lakebase_database, embedding_endpoint, thread_id_strategy}`.\n\n**Gate:** `Auth + Memory verified` \u2014 both OBO and SP flows pass the local verification probes; same-thread turn 2 references turn 1 (short-term); a fact stated in thread A is recalled when starting a fresh thread B for the same user (long-term)."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{lakebase_database}",
+      "{lakebase_instance}",
+      "{use_case_slug}"
+    ]
+  },
+  "46-track_a_agent_eval_deploy.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"track_a_agent_eval_deploy\"`, `require_prior_gate: {prompt_id: \"track_a_agent_auth_memory\", gate: \"Auth + Memory verified\"}`.\n2. @genai-agents/tracks/A-custom-agent-apps/06-evaluation/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `agent_tool_plan_ref: \"docs/agent_tool_plan.yaml\"`\n   - `mlflow_experiment_path: \"{mlflow_experiment_path}\"`\n   - `runtime_model_ref: \"docs/agent_tool_plan.yaml.runtime_config.llm\"`\n   - `runner_cmd: \"uv run agent-evaluate\"`\n   - `dataset_path: \"tests/eval_dataset.json\"`\n   - The skill reads `governance.verification.smoke_test_cases[]` (Spec, use-case shaped) UNIONED with `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` (Plan, one per `selected_tools[]` entry) for the developer-loop test cases. Tool families absent from `selected_tools[]` contribute zero smoke tests.\n3. @genai-agents/tracks/A-custom-agent-apps/07-deploy-and-query/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `target: \"databricks_apps\"`\n   - `runtime_model_ref: \"docs/agent_tool_plan.yaml.runtime_config.llm\"`\n   - `ai_gateway_required: false`\n   - `post_deploy_checks: [\"curl_query\", \"python_sdk_query\", \"traces_visible_in_mlflow\"]`\n4. **Inline verification:** `databricks apps get \"{agent_app_name}\" --output json | jq -r '.status.state'` must return `RUNNING` before exit.\n5. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"track_a_agent_eval_deploy\"`, `gate: \"Agent App RUNNING\"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions above; any positive condition flips the Gate to `Smoke regressed \u2014 block` and refuses to advance.\n\n**Gate:** `Agent App RUNNING` \u2014 smoke eval pass/fail visible in MLflow AND none of the four fail-closed conditions above are tripped (no L1 scorer below floor, `correctness/mean` at or above floor, no `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission denied / empty tool output, no open `mlflow_eval_known_quality_issues[]` targeting `first_scored_eval`); agent app deployed; curl + Python SDK calls against `<agent_app_url>/invocations` succeed; traces from the deployed app show up at `{mlflow_experiment_path}`. The deployed app uses the configured model route from `runtime_config.llm`; the core gate does not create, configure, or require AI Gateway."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{mlflow_experiment_path}",
+      "{use_case_slug}"
+    ]
+  },
+  "47-appkit_agent_app_proxy_chat.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"appkit_agent_app_proxy_chat\"`, `require_prior_gate: {prompt_id: \"track_a_agent_eval_deploy\", gate: \"Agent App RUNNING\"}`.\n2. @apps_lakebase/skills/06d-appkit-agent-app-proxy/SKILL.md \u2014 params:\n   - `app_dir: \"apps_lakebase/{app_name}\"`\n   - `agent_app_name: \"{agent_app_name}\"`\n   - `agent_app_url: \"{agent_app_url}\"`\n   - `chat_route: \"/api/chat\"`\n   - `chat_page: \"/chat\"`\n   - `databricks_yml_resource: {type: \"app\", name: \"agent-backend\", permission: \"CAN_USE\"}`\n   - `app_yaml_env: {AGENT_APP_URL: {valueFrom: \"agent-backend\"}}`\n   - `streaming: \"dual-format\"`\n   - `obo_forwarding: true` (verbatim `x-forwarded-access-token`)\n   - `verification: {cmd: \"bash apps_lakebase/skills/06d-appkit-agent-app-proxy/scripts/test-agent-app-proxy.sh --appkit-app {app_name} --agent-app {agent_app_name}\", behavior: \"3 probes pass\"}`\n   - Wires the AppKit frontend to the Agent App backend via a vanilla `server.extend()` proxy with SP + OBO auth layers. Does **not** use the Serving plugin \u2014 the backend is a Databricks App, not a Model Serving endpoint.\n3. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"appkit_agent_app_proxy_chat\"`, `gate: \"AppKit \u2194 Agent App proxy live\"`.\n\n**Gate:** `AppKit \u2194 Agent App proxy live` \u2014 streaming chat works on `/chat` against the Agent App; the 3-probe e2e test (direct agent, AppKit SP-only, AppKit with forwarded OBO) passes."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_app_url}",
+      "{app_name}"
+    ]
+  },
+  "48-appkit_chat_feedback_mlflow.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"appkit_chat_feedback_mlflow\"`, `require_prior_gate: {prompt_id: \"appkit_agent_app_proxy_chat\", gate: \"AppKit \u2194 Agent App proxy live\"}`.\n2. @apps_lakebase/skills/07-appkit-chat-history/SKILL.md \u2014 params:\n   - `app_dir: \"apps_lakebase/{app_name}\"`\n   - `lakebase_host: \"{lakebase_host}\"`\n   - `sidebar_enabled: true`\n   - `navigation: \"by_conversation\"`\n   - `identity: \"OBO\"`\n   - `auto_title: true`\n   - `ephemeral_fallback: true`\n   - `streaming_proxy: \"two-app-agent-proxy\"` (proxy route streams via `/api/chat` from `06d-appkit-agent-app-proxy`, forwards OBO to the Agent App, persists messages, and captures MLflow `trace_id` for feedback linking)\n3. @genai-agents/sdlc/04c-end-user-feedback/SKILL.md \u2014 params:\n   - `agent_app_dir: \"{agent_app_name}\"`\n   - `feedback_route: \"/feedback\"`\n   - `trace_id_source: \"invoke_response_field\"` (return `trace_id` from `@invoke`; for `@stream` send a final `{type: \"done\", trace_id}` SSE event)\n   - `assessment_name: \"user_feedback\"`\n   - `source_type: \"HUMAN\"`\n   - `user_id_resolver: \"OBO\"`\n   - `dimensions: [\"accuracy\", \"helpfulness\", \"relevance\"]`\n   - `support_update_delete: true`\n   - Owns the **Python `mlflow.log_feedback(...)` write-path** in the Track A Agent App.\n4. @apps_lakebase/skills/08-appkit-feedback/SKILL.md \u2014 params:\n   - `app_dir: \"apps_lakebase/{app_name}\"`\n   - `mlflow_feedback_experiment_name: \"{mlflow_feedback_experiment_path}\"`\n   - `mlflow_api: \"Assessments\"`\n   - `auth: \"client.config.authenticate()\"`\n   - `controls: [\"thumbs_up\", \"thumbs_down\"]`\n   - `link_to_mlflow_traces: true`\n   - `python_contract: \"genai-agents/sdlc/04c-end-user-feedback\"`\n   - `capture_into_state: [\"mlflow_feedback_experiment_path\"]`\n5. **Inline steps:** `databricks experiments create --name \"{mlflow_feedback_experiment_path}\"` (capture path), then deploy and run E2E including idle resilience (wait 3\u20135 min then re-test). Verify the round-trip: send a chat turn, click \ud83d\udc4e, refresh the trace in the MLflow UI and confirm the `user_feedback=false` assessment with `source_type=HUMAN, source_id=<your email>` is attached.\n6. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"appkit_chat_feedback_mlflow\"`, `gate: \"Deployed + idle resilience passed + 04c round-trip verified\"`, `captured: {mlflow_feedback_experiment_path}`.\n\n**Gate:** `Deployed + idle resilience passed + 04c round-trip verified` \u2014 sidebar + history works; thumbs-up/down linked to MLflow traces via `mlflow.log_feedback(...)` from the Track A Agent App; an end-to-end \ud83d\udc4e round-trip shows up in the MLflow trace UI; the app survives 3\u20135 min idle."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{app_name}",
+      "{lakebase_host}",
+      "{mlflow_feedback_experiment_path}"
+    ]
+  },
+  "49-mlflow_prompt_registry.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_prompt_registry\"`, `require_prior_gate: {prompt_id: \"mlflow_agent_tracing_uc\", gate: \"Tracing live; UC OTel tables ready\"}`.\n2. @genai-agents/sdlc/01-prompt-registry/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `uc_catalog: \"{lakehouse_default_catalog}\"`\n   - `uc_schema: \"{db_schema}_agent\"`\n   - `aliases: [\"@production\", \"@staging\"]`\n   - `verify_loader: \"prompts://\"`\n3. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_prompt_registry\"`, `gate: \"Prompts registered in UC; @production and @staging aliases set\"`.\n\n**Gate:** `Prompts registered in UC; @production and @staging aliases set` \u2014 every prompt the agent loads is now governed in UC and addressable via `prompts://...@alias` instead of inline strings."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{db_schema}",
+      "{lakehouse_default_catalog}"
+    ]
+  },
+  "50-mlflow_evaluation_datasets.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_evaluation_datasets\"`, `require_prior_gate: {prompt_id: \"mlflow_prompt_registry\", gate: \"Prompts registered in UC; @production and @staging aliases set\"}`.\n2. @genai-agents/sdlc/02-evaluation-datasets/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `agent_tool_plan_ref: \"docs/agent_tool_plan.yaml\"`\n   - `app_spec_ref: \"state://AppSpec\"`\n   - `target_table: \"{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks\"`\n   - `min_rows: 20`\n   - The skill reads `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` (every journey must have at least one benchmark row), AND `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` (one tool-shaped row appended per entry; tool families with `selected: false` contribute zero rows).\n3. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_evaluation_datasets\"`, `gate: \"\u2265 20 benchmark rows; every user journey covered\"`.\n\n**Gate:** `\u2265 20 benchmark rows; every user journey covered` \u2014 the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` is the single source of truth for scorers (input_id 211) and eval runs (input_id 212). Coverage assertion holds across THREE axes: every `agent.benchmark_seeds.coverage_buckets[]`, every `ui.user_journeys[]`, AND every `verification.tool_smoke_tests[]` entry from the Tool Plan has \u2265 1 row."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{db_schema}",
+      "{lakehouse_default_catalog}"
+    ]
+  },
+  "51-mlflow_scorers_and_judges.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_scorers_and_judges\"`, `require_prior_gate: {prompt_id: \"mlflow_evaluation_datasets\", gate: \"\u2265 20 benchmark rows; every user journey covered\"}`.\n2. @genai-agents/sdlc/03-scorers-and-judges/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `agent_tool_plan_ref: \"docs/agent_tool_plan.yaml\"`\n   - `mlflow_experiment_path: \"{mlflow_experiment_path}\"`\n   - `judge_endpoint: \"{llm_role_endpoints.llm_judge_default.endpoint}\"` (every `make_judge` call routes through the resolved `llm_judge_default` role binding \u2014 never the raw `{llm_endpoint}`)\n   - `builtins: [{name: \"safety\", sampling: 1.0, threshold: 0.95}, {name: \"relevance\", threshold: 0.8}]`\n   - The skill reads the GENERIC suite from `governance.scorer_suite.guidelines[]`, `governance.scorer_suite.custom_scorer_rules[]`, `governance.scorer_suite.judge_questions[]` (use-case shaped, tool-agnostic) AND the TOOL-SHAPED suite from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` (derived mechanically from `selected_tools[]`). The two are unioned and deduped.\n   - `RetrievalGroundedness` is registered ONLY if KA or Vector Search appears in `selected_tools[]`. `ka_citation_present` only if KA selected. `genie_sql_correctness` and `genie_response_grounded_in_table` only if Genie selected. `sql_readonly_compliance` and `sql_fully_qualified_names` only if SQL MCP selected. `uc_function_signature_match` only if UC Functions selected. There is NO defaulting for tool families absent from `selected_tools[]`.\n3. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_scorers_and_judges\"`, `gate: \"Scorer suite registered with thresholds\"`.\n\n**Gate:** `Scorer suite registered with thresholds` \u2014 every scorer the use case needs (builtins + Guidelines + custom code scorers + LLM judges from the Spec) UNIONED with every tool-shaped scorer hint from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` is registered against `{mlflow_experiment_path}` with explicit thresholds. No `RetrievalGroundedness` / `ka_citation_present` / `genie_*` / `sql_*` scorer registers unless its tool family is in `selected_tools[]`. Ready for the first scored eval (input_id 212)."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{llm_endpoint}",
+      "{mlflow_experiment_path}"
+    ]
+  },
+  "52-mlflow_evaluation_runs_and_iteration.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_evaluation_runs_and_iteration\"`, `require_prior_gate: {prompt_id: \"mlflow_scorers_and_judges\", gate: \"Scorer suite registered with thresholds\"}`.\n   This prompt maps to the canonical `first_scored_eval` role. Before any benchmark run, `enter` MUST evaluate the following preflight checks (a halt unblocks only via a `state_overrides[]` entry with `gate_type: preflight_check` whose `affected_state_field` matches the failing clause):\n   ```yaml\n   preflight_checks:\n     - system_prompt_review.complete == true\n     - count(system_prompt_review.must_do_worked_examples) >= count(agent.must_do)\n     - count(system_prompt_review.must_not_do_worked_examples) >= count(agent.must_not_do)\n   ```\n   The `## System Prompt Review` block in the live state file is populated by THIS prompt: read every `agent.must_do[]` clause and append a `must_do_worked_examples[]` entry with `rule`, `positive_example`, and `expected_behavior`; do the same for every `agent.must_not_do[]` clause into `must_not_do_worked_examples[]` with `rule`, `negative_example`, and `refusal_or_correction`. Set `complete: true`, stamp `reviewed_at` (ISO8601 UTC), and write `reviewed_by` (operator email). The audit MUST happen BEFORE step 2 (`@genai-agents/sdlc/04-evaluation-runs/SKILL.md`) runs.\n2. @genai-agents/sdlc/04-evaluation-runs/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_tool_plan_ref: \"docs/agent_tool_plan.yaml\"`\n   - `mlflow_experiment_path: \"{mlflow_experiment_path}\"`\n   - `benchmarks_table: \"{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks\"`\n   - `predict_fn_from_prompt: \"track_a_agent_auth_memory\"`\n   - `scorer_suite_from_prompt: \"mlflow_scorers_and_judges\"`\n   - `record_per_scorer_table: true`\n   - The skill reads `docs/agent_tool_plan.yaml.selected_tools[]` to scope failure-shape classification \u2014 `primary_shape: tool_call_empty` and the `tool_call_empty` routing branch only fire for tools present in `selected_tools[]`. Tools that were never wired cannot fail.\n3. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_evaluation_runs_and_iteration\"`, `gate: \"<Eval thresholds met | Eval regressed \u2014 iterate>\"`, `captured: {per_scorer_pass_fail_table, failing_scorers_if_regressed, failure_shape_classification, safety_buffer, predict_fn_exception_count, predict_fn_sentinel_count_per_run, judges_with_silent_aggregation_dropouts, mlflow_eval_predict_fn_signature}`.\n\n**Captured failure-shape schema (mandatory in `captured` at `exit`):**\n\n```yaml\nfailure_shape_classification:\n  primary_shape: enum                # one of: instruction | tool_call_empty | retrieval | safety | other\n  failing_scorers_if_regressed: [string]\n  l1_failures: [string]              # L1 scorer names below floor (e.g. safety, relevance, correctness)\n  failing_trace_ids:\n    - trace_id: string\n      failing_scorers: [string]\n      predict_fn_status: string      # ok | exception | sentinel | dropout\nsafety_buffer:\n  <scorer_name>: float               # mean - threshold (signed; negative = below floor)\npredict_fn_exception_count: integer\npredict_fn_sentinel_count_per_run: integer\njudges_with_silent_aggregation_dropouts: [string]\nmlflow_eval_predict_fn_signature: string\n```\n\n**Iteration routing (decision tree at `exit` when Gate is `Eval regressed \u2014 iterate`):**\n\n1. If `l1_failures` is non-empty \u2192 route to **architecture / system-prompt redesign** (do NOT route to Skill 08b \u2014 instruction-only iteration cannot recover an L1 scorer that is below floor). Open the failure-shape redesign loop instead.\n2. Else if `primary_shape == \"instruction\"` AND `l1_failures` is empty \u2192 route to @genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md (the next prompt, `mlflow_logged_model_uc_registration`, gates step 2 on exactly this branch).\n3. Else if `primary_shape == \"tool_call_empty\"` \u2192 route to @genai-agents/sdlc/06-direct-trace-debug/SKILL.md, scoped to the specific tool from `selected_tools[]` that returned empty (the `failing_trace_ids[].failing_scorers` and `selected_tools[]` together identify which tool to debug \u2014 never \"tool failed\" in the generic).\n4. Else if `primary_shape == \"retrieval\"` \u2192 route to **retrieval tuning** (chunking / embedding / top-k / filters in the KA tool or vector index). This route ONLY exists when KA or Vector Search is in `selected_tools[]`; if neither retrieval tool was selected, `primary_shape` cannot be `retrieval` and this branch never fires.\n5. Else (`safety`, `other`) \u2192 escalate to the agent owner; do NOT auto-iterate.\n\n**Gate:** either `Eval thresholds met` OR `Eval regressed \u2014 iterate` \u2014 record which scorers failed AND the routing branch fired (via `failure_shape_classification.primary_shape` and `l1_failures`); the next prompt (`mlflow_logged_model_uc_registration`) gates only the instruction-shaped, no-L1-failure branch via Skill 08b \u2014 direct tool/retrieval debugging or architecture redesign handles the rest."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{db_schema}",
+      "{lakehouse_default_catalog}",
+      "{mlflow_experiment_path}"
+    ]
+  },
+  "53-mlflow_human_review_and_signoff.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_human_review_and_signoff\"`, `require_prior_gate: {prompt_id: \"mlflow_evaluation_runs_and_iteration\", gate: \"Eval thresholds met | Eval regressed \u2014 iterate\"}`.\n2. @genai-agents/sdlc/04-evaluation-runs/SKILL.md op `labeling_session` \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `mlflow_experiment_path: \"{mlflow_experiment_path}\"`\n   - `trace_sample_size: 15`\n   - `sync_back_into: \"{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks\"`\n   - `sync_fields: [\"expectations\", \"human_assessments\"]`\n   - The skill reads `agent.reviewer_role` to pre-fill the labeling-session reviewer-role field.\n3. @genai-agents/sdlc/02-evaluation-datasets/references/benchmark-generation.md section `11-issue-focused-subset` \u2014 params:\n   - `source: \"negative_feedback_traces\"`\n   - `tag: {provenance: \"issue_failing_trace\"}`\n   - `regression_pass_rate: 1.0`\n4. @genai-agents/sdlc/04b-stakeholder-signoff/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `one_page_metrics_report: true`\n   - `walkthrough_rows: {failing: 5, passing: 5, source: \"latest_eval_run\"}`\n   - `compliance_checklist: true`\n   - `decision_record_path: \"/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md\"`\n   - `required_fields: [\"Decision: APPROVED\", \"rollback_trigger\"]`\n   - `capture_into_state: [\"signoff_decision\"]`\n   - The skill reads `governance.monitoring.rollback_trigger_example` for the hint wording.\n5. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_human_review_and_signoff\"`, `gate: \"<Signoff APPROVED | Signoff REJECTED \u2014 block promotion>\"`, `captured: {signoff_decision}`.\n\n**Gate:** `Signoff APPROVED` (or `Signoff REJECTED \u2014 block promotion`) \u2014 decision markdown committed to the UC volume; CI promotion gates on `Decision: APPROVED`."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{db_schema}",
+      "{lakehouse_default_catalog}",
+      "{mlflow_experiment_path}",
+      "{signoff_decision}"
+    ]
+  },
+  "54-mlflow_logged_model_uc_registration.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_logged_model_uc_registration\"`, `require_prior_gate: {prompt_id: \"mlflow_human_review_and_signoff\", gate: \"Signoff APPROVED\"}`, `hard_assert: {var: \"signoff_decision\", equals: \"APPROVED\"}`.\n\n2. **(Optional, only if `failing_scorers_if_regressed` is non-empty AND `failure_shape == instruction` AND no L1 scorer failure)** @genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md \u2014 params:\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `prompt_ref: \"prompts:/{lakehouse_default_catalog}.{db_schema}_agent.system_instructions@production\"`\n   - `target_scorers: <from first_scored_eval failing_scorers_if_regressed>`\n   - `rerun_prompt_role: \"first_scored_eval\"`\n   - `write_alias: \"@staging\"`\n   - `promote_if: \"all_target_scorers_meet_or_beat_baseline_on_full_dataset\"`\n   - `promote_from: \"@staging\"`\n   - `promote_to: \"@production\"`\n   - `reflection_lm_role: \"reflection_lm\"`\n   - `reflection_lm_endpoint: \"{llm_role_endpoints.reflection_lm.endpoint}\"` (the diff-summary helper routes through the resolved `reflection_lm` role binding \u2014 never the raw `{llm_endpoint}`)\n   - `preflight_checks: [\"reflection_lm_large_context_probe\"]`\n   - `capture_into_state: [\"prompt_iteration_ran\", \"prompt_handauthoring_iterations\", \"prompt_handauthoring_template_diff_summaries\"]`\n\n3. @genai-agents/sdlc/05-logged-model-and-uc-registration/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `uc_model: \"{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}\"`\n   - `promotion_alias: \"@champion\"`\n   - `promote_if: \"eval_scores_ge_prior_champion\"`\n\n4. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_logged_model_uc_registration\"`, `gate: \"@champion set\"`, `captured: {prompt_iteration_ran}`.\n\n**Gate:** `@champion set` \u2014 the agent is logged via `mlflow.models.log_model`, registered at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}`, and the `@champion` alias is moved to the new version IFF eval scores are \u2265 the prior champion. Promotion is hard-asserted on `signoff_decision == APPROVED` from input_id 213."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{db_schema}",
+      "{lakehouse_default_catalog}",
+      "{llm_endpoint}",
+      "{prompt_iteration_ran}"
+    ]
+  },
+  "55-mlflow_gateway_and_deployment.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_gateway_and_deployment\"`, `require_prior_gate: {prompt_id: \"mlflow_logged_model_uc_registration\", gate: \"@champion set\"}`, `hard_assert: {var: \"signoff_decision\", equals: \"APPROVED\"}`.\n\n2. @genai-agents/foundation/04-ai-gateway/SKILL.md \u2014 params:\n   - `mode: \"preprovisioned_or_skip\"`\n   - `gateway_name: \"{agent_app_name}-gateway\"`\n   - `backing_model: \"{llm_role_endpoints.agent_chat.endpoint}\"`\n   - `required_precondition: \"AI Gateway endpoint already exists OR public admin API is available\"`\n   - `skip_if_unavailable: true`\n   - `capture_into_state: [\"ai_gateway_endpoint\", \"ai_gateway_status\"]`\n\n3. @genai-agents/sdlc/06-deployment-and-automation/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `tool: \"databricks_asset_bundles\"`\n   - `customize: [\"databricks.yml\", \"app.yaml\"]`\n   - `env: {MLFLOW_ACTIVE_MODEL_ID: \"auto\", LLM_GATEWAY_BASE_URL: \"{ai_gateway_endpoint}\", LLM_GATEWAY_MODEL: \"{agent_app_name}-gateway\"}`\n   - `propagate_header: {name: \"databricks_request_id\", source: \"mlflow_trace_request_id\"}`\n   - `block_promotion_if_missing: \"/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md :: 'Decision: APPROVED'\"`\n   - `warehouse_id: \"{default_warehouse}\"`\n\n4. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_gateway_and_deployment\"`, `gate: \"Optional gateway route configured or skipped\"`, `captured: {ai_gateway_endpoint, ai_gateway_status, agent_app_url, agent_app_name}`.\n\n**Gate:** `Optional gateway route configured or skipped` \u2014 if a pre-provisioned AI Gateway endpoint exists, the agent app is configured to use it and `ai_gateway_endpoint` is captured. If no endpoint or public admin API is available, the prompt records `ai_gateway_status: \"skipped_unavailable\"` and leaves the core Track A raw model route intact."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{ai_gateway_endpoint}",
+      "{db_schema}",
+      "{default_warehouse}",
+      "{lakehouse_default_catalog}"
+    ]
+  },
+  "56-mlflow_production_monitoring_and_debugging.md": {
+    "class": "B",
+    "verbatim_substrings": [
+      "**Invoke skills (in order):**\n\n1. `genai-agents/vibecoding-state` op `enter` \u2014 params: `prompt_id: \"mlflow_production_monitoring_and_debugging\"`, `require_prior_gate: {prompt_id: \"mlflow_gateway_and_deployment\", gate: \"gateway live; DAB-deployed\"}`.\n\n2. @genai-agents/sdlc/07-production-monitoring/SKILL.md \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `otel_prefix: \"{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_\"`\n   - `alerts_from_reference: {path: \"references/monitoring-dashboard-queries.md\", section: \"6b\"}`\n   - The skill reads `governance.scorer_suite.production_scorers[]` for continuous-eval sampling and `governance.monitoring.required_alerts[]` for the alert set.\n\n3. @genai-agents/tracks/A-custom-agent-apps/08-debugging/SKILL.md section `agent-as-judge-debugging` \u2014 params:\n   - `agent_name: \"{agent_app_name}\"`\n   - `agent_spec_ref: \"state://AgentSpec\"`\n   - `categorizer_endpoint: \"{llm_role_endpoints.failure_categorizer.endpoint}\"` (the `make_judge` failure-categorizer call routes through the resolved `failure_categorizer` role binding \u2014 never the raw `{llm_endpoint}`)\n   - `otel_annotations_table: \"{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations\"`\n   - `filter: {value_lt: 0.7, window: \"7d\"}`\n   - `write_assessment: \"agent_failure_root_cause\"`\n   - `cluster_top_n: 5`\n   - `action_routing: {instruction: \"queue_prompt_optimization\", retrieval: \"queue_retrieval_tuning\", tool: \"queue_tool_fix\"}`\n   - The skill reads `governance.scorer_suite.primary_scorer` to set `filter.assessment_name`.\n\n4. `genai-agents/vibecoding-state` op `exit` \u2014 params: `prompt_id: \"mlflow_production_monitoring_and_debugging\"`, `gate: \"alerts wired; agent-as-judge running\"`, `captured: {production_alerts_configured, agent_failure_root_cause_writes_observed}`.\n\n**Gate:** `alerts wired; agent-as-judge running` \u2014 continuous-eval scorers sampling production traces against `governance.scorer_suite.production_scorers[]`, \u2265 4 SQL alerts configured (drawn from `governance.monitoring.required_alerts[]` and the `references/monitoring-dashboard-queries.md` section `6b` recipes), and `agent_failure_root_cause` rows being written to `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations` on low-scoring traces, with each cluster dispatched to the correct follow-up track (instruction \u2192 prompt iteration; retrieval \u2192 retrieval tuning; tool \u2192 tool fix)."
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{db_schema}",
+      "{lakehouse_default_catalog}",
+      "{llm_endpoint}"
+    ]
+  },
+  "99-activation_app_design.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "**Gate:** `Analytics app designed`"
+    ],
+    "placeholders": [
+      "{analytics_ui_design}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-activation_build_wire.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "**Gate:** `Analytics app built (mock)`"
+    ],
+    "placeholders": [
+      "{2}",
+      "{app_dir}",
+      "{databricks_cli_profile}",
+      "{f}",
+      "{name}",
+      "{srv}",
+      "{use_case_slug}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-activation_deploy_validate.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "drift",
+      "**Gate:** `Activation app deployed + validated`"
+    ],
+    "placeholders": [
+      "{2}",
+      "{databricks_cli_profile}",
+      "{f}",
+      "{genie_space_id}",
+      "{id}",
+      "{name}",
+      "{srv}",
+      "{use_case_slug}",
+      "{user_app_name}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-activation_reverse_sync.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "drift",
+      "**Gate:** `Synced tables live`"
+    ],
+    "placeholders": [
+      "{fmt}",
+      "{id}",
+      "{lakehouse_default_catalog}",
+      "{op_name}",
+      "{synced_table_id}",
+      "{use_case_slug}",
+      "{user_app_name}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-activation_table_design.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "no-create invariant",
+      "drift",
+      "**Gate:** `Synced tables planned`"
+    ],
+    "placeholders": [
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakebase_instance_name}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{use_case_slug}",
+      "{user_app_name}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-activation_wire_lakebase.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Analytics app live data (local)`"
+    ],
+    "placeholders": [
+      "{databricks_cli_profile}",
+      "{lakebase_service}",
+      "{use_case_slug}",
+      "{user_app_name}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-agent_framework.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<agent_app_root>/.vibecoding-state.md",
+      "body of the bundle job",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Agent endpoint READY`"
+    ],
+    "placeholders": [
+      "{catalog}",
+      "{file_id}",
+      "{folder_id}",
+      "{gold_schema}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{model_name}",
+      "{o}",
+      "{schema}",
+      "{use_case_slug}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-aibi_dashboard.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "databricks.yml not found",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "fails the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "extract-back",
+      "Extract back",
+      "non-dev",
+      "persisted",
+      "Reproducible",
+      "drift",
+      "orphan",
+      "openAsset",
+      "readAssetById",
+      "**Gate:** `Dashboard deployed`"
+    ],
+    "placeholders": [
+      "{dashboard_id}",
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-appkit_agent_app_proxy_chat.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `AppKit \u2194 Agent App proxy live`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_app_url}",
+      "{app_name}",
+      "{workspace_url}"
+    ]
+  },
+  "99-appkit_chat_feedback_mlflow.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Deployed + idle resilience passed + 04c round-trip verified`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{app_name}",
+      "{lakebase_host}",
+      "{mlflow_feedback_experiment_path}",
+      "{user_app_name}",
+      "{workspace_url}"
+    ]
+  },
+  "99-bronze_layer_creation.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "body of the bundle job",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "no-create invariant",
+      "CREATE CATALOG",
+      "DEFAULT` column clause",
+      "**Gate:** `Bronze layer live`"
+    ],
+    "placeholders": [
+      "{chapter_3_lakehouse_catalog}",
+      "{chapter_3_lakehouse_schema}",
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-cursor_copilot_ui_design.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `App scaffolded + UI authored (deploy + verify deferred to step 05)`"
+    ],
+    "placeholders": [
+      "{2}",
+      "{databricks_cli_profile}",
+      "{f}",
+      "{http_code}",
+      "{name}",
+      "{srv}",
+      "{use_case_slug}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-deploy_databricks_app.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `App deployed (SDK SNAPSHOT) + live URL verified behind OAuth`"
+    ],
+    "placeholders": [
+      "{2}",
+      "{databricks_cli_profile}",
+      "{f}",
+      "{name}",
+      "{srv}",
+      "{use_case_slug}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-deploy_di_assets.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "databricks.yml not found",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "just-in-time",
+      "serialized_space",
+      "metric_views",
+      "data-rooms",
+      "extract-back",
+      "non-dev",
+      "persisted",
+      "Reproducible",
+      "drift",
+      "orphan",
+      "readAssetById",
+      "benchmark",
+      "**Gate:** `Semantic layer assets deployed`"
+    ],
+    "placeholders": [
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{id}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{project}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-deploy_lakehouse_assets.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "persisted",
+      "**Gate:** `Lakehouse assets deployed`"
+    ],
+    "placeholders": [
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-genie_space.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "databricks.yml not found",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "fails the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "just-in-time",
+      "serialized_space",
+      "metric_views",
+      "data-rooms",
+      "extract-back",
+      "extract back",
+      "non-dev",
+      "persisted",
+      "Reproducible",
+      "drift",
+      "orphan",
+      "benchmark",
+      "**Gate:** `Genie Space live`"
+    ],
+    "placeholders": [
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{id}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{param}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-gold_layer_design.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "population_strategy",
+      "just-in-time",
+      "DESIGN_GAP_ANALYSIS.md",
+      "Upstream cross-reference",
+      "**Gate:** `Gold design complete`"
+    ],
+    "placeholders": [
+      "{domain}",
+      "{gold_design_path}",
+      "{table}",
+      "{use_case_file_prefix}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-gold_layer_pipeline.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "saveAsTable",
+      "validate_gold",
+      "DEFAULT` column clause",
+      "column inventory",
+      "DESCRIBE TABLE",
+      "persisted",
+      "**Gate:** `Gold layer live`"
+    ],
+    "placeholders": [
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-knowledge_assistant_create.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<agent_app_root>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `KA READY`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{db_schema}",
+      "{ka_name}",
+      "{lakehouse_default_catalog}",
+      "{use_case_slug}",
+      "{workspace_url}"
+    ]
+  },
+  "99-mlflow_gateway_and_deployment.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<agent_app_root>/.vibecoding-state.md",
+      "Do not fall back to direct SQL",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "drift",
+      "**Gate:** `Optional gateway route configured or skipped`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{ai_gateway_endpoint}",
+      "{db_schema}",
+      "{default_warehouse}",
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{workspace_url}"
+    ]
+  },
+  "99-mlflow_production_monitoring_and_debugging.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<agent_app_root>/.vibecoding-state.md",
+      "Do not fall back to direct SQL",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "drift",
+      "**Gate:** `alerts wired; agent-as-judge running`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{agent_resource_prefix}",
+      "{db_schema}",
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{llm_endpoint}",
+      "{mlflow_experiment_path}",
+      "{o}",
+      "{workspace_url}"
+    ]
+  },
+  "99-setup_lakebase.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Lakebase package + app.yaml configured, project provisioned + bound (REST)`"
+    ],
+    "placeholders": [
+      "{APP_NAME}",
+      "{databricks_cli_profile}",
+      "{use_case_slug}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-silver_layer_sdp.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "source_linked_deployment",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "DEFAULT` column clause",
+      "column inventory",
+      "DESCRIBE TABLE",
+      "Contract test",
+      "persisted",
+      "**Gate:** `Silver layer live`"
+    ],
+    "placeholders": [
+      "{bronze_schema}",
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{lakehouse_default_catalog}",
+      "{o}",
+      "{use_case_slug}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-sync_from_lakebase.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "listFiles",
+      "saveAsTable",
+      "**Gate:** `Lakebase->lakehouse sync live`"
+    ],
+    "placeholders": [
+      "{default_warehouse}",
+      "{enable_lakebase_cdf}",
+      "{lakebase_uc_catalog_name}",
+      "{lakehouse_default_catalog}",
+      "{tbl}",
+      "{user_app_name}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-track_a_agent_app_clone_framework.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<AGENT_APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Agent framework live`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{mlflow_experiment_path}",
+      "{use_case_slug}",
+      "{user_schema_prefix}",
+      "{workspace_url}"
+    ]
+  },
+  "99-track_a_agent_auth_memory.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<agent_app_root>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Auth + Memory verified`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{lakebase_database}",
+      "{lakebase_instance}",
+      "{use_case_slug}",
+      "{workspace_url}"
+    ]
+  },
+  "99-track_a_agent_eval_deploy.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<agent_app_root>/.vibecoding-state.md",
+      "Do not fall back to direct SQL",
+      "databricks.yml not found",
+      "NOT sufficient",
+      "bundle editor",
+      "bundle-editor",
+      "escape hatch",
+      "FAILS the gate",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "drift",
+      "**Gate:** `Agent App RUNNING`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{file_id}",
+      "{folder_id}",
+      "{host}",
+      "{mlflow_experiment_path}",
+      "{o}",
+      "{use_case_slug}",
+      "{workspace_url}"
+    ]
+  },
+  "99-track_a_agent_ka_genie_tools.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<agent_app_root>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Tools wired`"
+    ],
+    "placeholders": [
+      "{agent_app_name}",
+      "{default_warehouse}",
+      "{genie_space_id}",
+      "{use_case_slug}",
+      "{workspace_url}"
+    ]
+  },
+  "99-usecase_plan.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<dp_bundle_root>/.vibecoding-state.md",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "os.path.exists",
+      "listFiles",
+      "persisted",
+      "**Gate:** `Use-case plan complete`"
+    ],
+    "placeholders": [
+      "{lakehouse_default_catalog}",
+      "{usecase_plan_path}",
+      "{user_schema_prefix}"
+    ]
+  },
+  "99-wire_ui_agent.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "Preflight acknowledgement",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Agent wired to UI`"
+    ],
+    "placeholders": [
+      "{2}",
+      "{assistant}",
+      "{databricks_cli_profile}",
+      "{f}",
+      "{use_case_slug}",
+      "{user}",
+      "{workspace_url}"
+    ]
+  },
+  "99-wire_ui_lakebase.genie-code.md": {
+    "class": "fork",
+    "verbatim_substrings": [
+      "mandatory ritual, not advisory",
+      "NOT complete until",
+      "<APP_ROOT>/.vibecoding-state.md",
+      "readSkillFile(\"skills/vibe-coding-workshop/",
+      "**Gate:** `Lakebase wired (onPluginsReady) + static gate clean; build deferred to deploy`"
+    ],
+    "placeholders": [
+      "{databricks_cli_profile}",
+      "{workspace_url}"
+    ]
+  }
+}
