@@ -313,6 +313,11 @@ NUMERIC_COPY_ALLOWLIST = {
         "goes back to App and is written through stepNumbersToGates",
     ),
     "src/constants/scoring.ts": (3, "pure points calculator normalising the caller's (projected) sets"),
+    "src/constants/levelLock.ts": (
+        1,
+        "hasStartedWorkflow (any step >= 2) path-lock threshold, moved unchanged out of "
+        "LevelSelector so the track tabs share it (display/lock only, never written)",
+    ),
 }
 
 # X3c: a numeric literal added to a completed/skipped step set bypasses the gates.

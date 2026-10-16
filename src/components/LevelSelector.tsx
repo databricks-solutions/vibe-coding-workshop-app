@@ -1,27 +1,27 @@
 /**
  * LevelSelector Component
  *
- * Forward direction opens with the recommended Genie Accelerator card (R5
- * "Option A"): the default path for every new session, holding the Include
- * Genie Ontology and Include Lakehouse toggles. Below it, "Choose a different
- * path" holds a tiered 4-column layout: three persona-aligned chapter columns
- * and a fourth column of the other role-agnostic Accelerators. It is folded
- * while Genie Accelerator is selected and open whenever another path is.
- * Reverse direction has no accelerators, so it shows only the three columns.
+ * Two views, one per track tab in PathAndArchitecture (Mock B). The Genie tab
+ * shows the recommended Genie Accelerator card (R5 "Option A"): the default
+ * path for every new session, holding the Include Genie Ontology and Include
+ * Lakehouse toggles, with its stage strip. The Other tracks tab shows the
+ * tiered 4-column layout: three persona-aligned chapter columns and a fourth
+ * column of the other role-agnostic Accelerators. Reverse direction has no
+ * accelerators, so it shows only the three columns.
  *
  * Path locking: Once a user explicitly selects a level AND completes all foundation
  * steps (1, 2, 3), switching between tracks is disabled. Movement within the same
  * track (e.g. "Databricks Apps" → "+ Lakebase") remains allowed. The card follows
  * the same lock rules and tooltips; a read-only session renders it disabled.
  *
- * Layout (forward):
+ * Layout — Genie tab:
  * ┌───────────────────────────────────────────────────────────────────────────────────────────┐
- * │ ★ Recommended for this workshop   [✓ Selected]                                            │
+ * │ ★ Recommended track   [✓ Selected]                                                        │
  * │ Genie Accelerator · [Lakehouse →] Metric View → Genie Agent → Dashboard → [Ontology] →    │
  * │ Lakebase sync → App · N steps · est. H:MM          [Include Genie Ontology] [Include Lakehouse] │
  * └───────────────────────────────────────────────────────────────────────────────────────────┘
  *   (Genie selected: its stage strip  [Lakehouse] → Semantic Layer → AI and Agents → [Ontology] → Activation)
- * ▸ Choose a different path (Apps · Lakehouse · AI & Agents · other accelerators)
+ * Layout — Other tracks tab:
  *    [For App Developers]   [For Data Engineering]   [For Data Science]   (no caption)
  * ┌──────────────────────┬───────────────────────┬────────────────────┬────────────────────────┐
  * │  Apps and Lakebase   │     Lakehouse         │   AI and Agents    │      Accelerators      │
@@ -51,7 +51,7 @@ import {
   type MedallionLayer,
   type ChainContext,
 } from '../constants/workflowSections';
-import { Check, ChevronDown, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, Code2, Star } from 'lucide-react';
+import { Check, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, Code2, Star } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CHAPTER_BLOCKS, genieAcceleratorServices, type ChapterBlock, type ChapterBlockId, type ChipTone } from '../constants/chapterBlocks';
 import { NewBadge } from './NewBadge';
@@ -60,6 +60,7 @@ import { ServicePopover } from './ServicePopover';
 import { ModuleBox, ModuleChip } from './ModuleBox';
 import { computeBuildTime, formatHM } from '../constants/pathDurations';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
+import { computeLevelLockState, getHighlightedButtons, type LevelLockContext, type LevelLockState, type LockReason } from '../constants/levelLock';
 import { apiClient, FALLBACK_WORKSHOP_DEFAULTS } from '../api/client';
 
 // Reasons a path button can be locked. Drives the tooltip wording so the user
@@ -67,7 +68,6 @@ import { apiClient, FALLBACK_WORKSHOP_DEFAULTS } from '../api/client';
 // path-lock-after-foundation; 'use-case' fires when a specific use case pinned
 // the level; 'assistant' fires when the active coding assistant doesn't
 // support this path (per admin Visibility config).
-type LockReason = 'workflow-started' | 'use-case' | 'assistant';
 
 const LOCK_REASON_TEXT: Record<LockReason, { title: string; body: string }> = {
   'workflow-started': {
@@ -84,7 +84,7 @@ const LOCK_REASON_TEXT: Record<LockReason, { title: string; body: string }> = {
   },
 };
 
-function LockedTooltip({
+export function LockedTooltip({
   reason = 'workflow-started',
   title,
   body,
@@ -129,7 +129,13 @@ interface LevelSelectorProps {
    * selected level is grandfathered (always clickable) inside the picker so
    * shared sessions and mid-session assistant changes never lose state. */
   disabledWorkshopLevels?: Set<WorkshopLevel>;
+  /** Which track tab is showing (PathAndArchitecture): the recommended Genie
+   * Accelerator card, or the other tracks. Defaults from the selected level. */
+  view?: TrackView;
 }
+
+/** The track picker's two tabs (Mock B). */
+export type TrackView = 'genie' | 'other';
 
 const BUTTON_LABELS: Record<WorkshopLevel, string> = {
   'app-only': 'Databricks Apps',
@@ -176,45 +182,6 @@ function getTrack(level: WorkshopLevel): Track {
   return 'accelerator';
 }
 
-/**
- * Returns the set of buttons that should appear "included" (highlighted).
- * When on a progressive chain, all levels up to and including the current
- * position are highlighted to show the cumulative path.
- */
-function getHighlightedButtons(
-  selectedLevel: WorkshopLevel,
-  completedSteps: Set<number>,
-  chainContext?: ChainContext,
-): Set<WorkshopLevel> {
-  const chain = getActiveChain(selectedLevel, completedSteps, chainContext);
-  if (chain) {
-    const idx = chain.indexOf(selectedLevel);
-    if (idx !== -1) return new Set(chain.slice(0, idx + 1));
-  }
-  switch (selectedLevel) {
-    case 'end-to-end':
-      // End-to-End is direction-agnostic: highlight every level on both forward
-      // and reverse chains so the buttons in whichever column layout is currently
-      // rendered (forward or reverse) all show the included/checkmark style.
-      return new Set<WorkshopLevel>([
-        'app-only', 'app-database', 'lakehouse', 'lakehouse-di',
-        'reverse-lakehouse', 'reverse-lakehouse-di', 'reverse-lakebase', 'reverse-app',
-        'end-to-end',
-      ]);
-    case 'accelerator':
-      return new Set<WorkshopLevel>(['accelerator']);
-    case 'genie-accelerator':
-      return new Set<WorkshopLevel>(['genie-accelerator']);
-    case 'data-engineering-accelerator':
-      return new Set<WorkshopLevel>(['data-engineering-accelerator']);
-    case 'skills-accelerator':
-      return new Set<WorkshopLevel>(['skills-accelerator']);
-    case 'agents-accelerator':
-      return new Set<WorkshopLevel>(['agents-accelerator']);
-    default:
-      return new Set<WorkshopLevel>([selectedLevel]);
-  }
-}
 
 const TRACK_LABEL: Record<Track, string> = {
   'apps-lakebase': 'Apps and Lakebase',
@@ -255,6 +222,7 @@ export function LevelSelectorContent({
   includeGenieOntology,
   onIncludeGenieOntologyChange,
   disabledWorkshopLevels,
+  view,
 }: LevelSelectorProps) {
   return (
     <LevelSelectorGrid
@@ -274,6 +242,7 @@ export function LevelSelectorContent({
       includeGenieOntology={includeGenieOntology}
       onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
       disabledWorkshopLevels={disabledWorkshopLevels}
+      view={view}
     />
   );
 }
@@ -393,7 +362,7 @@ export function GenieRecommendedCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1 text-ui-3xs font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-300">
               <Star className="w-3 h-3" aria-hidden="true" />
-              Recommended for this workshop
+              Recommended track
             </span>
             {selected && (
               <span className="inline-flex items-center gap-1 text-ui-3xs font-semibold px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30">
@@ -511,6 +480,7 @@ function LevelSelectorGrid({
   includeGenieOntology = false,
   onIncludeGenieOntologyChange,
   disabledWorkshopLevels,
+  view,
 }: LevelSelectorProps) {
   const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps, chainContext);
 
@@ -519,81 +489,12 @@ function LevelSelectorGrid({
   const chainIdx = activeChain ? activeChain.indexOf(selectedLevel) : -1;
   const isPathLocked = hasStartedWorkflow || !!useCaseLockedLevel;
 
-  // Additive-selection gates. The "+" prefix levels are hard-disabled until
-  // their parent in the APP_CHAIN is highlighted/selected. Once Apps is
-  // selected, "+ Lakebase" unlocks; once Lakehouse is selected, "+ AI and
-  // Agents" unlocks. These gates apply only in forward direction — reverse
-  // chain deals with its own separate level set.
-  const isAdditiveGateDisabled = (level: WorkshopLevel): { disabled: boolean; tooltipBody?: string } => {
-    if (direction === 'reverse') return { disabled: false };
-    if (useCaseLockedLevel) return { disabled: false };
-    if (level === 'app-database') {
-      const appsSelected = highlightedButtons.has('app-only') || highlightedButtons.has('app-database');
-      if (!appsSelected) {
-        return { disabled: true, tooltipBody: 'Select Databricks Apps first to enable.' };
-      }
-    }
-    if (level === 'lakehouse-di') {
-      const lakehouseSelected = highlightedButtons.has('lakehouse') || highlightedButtons.has('lakehouse-di');
-      if (!lakehouseSelected) {
-        return { disabled: true, tooltipBody: 'Select Lakehouse first to enable.' };
-      }
-    }
-    return { disabled: false };
+  // The picker's lock rule (constants/levelLock.ts): shared with the track tabs
+  // in PathAndArchitecture and checked against the MCP switch rule.
+  const lockCtx: LevelLockContext = {
+    selectedLevel, completedSteps, chainContext, useCaseLockedLevel, hasUseCaseSelected, direction, disabledWorkshopLevels,
   };
-
-  // Resolve why a button is locked, in priority order. Returns null when the
-  // button is enabled. The returned `reason` drives the LockedTooltip wording
-  // so the user always knows whether this is an assistant restriction, a
-  // use-case lock, an additive gate, or the standard "workflow started" lock.
-  //
-  // Grandfather rule: the currently-selected level is ALWAYS clickable, even
-  // if it lives in `disabledWorkshopLevels`. This preserves shared sessions
-  // (a session saved with `app-database` and a Cursor user, opened later by a
-  // Genie Code user, still works) and prevents mid-session assistant changes
-  // from silently mutating progress.
-  const getLockState = (level: WorkshopLevel): { reason: LockReason; title?: string; body?: string } | null => {
-    // Grandfather: current selection is always usable.
-    if (level === selectedLevel) return null;
-
-    // 1. Assistant restriction. Highest-priority message because it's the most
-    //    likely cause of confusion when a user just switched assistants.
-    if (disabledWorkshopLevels?.has(level)) {
-      return { reason: 'assistant' };
-    }
-
-    // 2. Use-case lock pinned a specific level — every other level is locked.
-    if (useCaseLockedLevel && level !== useCaseLockedLevel) {
-      return { reason: 'use-case' };
-    }
-
-    // 3. Skills Accelerator is hidden once a non-skills use case is selected
-    //    (the use-case lock above pins it directly when chosen).
-    if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) {
-      return { reason: 'use-case' };
-    }
-
-    // 4. Additive gate ("+ Lakebase" needs Apps, "+ AI and Agents" needs
-    //    Lakehouse). Friendlier wording than the generic locked tooltip.
-    const additive = isAdditiveGateDisabled(level);
-    if (additive.disabled) {
-      return { reason: 'workflow-started', title: 'Select prerequisite first', body: additive.tooltipBody };
-    }
-
-    // 5. Workflow-started path lock. Foundation steps complete -> only the
-    //    active chain's current and next-step buttons remain clickable.
-    if (hasStartedWorkflow) {
-      if (activeChain) {
-        const targetIdx = activeChain.indexOf(level);
-        if (targetIdx === chainIdx) return null;
-        if (targetIdx === chainIdx + 1) return null;
-        return { reason: 'workflow-started' };
-      }
-      return { reason: 'workflow-started' };
-    }
-
-    return null;
-  };
+  const getLockState = (level: WorkshopLevel): LevelLockState | null => computeLevelLockState(level, lockCtx);
 
   const isButtonDisabled = (level: WorkshopLevel): boolean => getLockState(level) !== null;
 
@@ -791,11 +692,12 @@ function LevelSelectorGrid({
     includeLakehouse: cardLakehouse,
     includeGenieOntology: cardOntology,
   }).total;
-  // "Choose a different path": folded while the Genie card is selected (the
-  // learner can open it), always open while any other path is selected.
-  const [showOtherPaths, setShowOtherPaths] = useState(false);
+  // Mock B tabs (PathAndArchitecture): the Genie tab shows the recommended card
+  // and its stage strip; the Other tracks tab shows the columns. Reverse ETL has
+  // no accelerators, so it is always the Other tracks view.
   const isForward = direction !== 'reverse';
-  const otherPathsExpanded = !isForward || !isGeniePathView || showOtherPaths;
+  const showGenieView = isForward && (view ?? (isGeniePathView ? 'genie' : 'other')) === 'genie';
+  const otherPathsExpanded = !showGenieView;
 
   const geniePathStages: ChapterBlock[] = [];
   if (isGeniePathView) {
@@ -909,9 +811,9 @@ function LevelSelectorGrid({
         />
       </div>
 
-      {/* Recommended Genie Accelerator card — forward direction only (the
-          accelerators have no reverse counterpart). */}
-      {isForward && (
+      {/* Recommended Genie Accelerator card — the Genie tab only (forward
+          direction; the accelerators have no reverse counterpart). */}
+      {showGenieView && (
         <GenieRecommendedCard
           selected={isGeniePathView}
           lockState={getLockState('genie-accelerator')}
@@ -927,28 +829,10 @@ function LevelSelectorGrid({
       )}
 
       {/* The selected Genie path's stages (click a chip for details). */}
-      {isForward && isGeniePathView && (
+      {showGenieView && isGeniePathView && (
         <LayoutGroup>
           <div className="flex gap-3 mb-4">{geniePathStrip}</div>
         </LayoutGroup>
-      )}
-
-      {isForward && (
-        <button
-          type="button"
-          onClick={() => { if (isGeniePathView) setShowOtherPaths(v => !v); }}
-          disabled={!isGeniePathView}
-          aria-expanded={otherPathsExpanded}
-          aria-controls="other-workshop-paths"
-          data-testid="other-paths-toggle"
-          className={`w-full flex items-center gap-2 mb-3 text-left text-ui-sm font-semibold text-foreground ${isGeniePathView ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
-        >
-          {isGeniePathView && (
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${otherPathsExpanded ? 'rotate-180' : ''}`} />
-          )}
-          <span>Choose a different path</span>
-          <span className="text-ui-xs font-normal text-muted-foreground">(Apps · Lakehouse · AI &amp; Agents · other accelerators)</span>
-        </button>
       )}
 
       {otherPathsExpanded && (

@@ -937,14 +937,21 @@ export default function App() {
       'skills-accelerator',
       'agents-accelerator',
     ];
-    if (newDirection === 'reverse' && ACCELERATOR_LEVELS.includes(workshopLevel)) {
-      setWorkshopLevel('app-database');
+    // The track picker's Other tracks tab puts Reverse ETL one click from the
+    // Genie Accelerator, so the fallback level is saved in the SAME write as the
+    // direction and the outline is refetched for it: a level set only locally
+    // would compose GET /outline for the old track and be lost on reload.
+    const nextLevel: WorkshopLevel =
+      newDirection === 'reverse' && ACCELERATOR_LEVELS.includes(workshopLevel) ? 'app-database' : workshopLevel;
+    if (nextLevel !== workshopLevel) {
+      setWorkshopLevel(nextLevel);
     }
     if (sessionId) {
       const sid = sessionId;
       apiClient.updateSessionMetadata({
         session_id: sid,
         direction: newDirection,
+        ...(nextLevel !== workshopLevel ? { workshop_level: nextLevel } : {}),
         // Complete composition (T3b-2b) so GET /outline recomposes for the new
         // direction. The engine reads persisted `direction` to select the reverse
         // variant; flags/chain_context reflect current live state.
@@ -952,7 +959,7 @@ export default function App() {
       })
         // Refetch after direction persists so the reverse order lands BEFORE the
         // next render (T3c; closes the old reverse-order fallback).
-        .then(() => fetchOutline(workshopLevel, sid))
+        .then(() => fetchOutline(nextLevel, sid))
         .catch(err => console.error('Error persisting direction:', err));
     }
   }, [directionLocked, sessionId, workshopLevel, compositionParams, fetchOutline]);

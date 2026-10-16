@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, ChevronLeft, Lock, Map, ArrowRight } from 'lucide-react';
-import { LevelSelectorContent } from './LevelSelector';
+import { ChevronDown, ChevronRight, ChevronLeft, Lock, Map, ArrowRight, Star, Layers } from 'lucide-react';
+import { LevelSelectorContent, LockedTooltip } from './LevelSelector';
+import { computeLevelLockState, hasStartedWorkflow, trackTabForLevel } from '../constants/levelLock';
+import { useReadOnly } from '../contexts/ReadOnlyContext';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
 import { PathDescriptionPanel } from './PathDescriptionPanel';
 import { BorderBeamButton } from './BorderBeamButton';
@@ -72,6 +74,33 @@ export function PathAndArchitecture({
   // forceExpanded is authoritative; forceCollapsed sets the default (user can still override)
   const isExpanded = forceExpanded ? true : (userOverride ?? (forceCollapsed ? false : true));
 
+  // Track tabs (Mock B): [★ Genie Accelerator · Recommended] [Other tracks].
+  // The tab follows the selected level whenever it changes (a pick here, a
+  // session load, a use-case lock, a change from Genie Code); clicking Other
+  // tracks only changes the view. Same render-time sync as prevForceCollapsed.
+  const tabKey = `${selectedLevel}|${direction}`;
+  const [tab, setTab] = useState(() => trackTabForLevel(selectedLevel, direction));
+  const [prevTabKey, setPrevTabKey] = useState(tabKey);
+  if (tabKey !== prevTabKey) {
+    setPrevTabKey(tabKey);
+    setTab(trackTabForLevel(selectedLevel, direction));
+  }
+  const readOnly = useReadOnly();
+  const onGenie = selectedLevel === 'genie-accelerator';
+  // Picking the Genie tab selects the Genie Accelerator, so it follows the
+  // picker's lock rule; Reverse ETL has no accelerators. Viewing it while it is
+  // already the track is always allowed.
+  const genieLock = computeLevelLockState('genie-accelerator', {
+    selectedLevel, completedSteps, chainContext, useCaseLockedLevel, hasUseCaseSelected, direction, disabledWorkshopLevels,
+  });
+  const genieTabDisabled = !onGenie && (readOnly || direction === 'reverse' || genieLock !== null);
+  const trackLocked = hasStartedWorkflow(completedSteps) || !!useCaseLockedLevel;
+  const selectGenieTab = () => {
+    if (genieTabDisabled) return;
+    if (onGenie) setTab('genie');
+    else onLevelChange('genie-accelerator');
+  };
+
   // The Path Duration Bar consumes all four state inputs. Some callers may
   // omit chip/module sets, so we fall back to the all-on defaults that match
   // the rest of the app's defaulting logic in App.tsx.
@@ -131,6 +160,70 @@ export function PathAndArchitecture({
               the entire card. The compact variant in the collapsed-card header
               still surfaces the total when this section is folded. */}
 
+          {/* Track tabs (Mock B) */}
+          <div role="tablist" aria-label="Workshop tracks" className="flex justify-center">
+            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-secondary/40 border border-border">
+              <div className={genieTabDisabled ? 'relative group' : undefined}>
+                <button
+                  type="button"
+                  role="tab"
+                  data-testid="track-tab-genie"
+                  aria-selected={tab === 'genie'}
+                  aria-disabled={genieTabDisabled}
+                  onClick={selectGenieTab}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-ui-sm font-medium transition-colors ${
+                    tab === 'genie'
+                      ? 'bg-teal-500/15 border border-teal-500/40 text-foreground font-semibold'
+                      : genieTabDisabled
+                        ? 'border border-transparent text-muted-foreground/40 cursor-not-allowed'
+                        : 'border border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Star className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Genie Accelerator</span>
+                  <span className="text-ui-2xs font-semibold uppercase tracking-wide text-teal-300/80">Recommended</span>
+                </button>
+                {genieTabDisabled && direction === 'reverse' && !readOnly && (
+                  <LockedTooltip
+                    reason="workflow-started"
+                    title="Build Forward track"
+                    body="Switch to Build Forward (under Other tracks) to use the Genie Accelerator."
+                  />
+                )}
+                {genieTabDisabled && direction !== 'reverse' && genieLock && (
+                  <LockedTooltip reason={genieLock.reason} title={genieLock.title} body={genieLock.body} />
+                )}
+              </div>
+              <button
+                type="button"
+                role="tab"
+                data-testid="track-tab-other"
+                aria-selected={tab === 'other'}
+                onClick={() => setTab('other')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-ui-sm font-medium transition-colors ${
+                  tab === 'other'
+                    ? 'bg-violet-500/15 border border-violet-500/40 text-foreground font-semibold'
+                    : 'border border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Other tracks</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Other tracks while the Genie Accelerator is still the track: say so,
+              so Start Building never continues on a track the view hides. */}
+          {tab === 'other' && onGenie && (
+            <p data-testid="current-track-note" className="text-center text-ui-xs text-muted-foreground">
+              Current track: <span className="font-semibold text-foreground">Genie Accelerator</span>.{' '}
+              {trackLocked
+                ? 'The track is locked once Set Up Project is done; start a new session to switch.'
+                : 'Pick one below to switch.'}
+            </p>
+          )}
+
+          {tab === 'other' && (<>
           {/* Direction Toggle */}
           <div className="flex justify-center mb-4">
             <div
@@ -252,6 +345,7 @@ export function PathAndArchitecture({
               </p>
             </div>
           </div>
+          </>)}
 
           {/* Level Selector Grid */}
           <LevelSelectorContent
@@ -271,6 +365,7 @@ export function PathAndArchitecture({
             includeGenieOntology={includeGenieOntology}
             onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
             disabledWorkshopLevels={disabledWorkshopLevels}
+            view={tab}
           />
 
           {/* What You'll Build — path description panel */}
