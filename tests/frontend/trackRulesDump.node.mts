@@ -12,8 +12,10 @@ import { loadComponentModule } from './loadComponent.ts';
 
 type Sections = typeof import('../../src/constants/workflowSections.ts');
 type Names = typeof import('../../src/constants/trackNames.ts');
+type Lock = typeof import('../../src/constants/levelLock.ts');
 const sections = await loadComponentModule<Sections>('src/constants/workflowSections.ts');
 const { TRACK_DISPLAY_NAMES } = await loadComponentModule<Names>('src/constants/trackNames.ts');
+const { computeLevelLockState } = await loadComponentModule<Lock>('src/constants/levelLock.ts');
 
 const levels = Object.keys(sections.WORKSHOP_LEVELS) as Array<keyof typeof sections.WORKSHOP_LEVELS>;
 const chains = [null, 'app', 'lakehouse', 'reverse'] as const;
@@ -42,6 +44,38 @@ for (const level of levels) {
   }
 }
 
+// What the web UI lets a session do: the picker's lock (constants/levelLock.ts)
+// and then the App's guard (handleWorkshopLevelChange: once started, forward
+// progression only). Compared with the MCP rule, track_switch.evaluate_switch.
+const lockCases: unknown[] = [];
+for (const current of levels) {
+  for (const steps of [[], [1, 2]] as number[][]) {
+    const done = new Set(steps);
+    const started = steps.some(s => s >= 2);
+    for (const chain of chains) {
+      // The chain the web tab holds for this stored value (utils/sessionSync
+      // chainFromParams): stored only on the lakehouse levels, else derived.
+      const webChain = current === 'lakehouse' || current === 'lakehouse-di'
+        ? chain ?? sections.deriveInitialChainContext(current, done)
+        : sections.deriveInitialChainContext(current, done);
+      for (const target of levels) {
+        const lock = computeLevelLockState(target, {
+          selectedLevel: current,
+          completedSteps: done,
+          chainContext: webChain,
+          direction: target.startsWith('reverse-') ? 'reverse' : 'forward',
+        });
+        const guard = !started || target === current || sections.isForwardProgression(current, target);
+        lockCases.push({
+          current, target, steps, chain,
+          lock: lock ? (lock.title === 'Select prerequisite first' ? 'additive' : lock.reason) : null,
+          allowed: lock === null && guard,
+        });
+      }
+    }
+  }
+}
+
 process.stdout.write(
   JSON.stringify({
     levels,
@@ -49,5 +83,6 @@ process.stdout.write(
     useCaseLock: sections.USE_CASE_LEVEL_LOCK,
     progressionChains: sections.PROGRESSION_CHAINS,
     cases,
+    lockCases,
   }),
 );

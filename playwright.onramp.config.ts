@@ -11,7 +11,7 @@ const PREVIEW = 'http://127.0.0.1:4173';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: 'connect-genie-code.spec.ts',
+  testMatch: ['connect-genie-code.spec.ts', 'track-tabs.spec.ts'],
   fullyParallel: true,
   workers: 1,
   retries: 0,

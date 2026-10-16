@@ -288,8 +288,9 @@ _NUMERIC_COPY = re.compile(
 # file -> (exact count of copy-based reads, why they are allowed). Measured at 3d5b700.
 NUMERIC_COPY_ALLOWLIST = {
     "src/App.tsx": (
-        9,
-        "direction lock and level-switch guards (step >= 4 / >= 2 thresholds), the "
+        8,
+        "direction lock guard (step >= 4 threshold; the >= 2 level-switch guard now calls "
+        "levelLock.hasStartedWorkflow), the "
         "initial expanded step, and the stepNumbersToGates writes (toggle skipped_gates "
         "and handleSaveSession); includes one comment line naming WorkflowDiagram's seeds; "
         "main's Insights setup seeds nextCompleted (step-1 credit, written as gates)",
@@ -303,16 +304,17 @@ NUMERIC_COPY_ALLOWLIST = {
         "done/skip handler seeds over App's sets; the next set goes back to App and is "
         "written through stepNumbersToGates",
     ),
-    "src/components/LevelSelector.tsx": (
-        1,
-        "hasStartedWorkflow (any step >= 2) path-lock threshold over the completedSteps prop",
-    ),
     "src/components/WorkflowDiagram.tsx": (
         8,
         "toggle/reset/skip handler seeds over the mergeStatus-projected prop; the next set "
         "goes back to App and is written through stepNumbersToGates",
     ),
     "src/constants/scoring.ts": (3, "pure points calculator normalising the caller's (projected) sets"),
+    "src/constants/levelLock.ts": (
+        1,
+        "hasStartedWorkflow (any step >= 2) path-lock threshold, the one copy shared by "
+        "LevelSelector, the track tabs and App's level-switch guard (lock only, never written)",
+    ),
 }
 
 # X3c: a numeric literal added to a completed/skipped step set bypasses the gates.

@@ -159,9 +159,7 @@ def evaluate_switch(record: dict[str, Any], target: str, disabled_paths: set[str
             allowed_targets,
         )
     if started:
-        # The picker's lock (current or next on the active chain) AND the App's
-        # guard (handleWorkshopLevelChange: forward progression only).
-        if target in allowed_targets and is_forward_progression(current, target):
+        if target in allowed_targets:
             return SwitchDecision(True, current, target, "ok", allowed_targets=allowed_targets)
         return SwitchDecision(
             False, current, target, "workflow-started",
@@ -171,12 +169,27 @@ def evaluate_switch(record: dict[str, Any], target: str, disabled_paths: set[str
     return SwitchDecision(True, current, target, "ok")
 
 
+def _picker_open(current: str, target: str, chain: tuple[str, ...]) -> bool:
+    """The picker's started-lock, as LevelSelector computes it: a level is open when
+    its index on the active chain equals the current level's, or is the next one
+    (indexOf is -1 for a level off the chain, on both sides)."""
+
+    current_index = chain.index(current) if current in chain else -1
+    target_index = chain.index(target) if target in chain else -1
+    return target_index in (current_index, current_index + 1)
+
+
 def _allowed_targets(current: str, chain: tuple[str, ...] | None) -> tuple[str, ...]:
-    if chain and current in chain:
-        index = chain.index(current)
-        if index + 1 < len(chain):
-            return (chain[index + 1],)
-    return ()
+    """Once started: the levels both the picker's lock and the App's forward-
+    progression guard let through (in practice, the next level on the chain)."""
+
+    if not chain:
+        return ()
+    candidates = dict.fromkeys(level for each in PROGRESSION_CHAINS for level in each)
+    return tuple(
+        level for level in candidates
+        if level != current and _picker_open(current, level, chain) and is_forward_progression(current, level)
+    )
 
 
 def switch_params(

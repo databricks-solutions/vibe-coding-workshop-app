@@ -6,3 +6,4 @@ export { PathAndArchitecture } from '../../src/components/PathAndArchitecture';
 export { ReadOnlyProvider } from '../../src/contexts/ReadOnlyContext';
 export { computeBuildTime, formatHM } from '../../src/constants/pathDurations';
 export { ALL_AI_MODULES, ALL_MEDALLION_LAYERS } from '../../src/constants/workflowSections';
+export { trackTabForLevel } from '../../src/constants/levelLock';

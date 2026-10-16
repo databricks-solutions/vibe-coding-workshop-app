@@ -147,14 +147,16 @@ call fails the UI uses the template default: Genie Accelerator, ontology on). Pi
 assistant doesn't move a new session off it. Sessions that already exist open as they were saved;
 one that never stored the ontology opens with it off.
 
-- **The recommended card.** In **Workshop Path & Architecture** (Build Forward), a card marked
-  "★ Recommended for this workshop" sits above the other paths. It shows the Genie Accelerator's
-  chapters (Metric View → Genie Agent → Dashboard → Ontology → Lakebase sync → App), its step count
-  and its estimated build time, and reads "✓ Selected" while it is the session's path. Click it to
-  pick it. "Choose a different path (Apps · Lakehouse · AI & Agents · other accelerators)" is
-  folded while the Genie Accelerator is selected and open whenever another path is. The card
-  follows the usual path locks, is disabled on a read-only (shared) session and is hidden in
-  Reverse ETL.
+- **Two track tabs.** **Workshop Path & Architecture** opens with two tabs: **★ Genie Accelerator ·
+  Recommended** and **Other tracks**. The Genie tab holds the "★ Recommended track" card: the
+  Genie Accelerator's chapters (Metric View → Genie Agent → Dashboard → Ontology → Lakebase sync →
+  App), its step count and estimated build time, "✓ Selected" while it is the session's track,
+  and its stage strip. **Other tracks** shows everything else as before: Build Forward / Reverse
+  ETL, the Apps, Lakehouse and AI & Agents columns and the other accelerators. Clicking Other
+  tracks only changes the view ("Current track: Genie Accelerator. Pick one below to switch");
+  picking a track there switches it, and one click on the Genie tab switches back. The Genie tab
+  follows the usual path locks, can't switch tracks on a read-only (shared) session, and is
+  disabled in Reverse ETL (switch to Build Forward first).
 - **Opt-out toggle.** The card holds **Include Genie Ontology (Beta: needs Genie One Pages)** and
   **Include Lakehouse**. Untick the ontology if the workspace has no Genie One Pages: the
   Ontology chapter drops out and the outline goes back to 24 steps. Switching back to the Genie

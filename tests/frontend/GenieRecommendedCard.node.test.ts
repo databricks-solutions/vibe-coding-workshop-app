@@ -1,13 +1,14 @@
-// Node render tests for the recommended Genie Accelerator card (genie-default-
-// ontology PR 3, R5 "Option A"): selected / not selected, "Choose a different
-// path" folded while Genie is selected and open otherwise, read-only, path
-// lock, hidden in reverse, the two toggles living only in the card, and the
-// same card wherever PathAndArchitecture renders.
+// Node render tests for the track picker's two tabs (Mock B) and the recommended
+// Genie Accelerator card (R5 "Option A"): the Genie tab shows the card and its
+// stage strip, the Other tracks tab shows today's columns and the direction
+// toggle; the Genie tab follows the picker's lock rule, Reverse ETL and
+// read-only; the two toggles live only in the card; the same card wherever
+// PathAndArchitecture renders.
 //
 // Run: node --experimental-strip-types --test tests/frontend/GenieRecommendedCard.node.test.ts
 //
-// No DOM: server-rendered. Effects (the outline step-count fetch and the
-// defaults fetch) don't run, so the card shows the template defaults.
+// No DOM: server-rendered, so effects don't run (the card shows the template
+// defaults) and clicks are covered by tests/e2e/connect-genie-code.spec.ts.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,11 +27,13 @@ const {
   ReadOnlyProvider,
   computeBuildTime,
   formatHM,
+  trackTabForLevel,
   ALL_AI_MODULES,
   ALL_MEDALLION_LAYERS,
 } = await loadComponentModule<Harness>('tests/frontend/levelSelectorHarness.ts');
 
 type SelectorProps = Parameters<typeof LevelSelectorContent>[0];
+type PathProps = Parameters<typeof PathAndArchitecture>[0];
 
 const noop = () => {};
 
@@ -49,26 +52,41 @@ function render(props: Partial<SelectorProps> = {}, readOnly = false) {
   return renderToStaticMarkup(createElement(ReadOnlyProvider, { value: readOnly }, el));
 }
 
+function renderPath(props: Partial<PathProps> = {}, readOnly = false) {
+  const el = createElement(PathAndArchitecture, {
+    selectedLevel: 'genie-accelerator',
+    onLevelChange: noop,
+    completedSteps: new Set<number>(),
+    forceExpanded: true,
+    includeGenieOntology: true,
+    onIncludeGenieOntologyChange: noop,
+    ...props,
+  } as PathProps);
+  return renderToStaticMarkup(createElement(ReadOnlyProvider, { value: readOnly }, el));
+}
+
 const card = (html: string) => {
-  const m = html.match(/<div data-testid="genie-recommended-card"[\s\S]*?(?=<div class="flex gap-3 mb-4">|<button type="button"[^>]*data-testid="other-paths-toggle")/);
+  const m = html.match(/<div data-testid="genie-recommended-card"[\s\S]*?(?=<div class="flex gap-3 mb-4">|$)/);
   assert.ok(m, 'the card renders');
   return m[0];
 };
 const chapterLine = (html: string) => html.match(/data-testid="genie-chapter-line">([^<]*)</)?.[1].replace(/&gt;/g, '>');
 const cardButton = (html: string) => card(html).match(/<button[^>]*aria-pressed[^>]*>/)?.[0] ?? '';
 const count = (html: string, s: string) => html.split(s).length - 1;
+const tab = (html: string, which: 'genie' | 'other') =>
+  html.match(new RegExp(`<button[^>]*data-testid="track-tab-${which}"[^>]*>`))?.[0] ?? '';
 
-test('selected: highlighted, "✓ Selected", the other paths folded', () => {
+// --- the Genie view ---------------------------------------------------------------
+
+test('Genie view: the card is selected, "Recommended track", no fold, the stage strip shows', () => {
   const html = render();
   assert.match(html, /data-testid="genie-recommended-card" data-selected="true"/);
-  assert.match(card(html), /Recommended for this workshop/);
+  assert.match(card(html), /Recommended track/);
+  assert.doesNotMatch(html, /Recommended for this workshop/);
   assert.match(card(html), />Selected</);
   assert.match(cardButton(html), /aria-pressed="true"/);
-  assert.match(html, /data-testid="other-paths-toggle"[^>]*>/);
-  assert.match(html, /aria-expanded="false"[^>]*data-testid="other-paths-toggle"/);
-  assert.match(html, /Choose a different path/);
-  assert.match(html, /Apps · Lakehouse · AI &amp; Agents · other accelerators/);
-  assert.doesNotMatch(html, /data-testid="other-paths"/, 'collapsed while Genie is selected');
+  assert.doesNotMatch(html, /other-paths-toggle|Choose a different path/, 'the fold is gone');
+  assert.doesNotMatch(html, /data-testid="other-paths"/, 'the columns are on the Other tracks tab');
   assert.match(html, /Your Genie Accelerator Path/, 'the Genie stage strip shows');
 });
 
@@ -84,27 +102,55 @@ test('the two toggles live only in the card', () => {
   assert.equal(count(html, '>Include Lakehouse<'), 1);
   assert.match(card(html), /Include Genie Ontology \(Beta: needs Genie One Pages\)/);
   assert.match(card(html), />Include Lakehouse</);
-  // Open the other paths: the Accelerators column no longer repeats Genie or its toggles.
   const other = render({ selectedLevel: 'agents-accelerator' });
-  assert.equal(count(other, 'Include Genie Ontology'), 0, 'no toggles while another path is selected');
+  assert.equal(count(other, 'Include Genie Ontology'), 0, 'no toggles on the Other tracks view');
   assert.doesNotMatch(other.slice(other.indexOf('data-testid="other-paths"')), />Genie Accelerator</);
 });
 
-test('not selected: "★ Recommended", the other paths open, clicking selects Genie', () => {
-  const html = render({ selectedLevel: 'lakehouse', includeGenieOntology: false });
-  assert.match(html, /data-testid="genie-recommended-card" data-selected="false"/);
-  assert.match(card(html), /Recommended for this workshop/);
-  assert.doesNotMatch(card(html), />Selected</);
-  assert.match(cardButton(html), /aria-pressed="false"/);
-  assert.doesNotMatch(cardButton(html), /disabled/);
-  assert.match(html, /aria-expanded="true"[^>]*data-testid="other-paths-toggle"/);
-  assert.match(html, /data-testid="other-paths"/, 'expanded whenever another path is selected');
-  assert.match(html, /For Application Developers/);
-  // Shows what picking it gives: the facilitator's ontology default (template: on).
-  assert.equal(chapterLine(html), 'Metric View → Genie Agent → Dashboard → Ontology → Lakebase sync → App');
-  for (const level of ['app-only', 'app-database', 'lakehouse-di', 'end-to-end', 'agents-accelerator', 'data-engineering-accelerator', 'skills-accelerator'] as const) {
-    assert.match(render({ selectedLevel: level }), /data-testid="other-paths"/, `${level}: other paths open`);
+// --- the Other tracks view --------------------------------------------------------
+
+test('Other tracks view: today\'s columns, no card, for every non-Genie level', () => {
+  for (const level of ['app-only', 'app-database', 'lakehouse', 'lakehouse-di', 'end-to-end', 'agents-accelerator', 'data-engineering-accelerator', 'skills-accelerator'] as const) {
+    const html = render({ selectedLevel: level });
+    assert.match(html, /data-testid="other-paths"/, `${level}: columns show`);
+    assert.doesNotMatch(html, /genie-recommended-card/, `${level}: no card`);
   }
+  assert.match(render({ selectedLevel: 'lakehouse' }), /For Application Developers/);
+  // The Other tracks tab can show while Genie is still the track (view="other").
+  const browsing = render({ view: 'other' });
+  assert.match(browsing, /data-testid="other-paths"/);
+  assert.doesNotMatch(browsing, /genie-recommended-card/);
+});
+
+test('reverse direction: always the Other tracks view, no card', () => {
+  const html = render({ selectedLevel: 'reverse-lakehouse', direction: 'reverse', view: 'genie' });
+  assert.doesNotMatch(html, /genie-recommended-card/);
+  assert.doesNotMatch(html, /Include Genie Ontology/);
+  assert.match(html, /data-testid="other-paths"/, 'the reverse columns still show');
+});
+
+// --- the card on its own ------------------------------------------------------------
+
+const cardOnly = (props: Partial<Parameters<typeof GenieRecommendedCard>[0]> = {}) =>
+  renderToStaticMarkup(createElement(GenieRecommendedCard, {
+    selected: false,
+    lockState: null,
+    readOnly: false,
+    includeLakehouse: false,
+    includeGenieOntology: true,
+    stepCount: null,
+    buildMinutes: 200,
+    onSelect: noop,
+    ...props,
+  }));
+
+test('not selected: "Recommended track" without "✓ Selected", clickable', () => {
+  const html = cardOnly();
+  assert.match(html, /data-selected="false"/);
+  assert.match(html, /Recommended track/);
+  assert.doesNotMatch(html, />Selected</);
+  assert.match(html, /aria-pressed="false"/);
+  assert.doesNotMatch(html.match(/<button[^>]*aria-pressed[^>]*>/)?.[0] ?? '', /disabled/);
 });
 
 test('read-only: the card and its toggles render disabled', () => {
@@ -113,26 +159,14 @@ test('read-only: the card and its toggles render disabled', () => {
   const boxes = card(html).match(/<input type="checkbox"[^>]*>/g) ?? [];
   assert.equal(boxes.length, 2);
   for (const box of boxes) assert.match(box, /disabled=""/);
-  const other = render({ selectedLevel: 'lakehouse' }, true);
-  assert.match(cardButton(other), /disabled=""/);
+  assert.match(cardOnly({ readOnly: true }).match(/<button[^>]*aria-pressed[^>]*>/)?.[0] ?? '', /disabled=""/);
 });
 
-test('path lock: a started workflow on another path locks the card with the lock tooltip', () => {
-  const html = render({ selectedLevel: 'lakehouse', completedSteps: new Set([1, 2, 3]), levelExplicitlySelected: true });
-  assert.match(cardButton(html), /disabled=""/);
-  assert.match(card(html), /Path is locked/);
-  assert.match(card(html), /Start a new session to switch tracks\./);
-  // The selected path is never locked (grandfather rule).
-  const own = render({ completedSteps: new Set([1, 2, 3]) });
-  assert.doesNotMatch(cardButton(own), /disabled/);
-});
-
-test('reverse direction: no card and no "Choose a different path"', () => {
-  const html = render({ selectedLevel: 'reverse-lakehouse', direction: 'reverse' });
-  assert.doesNotMatch(html, /genie-recommended-card/);
-  assert.doesNotMatch(html, /Choose a different path/);
-  assert.doesNotMatch(html, /Include Genie Ontology/);
-  assert.match(html, /data-testid="other-paths"/, 'the reverse columns still show');
+test('locked: the card renders disabled with the lock tooltip', () => {
+  const html = cardOnly({ lockState: { reason: 'workflow-started' } });
+  assert.match(html.match(/<button[^>]*aria-pressed[^>]*>/)?.[0] ?? '', /disabled=""/);
+  assert.match(html, /Path is locked/);
+  assert.match(html, /Start a new session to switch tracks\./);
 });
 
 test('step count and build time come from the outline and computeBuildTime', () => {
@@ -161,32 +195,73 @@ test('step count and build time come from the outline and computeBuildTime', () 
   assert.match(render({ includeGenieOntology: false }), new RegExp(`est\\. ${formatHM(off)} build time`));
   // Until the outline answers there's no step count; then it shows the outline's length.
   assert.doesNotMatch(html, / steps · /);
-  const withCount = renderToStaticMarkup(createElement(GenieRecommendedCard, {
-    selected: true,
-    lockState: null,
-    readOnly: false,
-    includeLakehouse: false,
-    includeGenieOntology: true,
-    stepCount: 27,
-    buildMinutes: minutes,
-    onSelect: noop,
-  }));
-  assert.match(withCount, />27 steps · </);
+  assert.match(cardOnly({ selected: true, stepCount: 27, buildMinutes: minutes }), />27 steps · </);
   const source = readFileSync(new URL('../../src/components/LevelSelector.tsx', import.meta.url), 'utf-8');
   assert.match(source, /previewTrackOutline\('genie-accelerator', \{ flags: \{ includeLakehouse, includeGenieOntology \} \}\)/);
   assert.match(source, /\.then\(resp => resp\.outline\.length\)/);
 });
 
-test('the same card wherever PathAndArchitecture renders', () => {
-  const html = renderToStaticMarkup(createElement(ReadOnlyProvider, { value: false }, createElement(PathAndArchitecture, {
-    selectedLevel: 'genie-accelerator',
-    onLevelChange: noop,
-    completedSteps: new Set<number>(),
-    forceExpanded: true,
-    includeGenieOntology: true,
-    onIncludeGenieOntologyChange: noop,
-  })));
+// --- the tabs in PathAndArchitecture ------------------------------------------------
+
+test('trackTabForLevel: Genie tab for the Genie Accelerator, Other tracks otherwise and in reverse', () => {
+  assert.equal(trackTabForLevel('genie-accelerator', 'forward'), 'genie');
+  assert.equal(trackTabForLevel('genie-accelerator', 'reverse'), 'other');
+  for (const level of ['app-only', 'lakehouse', 'end-to-end', 'agents-accelerator', 'reverse-app'] as const) {
+    assert.equal(trackTabForLevel(level, 'forward'), 'other', level);
+  }
+});
+
+test('Genie level: the Genie tab is selected, the direction toggle stays on Other tracks', () => {
+  const html = renderPath();
+  assert.match(html, /role="tablist"/);
+  assert.match(tab(html, 'genie'), /aria-selected="true"/);
+  assert.match(tab(html, 'other'), /aria-selected="false"/);
   assert.match(html, /data-testid="genie-recommended-card" data-selected="true"/);
+  assert.doesNotMatch(html, />Reverse ETL</, 'no direction toggle on the Genie tab');
+  assert.doesNotMatch(html, /current-track-note/);
+});
+
+test('another level: the Other tracks tab with the direction toggle and the columns', () => {
+  const html = renderPath({ selectedLevel: 'lakehouse', includeGenieOntology: false });
+  assert.match(tab(html, 'other'), /aria-selected="true"/);
+  assert.match(html, />Build Forward</);
+  assert.match(html, />Reverse ETL</);
+  assert.match(html, /data-testid="other-paths"/);
+  assert.doesNotMatch(html, /genie-recommended-card/);
+  assert.match(tab(html, 'genie'), /aria-disabled="false"/, 'one click back to the Genie Accelerator');
+});
+
+test('Reverse ETL disables the Genie tab and says why', () => {
+  const html = renderPath({ selectedLevel: 'reverse-lakehouse', direction: 'reverse' });
+  assert.match(tab(html, 'genie'), /aria-disabled="true"/);
+  assert.match(html, /Switch to Build Forward \(under Other tracks\) to use the Genie Accelerator\./);
+  assert.match(tab(html, 'other'), /aria-selected="true"/);
+});
+
+test('the Genie tab follows the picker lock: started on another track, or another assistant', () => {
+  const started = renderPath({ selectedLevel: 'lakehouse', completedSteps: new Set([1, 2, 3]) });
+  assert.match(tab(started, 'genie'), /aria-disabled="true"/);
+  assert.match(started, /Path is locked/);
+  const assistant = renderPath({ selectedLevel: 'lakehouse', disabledWorkshopLevels: new Set(['genie-accelerator']) });
+  assert.match(tab(assistant, 'genie'), /aria-disabled="true"/);
+  assert.match(assistant, /Not available with this assistant/);
+  // The picker alone would let a started end-to-end session (chain 'app') through;
+  // the App's forward-progression guard would not, so the tab is disabled too.
+  const endToEnd = renderPath({ selectedLevel: 'end-to-end', chainContext: 'app', completedSteps: new Set([1, 2]) });
+  assert.match(tab(endToEnd, 'genie'), /aria-disabled="true"/);
+  assert.match(endToEnd, /Path is locked/);
+  // The current track is never locked (grandfather rule).
+  const own = renderPath({ completedSteps: new Set([1, 2, 3]) });
+  assert.match(tab(own, 'genie'), /aria-disabled="false"/);
+});
+
+test('read-only: the Genie tab cannot switch tracks, but shows a Genie session', () => {
+  assert.match(tab(renderPath({ selectedLevel: 'lakehouse' }, true), 'genie'), /aria-disabled="true"/);
+  assert.match(tab(renderPath({}, true), 'genie'), /aria-disabled="false"/);
+});
+
+test('the same tabs and card wherever PathAndArchitecture renders', () => {
+  assert.match(renderPath(), /data-testid="genie-recommended-card" data-selected="true"/);
   // WorkflowDiagram and the Config Test Scenario both render PathAndArchitecture.
   for (const file of ['src/components/WorkflowDiagram.tsx', 'src/components/config/TestScenarioConfig.tsx']) {
     const src = readFileSync(new URL(`../../${file}`, import.meta.url), 'utf-8');

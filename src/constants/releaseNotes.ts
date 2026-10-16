@@ -54,7 +54,7 @@ export const RELEASES: Release[] = [
       {
         title: 'Run any workshop track from Genie Code',
         description:
-          'Add the app as a custom MCP server in Genie Code (the app URL followed by /mcp) and say "Start the Genie Accelerator". Genie Code then walks you through the track one step at a time, showing each prompt and waiting for you to run it. Your progress is saved on the server, so you can switch between Genie Code and the web app at any point.',
+          'Add the app as a custom MCP server in Genie Code (the app URL followed by /mcp), then say the line the web app shows, such as "Start a workshop track: Genie Accelerator". Genie Code then walks you through the track one step at a time, showing each prompt and waiting for you to run it. Your progress is saved on the server, so you can switch between Genie Code and the web app at any point.',
         category: 'new',
         audience: 'attendee',
         icon: 'terminal',
@@ -70,11 +70,27 @@ export const RELEASES: Release[] = [
       {
         title: 'New sessions start on the Genie Accelerator, with the Genie Ontology',
         description:
-          'Every new session now starts on the Genie Accelerator, whichever coding assistant you pick, with the Genie Ontology chapter included. A recommended card at the top of the path picker holds the Include Genie Ontology and Include Lakehouse options. If your workspace has no Genie One Pages, untick the ontology in the web app, or say "skip the ontology" in Genie Code. Existing sessions keep their saved path.',
+          'Every new session now starts on the Genie Accelerator, whichever coding assistant you pick, with the Genie Ontology chapter included. Its tab in the path picker holds the Include Genie Ontology and Include Lakehouse options. If your workspace has no Genie One Pages, untick the ontology in the web app, or say "skip the ontology" in Genie Code. Existing sessions keep their saved path.',
         category: 'new',
         audience: 'attendee',
         icon: 'route',
         beta: true,
+      },
+      {
+        title: 'One session in the web app and Genie Code',
+        description:
+          'Pick Genie Code as your coding assistant and the web app shows the MCP URL, the three connection steps and one line to say in Genie Code, such as "Start a workshop track: Genie Accelerator (session …)". It continues the same session, and Set Up Project repeats it. Start, switch track or save from either side: an open web tab catches up by itself and tells you what changed. Genie Code can also list your sessions and save one under a new name.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'terminal',
+      },
+      {
+        title: 'Recommended track and Other tracks',
+        description:
+          'The path picker now has two tabs. The Genie Accelerator tab holds the recommended track; Other tracks shows every other path as before, including Build Forward and Reverse ETL. You can move between them in one click, and Genie Code understands track names such as "Apps + Lakebase" or "lakehouse with AI".',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'route',
       },
       {
         title: 'The ontology chapter comes before the app',
