@@ -47,6 +47,7 @@ merge never changes it. After an upgrade, check that it has these keys:
 | `VIBE_COACH_BUDGET_S` | `"20"` | Seconds the coach waits for the model before falling back to the step's static help. |
 | `VIBE_DEFAULT_GENIE_ONTOLOGY` | `"true"` | Turns the Genie Ontology on for new Genie Accelerator sessions. Set `"false"` if the workspace has no Genie One Pages (§3). |
 | `VIBE_STEP_PROMPT_PREFETCH` | `"true"` | Prepares the next step's prompt in the background over MCP (§3). `"false"` renders it on completion. |
+| `VIBE_MCP_STRICT_OWNER` | `"true"` | A Genie Code request with no user identity can't open a session someone owns (§4). Databricks Apps always sends `x-forwarded-email`; set `"false"` only if your workspace's proxy sends no identity header. |
 | `IDEATE_ANALYSIS_ENDPOINT` | blank | Optional stronger model for Ideate's impact sizing. Blank uses `DATABRICKS_SERVING_ENDPOINT`. |
 | `INSIGHTS_BUILD_RECIPES` | blank | Insights add-ons turned on for everyone (`ontology`, `alerts`, `app_view`, `copilot` or `all`). |
 
@@ -216,6 +217,10 @@ way; both sides read and write the same row.
   characters, not "New Session").
 - **Find a session** over MCP with `vibe_list_sessions` (the learner's own sessions, newest first),
   then continue it with its id.
+- **Only your own sessions.** Every Genie Code call checks that the session belongs to the caller
+  (the `x-forwarded-email` identity the Apps proxy adds). A request without an identity can't open
+  a session someone owns (`VIBE_MCP_STRICT_OWNER`, §0), so a session id seen on someone's screen
+  is not enough to open their session.
 
 ---
 

@@ -61,6 +61,13 @@ env:
   # wait. Read per call; unset = on. "false" (or 0/off/no) = render on complete.
   - name: VIBE_STEP_PROMPT_PREFETCH
     value: "true"
+
+  # MCP strict owner: a Genie Code request that carries no user identity (no
+  # x-forwarded-email from the Apps proxy) cannot open a session someone owns.
+  # Read per call; unset = on. "false" (or 0/off/no) = the old behaviour, only
+  # for a workspace whose proxy sends no identity header.
+  - name: VIBE_MCP_STRICT_OWNER
+    value: "true"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration
