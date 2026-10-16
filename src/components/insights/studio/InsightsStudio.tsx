@@ -4,7 +4,7 @@ import { Clock } from 'lucide-react';
 import { getPreviousOutputsForStep } from '../../../utils/stepPreviousOutputs';
 import type { DataSource } from '../brief';
 import type { BlueprintChoice } from '../blueprint/types';
-import { MOMENTS, blueprintMoment, formatMinutes, momentsIn, tagForMoment, type ChapterId, type Moment } from '../journey';
+import { MOMENTS, dataSourceMoment, formatMinutes, momentsIn, tagForMoment, type ChapterId, type Moment } from '../journey';
 import { addOnOf, useTagAvailability, type AddOn } from '../recipes';
 import type { WorkspaceLinks } from '../types';
 import { ChapterCelebration } from './ChapterCelebration';
@@ -13,6 +13,7 @@ import { FinishScreen } from './FinishScreen';
 import { GenieCompanion } from './GenieCompanion';
 import { BlueprintInstallBody } from './BlueprintInstallBody';
 import { MomentCard } from './MomentCard';
+import { SchemaUploadBody } from './SchemaUploadBody';
 import { SetupBody } from './SetupBody';
 
 interface InsightsStudioProps {
@@ -58,6 +59,7 @@ export function InsightsStudio(props: InsightsStudioProps) {
   const [showFinish, setShowFinish] = useState(allDone);
   const [celebrating, setCelebrating] = useState<ChapterId | null>(null);
   const [pendingFinish, setPendingFinish] = useState(false);
+  const [schemaUploadReady, setSchemaUploadReady] = useState(() => !!stepPrompts[57]?.trim());
   const topRef = useRef<HTMLDivElement>(null);
 
   const foundIdx = moments.findIndex(m => m.step === activeStep);
@@ -156,7 +158,10 @@ export function InsightsStudio(props: InsightsStudioProps) {
   const isSetup = moment.kind === 'setup';
   const bp = dataSource === 'blueprint' ? blueprint ?? null : null;
   const isBlueprintStep = !!bp && moment.tag === 'semlayer_locate';
-  const relabel = <T extends typeof moment | null | undefined>(m: T): T => (bp && m ? blueprintMoment(m, bp.label) as T : m);
+  const isSchemaUploadStep = dataSource === 'upload' && moment.tag === 'semlayer_locate';
+  const relabel = <T extends typeof moment | null | undefined>(m: T): T => (
+    m ? dataSourceMoment(m, dataSource, bp?.label) as T : m
+  );
   const shownMoment = relabel(moment);
   const canSkip = !!moment.optional && !!onSkippedStepsChange;
   const unavailable = !!addOnOf(moment) && availability.loaded && availability.known && !availability.has(tag);
@@ -210,6 +215,8 @@ export function InsightsStudio(props: InsightsStudioProps) {
                 onSkip={canSkip ? skip : undefined}
                 onBack={prevMoment ? () => goTo(prevMoment.step) : undefined}
                 onGoTo={goTo}
+                customBodyReady={!isSchemaUploadStep || schemaUploadReady}
+                customDoneLabel={isSchemaUploadStep ? 'Instructions ready, next' : undefined}
                 customBody={isSetup ? (
                   <SetupBody
                     codingAssistant={codingAssistant}
@@ -219,6 +226,18 @@ export function InsightsStudio(props: InsightsStudioProps) {
                     onUndo={undo}
                     sessionId={sessionId}
                     useCaseLabel={name}
+                  />
+                ) : isSchemaUploadStep ? (
+                  <SchemaUploadBody
+                    sessionId={sessionId}
+                    industry={industry}
+                    useCase={useCase}
+                    step={moment.step}
+                    savedPrompt={stepPrompts[moment.step]}
+                    previousStepComplete={!lockedBy}
+                    readOnly={readOnly}
+                    onGenerated={onStepPromptGenerated}
+                    onReadyChange={setSchemaUploadReady}
                   />
                 ) : isBlueprintStep && bp ? (
                   <BlueprintInstallBody

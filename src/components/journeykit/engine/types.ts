@@ -1,5 +1,28 @@
 export type IdeaStatus = 'exploring' | 'committed' | 'parked';
 
+export type IdeaReviewStatus = 'draft' | 'pending' | 'changes_requested' | 'rejected' | 'approved';
+export type IdeaReviewAction = 'submitted' | 'approved' | 'changes_requested' | 'rejected' | 'reopened';
+
+export interface IdeaReviewEvent {
+  action: IdeaReviewAction;
+  at: string;
+  by?: string | null;
+  note?: string | null;
+  revision: number;
+}
+
+/** Canonical approval state. Catalog publication flags are intentionally separate. */
+export interface IdeaReview {
+  status: IdeaReviewStatus;
+  revision: number;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewer?: string | null;
+  note?: string | null;
+  approvedRevision?: number | null;
+  history: IdeaReviewEvent[];
+}
+
 /** `ideate` shapes an idea into a brief; `insights` shapes it and then builds a Genie on it. */
 export type JourneyMode = 'ideate' | 'insights';
 
@@ -351,6 +374,8 @@ export interface Idea {
   buildStage?: 'data' | 'studio';
   /** Bumped each time an approved answer changes. */
   revision?: number;
+  /** Owner/reviewer approval required before a revision may start or update a build. */
+  review?: IdeaReview;
   /** The revision the linked build was last set up from. */
   builtRevision?: number;
   /** The step whose approved answer changed most recently, until the brief is approved again. */

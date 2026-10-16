@@ -80,7 +80,7 @@ export function PromptGenerator({
   const [selectedPath, setSelectedPath] = useState<IntentPath>(
     initialIndustry && initialUseCase
       ? (SKILL_USE_CASES.has(initialUseCase) ? 'skill' : 'use_case')
-      : null
+      : 'use_case'
   );
 
   // Mode: library (pick from cards) or custom (define your own)
@@ -160,7 +160,7 @@ export function PromptGenerator({
   // Update state when initial props change (e.g., when loading a session or creating new session)
   useEffect(() => {
     if (!initialIndustry && !initialUseCase) {
-      setSelectedPath(null);
+      setSelectedPath('use_case');
       setSelectedIndustry('');
       setSelectedUsecase('');
       setHasStarted(false);

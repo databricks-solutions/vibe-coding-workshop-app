@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { calculateIdeaScore } from '../../constants/scoring';
-import { ArrowRight, BookOpenCheck, Copy, Hammer, History, Lightbulb, Menu, MoreHorizontal, Pencil, Send, Trash2 } from 'lucide-react';
+import { apiClient } from '../../api/client';
+import { ArrowRight, BookOpenCheck, CheckCircle2, Clock, Copy, Hammer, History, Inbox, Lightbulb, Menu, MoreHorizontal, Pencil, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import {
-  ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, SAMPLES, STEP_ART, SubmitDialog, SummitTrail, SurfaceChips, TierBadge, VoiceTextarea,
-  buildTargetFor, caseFigures, chosenShape, ideaProgressSteps, ideaTrail, isBuilding, money, needsBuildUpdate, openBuildHref, shapeBuild, startBuildHref, stepMeta, stepsOf, useEnabledAddOns, useIdeas,
+  ApprovalTracker, ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, ReviewDialog, SAMPLES, STEP_ART, SubmitDialog, SummitTrail,
+  isApproved, personName, useReviewRefresh, useReviewer, SurfaceChips, TierBadge, VoiceTextarea,
+  caseFigures, chosenShape, ideaProgressSteps, ideaTrail, isBuilding, money, needsBuildUpdate, openBuildHref, shapeBuild, startBuildHref, stepMeta, stepsOf, useEnabledAddOns, useIdeas,
   type Idea, type IdeaStatus,
 } from '../journeykit';
 
@@ -28,16 +30,86 @@ function timeAgo(iso: string) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+const approvedForBuild = isApproved;
+
+/** What just happened to an idea, so the home page can point at it and say what to do next. */
+type CoachEvent = 'submitted' | 'approved' | 'changes_requested' | 'rejected';
+interface Coach { id: string; event: CoachEvent; by?: string | null; self?: boolean }
+const COACH_EVENTS = new Set<CoachEvent>(['submitted', 'approved', 'changes_requested', 'rejected']);
+
+/** Ideate hands approved ideas to Insights. A stale Technical link starts a fresh Insights project. */
+const insightsBuildHref = (idea: Idea) =>
+  `${startBuildHref(idea)}&target=insights${idea.sessionId && idea.buildTarget !== 'insights' ? '&fresh=1' : ''}`;
+
 export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const { ideas, createIdea, updateIdea, deleteIdea, duplicateIdea } = useIdeas();
   useEnabledAddOns();
   const navigate = useNavigate();
   const [seed, setSeed] = useState('');
   const [industry, setIndustry] = useState('');
-  const [filter, setFilter] = useState<IdeaStatus | 'all' | 'submitted' | 'building'>('all');
+  const [filter, setFilter] = useState<IdeaStatus | 'all' | 'pending' | 'changes_requested' | 'rejected' | 'approved' | 'building'>('all');
   const [sort, setSort] = useState<'recent' | 'value'>('recent');
   const [submitting, setSubmitting] = useState<Idea | null>(null);
+  const [reviewing, setReviewing] = useState<Idea | null>(null);
+  const me = useReviewer();
+  const canReview = me.canReview;
   const [promptIdx, setPromptIdx] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [coach, setCoach] = useState<Coach | null>(null);
+  const [pulse, setPulse] = useState<{ id: string; n: number } | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
+
+  const spotlight = (next: Coach) => {
+    setCoach(next);
+    setPulse(p => ({ id: next.id, n: (p?.n ?? 0) + 1 }));
+  };
+
+  const focusParam = searchParams.get('focus');
+  const [seenFocus, setSeenFocus] = useState<string | null>(null);
+  if (focusParam !== seenFocus) {
+    setSeenFocus(focusParam);
+    if (focusParam) {
+      const event = searchParams.get('event') as CoachEvent | null;
+      setFilter('all');
+      spotlight({ id: focusParam, event: event && COACH_EVENTS.has(event) ? event : 'submitted' });
+    }
+  }
+
+  useEffect(() => {
+    if (!focusParam) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('focus');
+    next.delete('event');
+    setSearchParams(next, { replace: true });
+  }, [focusParam, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!pulse) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const frame = requestAnimationFrame(() =>
+      document.getElementById(`idea-card-${pulse.id}`)?.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' }));
+    return () => cancelAnimationFrame(frame);
+  }, [pulse]);
+
+  const coachIdea = coach ? ideas.find(i => i.id === coach.id) : undefined;
+  const anyPending = ideas.some(i => i.review?.status === 'pending');
+  useReviewRefresh(anyPending, changes => {
+    const decided = changes.find(c => c.from === 'pending' && c.idea.review?.status !== 'pending' && c.idea.review?.status !== 'draft');
+    if (!decided) return;
+    const status = decided.idea.review!.status as CoachEvent;
+    spotlight({ id: decided.idea.id, event: status, by: decided.idea.review?.reviewer });
+  });
+
+  useEffect(() => {
+    if (!canReview) return;
+    let alive = true;
+    const load = () => void apiClient.ideaReviews('pending')
+      .then(list => alive && setQueueCount(list.filter(r => r.owner?.email?.toLowerCase() !== me.email).length))
+      .catch(() => undefined);
+    load();
+    const timer = setInterval(load, 60_000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [canReview, me.email]);
 
   useEffect(() => {
     if (seed) return;
@@ -54,14 +126,31 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
   const values = useMemo(() => new Map(ideas.map(i => [i.id, caseFigures(i)?.value.expected ?? 0])), [ideas]);
   const visible = useMemo(() => {
     const list = ideas.filter(i =>
-      filter === 'all' || (filter === 'submitted' ? !!i.catalogRef : filter === 'building' ? isBuilding(i) && i.buildStatus !== 'later' : i.status === filter));
+      filter === 'all' || (filter === 'building'
+        ? isBuilding(i) && i.buildStatus !== 'later'
+        : ['pending', 'changes_requested', 'rejected', 'approved'].includes(filter)
+          ? (filter === 'approved'
+            ? i.review?.status === 'approved' && i.review.approvedRevision === (i.revision ?? 0)
+            : i.review?.status === filter)
+          : i.status === filter));
     return sort === 'value' ? [...list].sort((a, b) => (values.get(b.id) ?? 0) - (values.get(a.id) ?? 0)) : list;
   }, [ideas, filter, sort, values]);
-  const anySubmitted = ideas.some(i => i.catalogRef);
+  const reviewFilters = (['pending', 'changes_requested', 'rejected', 'approved'] as const).filter(s => ideas.some(i =>
+    s === 'approved' ? i.review?.status === s && i.review.approvedRevision === (i.revision ?? 0) : i.review?.status === s));
   const anyBuilding = ideas.some(i => isBuilding(i) && i.buildStatus !== 'later');
   const sized = ideas.filter(i => i.status !== 'parked' && (values.get(i.id) ?? 0) > 0);
   const portfolio = sized.reduce((a, i) => a + (values.get(i.id) ?? 0), 0);
-  const open = (idea: Idea) => navigate(isBuilding(idea) && idea.buildStatus !== 'later' ? openBuildHref(idea)! : idea.mode === 'insights' ? (openBuildHref(idea) ?? '/?view=insights') : `/ideate/${idea.id}`);
+  const open = (idea: Idea) => {
+    if (isBuilding(idea) && idea.buildStatus !== 'later') {
+      navigate(idea.buildTarget === 'insights' || idea.mode === 'insights'
+        ? openBuildHref(idea)!
+        : approvedForBuild(idea)
+          ? insightsBuildHref(idea)
+          : `/ideate/${idea.id}`);
+      return;
+    }
+    navigate(idea.mode === 'insights' ? (openBuildHref(idea) ?? '/?view=insights') : `/ideate/${idea.id}`);
+  };
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background">
@@ -113,16 +202,25 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
           <div className="mt-10">
             <div className="flex items-center gap-2 mb-4">
               <h2 className="text-ui-lg font-semibold text-foreground mr-2">My ideas</h2>
-              {(['all', 'exploring', 'committed', 'parked', ...(anyBuilding ? ['building' as const] : []), ...(anySubmitted ? ['submitted' as const] : [])] as const).map(f => (
+              {(['all', 'exploring', 'parked', ...reviewFilters, ...(anyBuilding ? ['building' as const] : [])] as const).map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`px-2.5 py-1 rounded-full text-ui-xs font-medium transition-colors ${filter === f ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-secondary'}`}
                 >
-                  {f === 'all' ? `All ${ideas.length}` : f === 'submitted' ? 'Submitted' : f === 'building' ? 'Building' : STATUS[f].label}
+                  {f === 'all' ? `All ${ideas.length}` : f === 'pending' ? 'Pending approval' : f === 'changes_requested' ? 'Changes requested' : f === 'rejected' ? 'Rejected' : f === 'approved' ? 'Approved' : f === 'building' ? 'Building' : STATUS[f].label}
                 </button>
               ))}
               <div className="ml-auto flex items-center gap-3">
+                {queueCount > 0 && (
+                  <button
+                    onClick={() => navigate('/library/review')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-ui-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                    title="Ideas from other people waiting for an approver"
+                  >
+                    <Inbox className="w-3.5 h-3.5" /> {queueCount} waiting for your review
+                  </button>
+                )}
                 {portfolio > 0 && (
                   <span className="hidden sm:inline text-ui-xs text-muted-foreground" title="Sum of the expected yearly value of ideas that are not parked">
                     <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{money(portfolio)}</span> a year across {sized.length} idea{sized.length === 1 ? '' : 's'}
@@ -133,6 +231,19 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                 </button>
               </div>
             </div>
+            {coachIdea && coach && (
+              <CoachBanner
+                key={`${coach.id}-${coach.event}`}
+                coach={coach}
+                idea={coachIdea}
+                canReview={canReview}
+                everyone={me.everyone}
+                onReview={() => setReviewing(coachIdea)}
+                onBuild={() => navigate(insightsBuildHref(coachIdea))}
+                onOpen={() => navigate(`/ideate/${coachIdea.id}`)}
+                onDismiss={() => setCoach(null)}
+              />
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               {visible.map((idea, i) => (
                 <IdeaCard
@@ -141,18 +252,20 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                   delay={i * 50}
                   value={values.get(idea.id) ?? 0}
                   onOpen={() => open(idea)}
-                  onBuild={() => navigate(idea.buildStatus === 'later' && idea.sessionId ? (updateIdea(idea.id, { buildStatus: 'building', status: 'committed' }), openBuildHref(idea)!) : startBuildHref(idea))}
+                  onBuild={() => navigate(insightsBuildHref(idea))}
                   onRename={title => updateIdea(idea.id, { title })}
                   onDuplicate={() => duplicateIdea(idea.id)}
                   onDelete={() => deleteIdea(idea.id)}
                   onSubmit={() => setSubmitting(idea)}
+                  onReview={canReview ? () => setReviewing(idea) : undefined}
+                  spotlit={pulse?.id === idea.id ? pulse.n : 0}
                 />
               ))}
               {visible.length === 0 && (
                 <div className="sm:col-span-2 flex flex-col items-center py-6 text-center">
                   <img src={ART.empty} alt="" width={200} height={133} className="w-48 rounded-2xl opacity-90" />
                   <p className="text-ui-sm text-muted-foreground mt-3">
-                    No {filter === 'all' ? '' : filter === 'submitted' ? 'submitted' : filter === 'building' ? 'building' : STATUS[filter].label.toLowerCase()} ideas yet.
+                    No matching ideas yet.
                   </p>
                 </div>
               )}
@@ -163,6 +276,23 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
         <SamplesSection onOpen={id => navigate(`/ideate/${id}`)} />
       </div>
       {submitting && <SubmitDialog idea={ideas.find(i => i.id === submitting.id) ?? submitting} onClose={() => setSubmitting(null)} />}
+      {reviewing && (
+        <ReviewDialog
+          idea={ideas.find(i => i.id === reviewing.id) ?? reviewing}
+          onClose={() => setReviewing(null)}
+          onDecided={action => spotlight({
+            id: reviewing.id,
+            event: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'changes_requested',
+            by: me.email,
+            self: true,
+          })}
+          onStartBuild={() => {
+            const idea = ideas.find(i => i.id === reviewing.id) ?? reviewing;
+            setReviewing(null);
+            navigate(insightsBuildHref(idea));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -176,13 +306,17 @@ interface IdeaCardProps {
   onDelete: () => void;
   onSubmit: () => void;
   onBuild: () => void;
+  onReview?: () => void;
   value: number;
+  /** Bumps each time the card should draw attention; 0 for no spotlight. */
+  spotlit: number;
 }
 
-function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete, onSubmit, onBuild }: IdeaCardProps) {
+function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete, onSubmit, onBuild, onReview, spotlit }: IdeaCardProps) {
   const building = isBuilding(idea);
   const later = idea.buildStatus === 'later';
-  const canBuild = idea.mode !== 'insights' && !!idea.brief && (!building || later);
+  const reviewApproved = approvedForBuild(idea);
+  const canBuild = idea.mode !== 'insights' && !!idea.brief && ((reviewApproved && !building) || (building && later));
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -199,12 +333,25 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
     return () => document.removeEventListener('mousedown', close);
   }, [menu]);
 
+  const reviewStatus = idea.review?.status;
+  const action: CardAction | null =
+    canBuild ? { kind: 'build', label: later ? 'Resume build' : 'Start building', onClick: onBuild }
+    : idea.buildTarget === 'technical' && building && reviewApproved ? { kind: 'build', label: 'Move to Insights', onClick: onBuild }
+    : reviewStatus === 'pending' && onReview ? { kind: 'review', label: 'Review & approve', onClick: onReview }
+    : reviewStatus === 'pending' ? { kind: 'waiting', label: `Waiting for review${idea.review?.submittedAt ? ` · ${timeAgo(idea.review.submittedAt)}` : ''}` }
+    : reviewStatus === 'changes_requested' || reviewStatus === 'rejected' ? { kind: 'revise', label: 'Revise and resubmit', onClick: onOpen }
+    : idea.status === 'committed' && idea.brief && idea.mode !== 'insights' && !reviewApproved ? { kind: 'submit', label: reviewStatus === 'approved' ? 'Resubmit this revision' : 'Submit for approval', onClick: onSubmit }
+    : null;
+  const tracked = idea.mode !== 'insights' && !!reviewStatus && reviewStatus !== 'draft';
+
   return (
     <div
+      id={`idea-card-${idea.id}`}
       onClick={() => !renaming && onOpen()}
-      className="group relative text-left rounded-2xl border border-border bg-card/60 p-4 cursor-pointer transition-colors hover:border-primary/40 hover:bg-card animate-cascade-in"
+      className={`group relative text-left rounded-2xl border bg-card/60 p-4 cursor-pointer scroll-mt-24 transition-colors hover:border-primary/40 hover:bg-card animate-cascade-in ${spotlit ? 'border-primary/50 bg-card' : 'border-border'}`}
       style={{ animationDelay: `${delay}ms` }}
     >
+      {spotlit > 0 && <span key={spotlit} aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl animate-spotlight" />}
       <div className="flex items-start gap-2.5">
         <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0" title={`At: ${stepLabel}`}>
           <StepIcon className="w-4 h-4" />
@@ -240,6 +387,11 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
         </div>
       </div>
       <p className="text-ui-sm text-muted-foreground line-clamp-2 mt-1 min-h-[2.5em]">{idea.spark?.statement ?? idea.seed}</p>
+      {(idea.review?.status === 'changes_requested' || idea.review?.status === 'rejected') && idea.review.note && (
+        <p className={`mt-2 rounded-lg px-2.5 py-2 text-ui-xs text-muted-foreground line-clamp-2 border-l-2 ${idea.review.status === 'rejected' ? 'bg-red-500/5 border-red-500/60' : 'bg-sky-500/5 border-sky-500/60'}`}>
+          <span className="font-semibold text-foreground">{personName(idea.review.reviewer)}:</span> {idea.review.note}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-3">
         {building && later ? (
           <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">Build later</span>
@@ -250,24 +402,6 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
         ) : (
           <span className={`px-2 py-0.5 rounded-full text-ui-2xs font-semibold ${status.cls}`}>{status.label}</span>
         )}
-        {idea.catalogRef ? (
-          <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-violet-500/10 text-violet-400" title={`${idea.catalogRef.industryLabel} / ${idea.catalogRef.useCaseLabel}`}>Submitted</span>
-        ) : canBuild ? (
-          <button
-            onClick={e => { e.stopPropagation(); onBuild(); }}
-            title={later ? 'Pick up the parked build' : `Start a project in ${BUILD_TARGET_LABEL[buildTargetFor(idea)]}`}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-2xs font-semibold text-primary hover:bg-primary/10"
-          >
-            <Hammer className="w-3 h-3" /> {later ? 'Resume build' : 'Build'}
-          </button>
-        ) : idea.status === 'committed' && idea.brief ? (
-          <button
-            onClick={e => { e.stopPropagation(); onSubmit(); }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-2xs font-semibold text-primary hover:bg-primary/10"
-          >
-            <Send className="w-3 h-3" /> Submit
-          </button>
-        ) : null}
         {needsBuildUpdate(idea) && (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400" title="You changed approved answers. Open the brief to update the build.">
             <History className="w-3 h-3" /> Changes to apply
@@ -277,6 +411,12 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
         <span className="min-w-0 flex"><IndustryBadge industry={idea.spark?.industry || idea.industry} catalogKey={idea.spark?.catalogIndustry ?? idea.sourceUseCase?.industry} size="sm" /></span>
         <span className="ml-auto shrink-0 text-ui-2xs text-muted-foreground">{stepLabel} · {timeAgo(idea.updatedAt)}</span>
       </div>
+      {(tracked || action) && (
+        <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border/60">
+          {tracked && <ApprovalTracker idea={idea} building={building && !later} />}
+          {action && <CardActionButton action={action} />}
+        </div>
+      )}
       <div className="flex items-center gap-3 mt-3">
         <div className="flex-1 min-w-0">
           <SummitTrail steps={ideaProgressSteps(idea, null)} size="xs" {...ideaTrail(idea)} />
@@ -295,6 +435,100 @@ function MenuItem({ icon: Icon, label, onClick, danger }: { icon: typeof Pencil;
     <button onClick={onClick} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-ui-sm hover:bg-secondary ${danger ? 'text-red-400' : 'text-foreground'}`}>
       <Icon className="w-3.5 h-3.5" /> {label}
     </button>
+  );
+}
+
+interface CardAction { kind: 'build' | 'review' | 'waiting' | 'revise' | 'submit'; label: string; onClick?: () => void }
+
+const ACTION_STYLE: Record<CardAction['kind'], string> = {
+  build: 'bg-primary text-primary-foreground shadow-sm hover:opacity-90',
+  review: 'bg-amber-500 text-white shadow-sm hover:bg-amber-400 animate-pulse-glow',
+  waiting: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 cursor-default',
+  revise: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20',
+  submit: 'bg-primary/10 text-primary hover:bg-primary/20',
+};
+const ACTION_ICON = { build: Hammer, review: ShieldCheck, waiting: Clock, revise: Pencil, submit: Send } as const;
+
+/** The one thing to do next with this idea. */
+function CardActionButton({ action }: { action: CardAction }) {
+  const Icon = ACTION_ICON[action.kind];
+  const cls = `ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-xs font-semibold transition-all active:scale-[0.97] ${ACTION_STYLE[action.kind]}`;
+  if (!action.onClick) {
+    return <span className={cls} title="Building unlocks as soon as an approver signs off. This card updates on its own."><Icon className="w-3.5 h-3.5" /> {action.label}</span>;
+  }
+  const run = action.onClick;
+  return (
+    <button onClick={e => { e.stopPropagation(); run(); }} className={cls}>
+      <Icon className="w-3.5 h-3.5" /> {action.label}
+      {action.kind === 'build' && <ArrowRight className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
+interface CoachBannerProps {
+  coach: Coach;
+  idea: Idea;
+  canReview: boolean;
+  everyone: boolean;
+  onReview: () => void;
+  onBuild: () => void;
+  onOpen: () => void;
+  onDismiss: () => void;
+}
+
+/** One sentence about what just happened to an idea, with the next step one click away. */
+function CoachBanner({ coach, idea, canReview, everyone, onReview, onBuild, onOpen, onDismiss }: CoachBannerProps) {
+  const status = idea.review?.status;
+  const by = coach.self ? 'You' : personName(coach.by ?? idea.review?.reviewer);
+  const title = `"${idea.title}"`;
+  let copy: { icon: typeof Hammer; tone: string; head: string; body: string; cta?: { label: string; run: () => void } };
+  if (isApproved(idea)) {
+    copy = {
+      icon: CheckCircle2, tone: 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-600 dark:text-emerald-400',
+      head: coach.self ? 'Approved. Ready to build.' : `${by} approved ${title}`,
+      body: 'Start the Insights build now, or pick it up any time from this card.',
+      cta: { label: 'Start building', run: onBuild },
+    };
+  } else if (status === 'pending') {
+    copy = canReview
+      ? {
+          icon: ShieldCheck, tone: 'border-amber-500/30 bg-amber-500/[0.06] text-amber-600 dark:text-amber-400',
+          head: `Submitted ${title} for approval`,
+          body: everyone ? "You're an approver, so you can review and approve it right now." : 'You can review it yourself, or leave it for another approver.',
+          cta: { label: 'Review & approve', run: onReview },
+        }
+      : {
+          icon: Clock, tone: 'border-amber-500/30 bg-amber-500/[0.06] text-amber-600 dark:text-amber-400',
+          head: `Submitted ${title} for approval`,
+          body: 'An approver takes it from here. This card updates the moment they decide, so there is no need to refresh.',
+        };
+  } else if (status === 'changes_requested' || status === 'rejected') {
+    copy = {
+      icon: RotateCcw, tone: status === 'rejected' ? 'border-red-500/30 bg-red-500/[0.05] text-red-500' : 'border-sky-500/30 bg-sky-500/[0.06] text-sky-600 dark:text-sky-400',
+      head: status === 'rejected' ? `${by} did not approve ${title}` : `${by} sent ${title} back with notes`,
+      body: idea.review?.note || 'Revise the idea and resubmit it.',
+      cta: coach.self ? undefined : { label: 'Revise and resubmit', run: onOpen },
+    };
+  } else {
+    return null;
+  }
+  const Icon = copy.icon;
+  return (
+    <div role="status" className={`flex items-start gap-3 rounded-2xl border px-4 py-3 mb-3 animate-slide-up-fade ${copy.tone}`}>
+      <Icon className="w-5 h-5 mt-0.5 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-ui-sm font-semibold text-foreground">{copy.head}</p>
+        <p className="text-ui-xs text-muted-foreground mt-0.5 line-clamp-2">{copy.body}</p>
+      </div>
+      {copy.cta && (
+        <button onClick={copy.cta.run} className="shrink-0 self-center inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-foreground text-background text-ui-xs font-semibold hover:opacity-90 active:scale-[0.97]">
+          {copy.cta.label} <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <button onClick={onDismiss} className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60" aria-label="Dismiss">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
   );
 }
 

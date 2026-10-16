@@ -65,6 +65,8 @@ OUTCOME_POINTS = {
 }
 QUALITY_MAX = 600
 TIERS: List[Tuple[int, str]] = [(750, "boardroom"), (500, "investable"), (250, "shaped"), (0, "spark")]
+REVIEW_STATUSES = {"pending", "changes_requested", "approved", "rejected"}
+REVIEW_ACTIONS = {"approve", "request_changes", "changes_requested", "reject"}
 
 DIMENSIONS: List[Tuple[str, str]] = [
     ("problem", "Problem clarity"),
@@ -197,8 +199,29 @@ _DDL = """CREATE TABLE IF NOT EXISTS {schema}.ideate_ideas (
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     points_reached_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITHOUT TIME ZONE
+    deleted_at TIMESTAMP WITHOUT TIME ZONE,
+    review_status VARCHAR(24),
+    submitted_revision INTEGER,
+    submitted_at TIMESTAMP WITHOUT TIME ZONE,
+    reviewed_revision INTEGER,
+    reviewed_at TIMESTAMP WITHOUT TIME ZONE,
+    reviewed_by VARCHAR(255),
+    review_note TEXT,
+    approved_revision INTEGER,
+    review_history JSONB NOT NULL DEFAULT '[]'::jsonb
 )"""
+
+_RUNTIME_MIGRATIONS = (
+    "ADD COLUMN IF NOT EXISTS review_status VARCHAR(24)",
+    "ADD COLUMN IF NOT EXISTS submitted_revision INTEGER",
+    "ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP WITHOUT TIME ZONE",
+    "ADD COLUMN IF NOT EXISTS reviewed_revision INTEGER",
+    "ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITHOUT TIME ZONE",
+    "ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255)",
+    "ADD COLUMN IF NOT EXISTS review_note TEXT",
+    "ADD COLUMN IF NOT EXISTS approved_revision INTEGER",
+    "ADD COLUMN IF NOT EXISTS review_history JSONB NOT NULL DEFAULT '[]'::jsonb",
+)
 
 _memory: Dict[str, Dict[str, Any]] = {}
 _memory_lock = threading.Lock()
@@ -223,6 +246,11 @@ def _ensure_table() -> Optional[str]:
     if _table_ready is None:
         try:
             _table_ready = bool(execute_insert(_DDL.format(schema=schema)))
+            if _table_ready:
+                for alteration in _RUNTIME_MIGRATIONS:
+                    if not execute_insert(f"ALTER TABLE {schema}.ideate_ideas {alteration}"):
+                        _table_ready = False
+                        break
         except Exception as e:
             logger.warning(f"[Ideas] could not create table: {e}")
             _table_ready = False
@@ -248,7 +276,7 @@ def _iso(v: Any) -> Optional[str]:
 
 def _row_out(r: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(r)
-    for k in ("payload", "approved", "quality_breakdown", "catalog_ref"):
+    for k in ("payload", "approved", "quality_breakdown", "catalog_ref", "review_history"):
         out[k] = _json(out.get(k))
     return out
 
@@ -273,6 +301,25 @@ def _owner_rows(email: str) -> List[Dict[str, Any]]:
     rows = execute_query(
         f"SELECT * FROM {schema}.ideate_ideas WHERE created_by = %s AND deleted_at IS NULL ORDER BY updated_at DESC",
         (email,),
+    ) or []
+    return [_row_out(r) for r in rows]
+
+
+def _review_rows() -> List[Dict[str, Any]]:
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            rows = [
+                dict(r) for r in _memory.values()
+                if not r.get("deleted_at") and r.get("review_status") in REVIEW_STATUSES
+            ]
+        rows.sort(key=lambda r: _iso(r.get("submitted_at")) or "", reverse=True)
+        return rows
+    _, execute_query, _, _ = _db()
+    rows = execute_query(
+        f"SELECT * FROM {schema}.ideate_ideas "
+        f"WHERE deleted_at IS NULL AND review_status IN ('pending', 'changes_requested', 'approved', 'rejected') "
+        f"ORDER BY submitted_at DESC NULLS LAST, updated_at DESC"
     ) or []
     return [_row_out(r) for r in rows]
 
@@ -401,11 +448,60 @@ def _points(row: Dict[str, Any], idea: Optional[Dict[str, Any]] = None) -> Dict[
 
 def _with_score(row: Dict[str, Any]) -> Dict[str, Any]:
     idea = dict(row.get("payload") or {})
+    if row.get("catalog_ref"):
+        idea["catalogRef"] = _json(row.get("catalog_ref"))
+    else:
+        idea.pop("catalogRef", None)
     idea["score"] = _points(row, idea)
+    idea["review"] = _review_metadata(row)
     return idea
 
 
 # ============== Helpers ==============
+
+def _review_metadata(row: Dict[str, Any]) -> Dict[str, Any]:
+    current_revision = _revision(row.get("payload") or {})
+    return {
+        "status": row.get("review_status") or "draft",
+        "revision": row.get("submitted_revision") or current_revision or 0,
+        "submittedRevision": row.get("submitted_revision"),
+        "submittedAt": _iso(row.get("submitted_at")),
+        "reviewedRevision": row.get("reviewed_revision"),
+        "reviewedAt": _iso(row.get("reviewed_at")),
+        "reviewer": row.get("reviewed_by"),
+        "reviewedBy": row.get("reviewed_by"),
+        "note": row.get("review_note"),
+        "latestNote": row.get("review_note"),
+        "approvedRevision": row.get("approved_revision"),
+        "history": _json(row.get("review_history")) or [],
+    }
+
+
+def _email_set(name: str) -> set:
+    return {email.strip().lower() for email in os.getenv(name, "").split(",") if email.strip()}
+
+
+def reviewer_email(request: Request) -> Optional[str]:
+    """Central reviewer policy. Provider groups can be added here later."""
+    user = _signed_in(request)
+    if not user:
+        return None
+    lowered = user.lower()
+    if lowered in _email_set("APP_ADMINS"):
+        return user
+    configured = os.getenv("IDEATE_REVIEWERS", "*").strip()
+    if configured == "*":
+        return user
+    allowed = {email.strip().lower() for email in configured.split(",") if email.strip()}
+    return user if lowered in allowed else None
+
+
+def _review_forbidden(request: Request) -> Optional[JSONResponse]:
+    if not _signed_in(request):
+        return JSONResponse({"error": "Sign in to review ideas."}, status_code=401)
+    if not reviewer_email(request):
+        return JSONResponse({"error": "You are not configured as an Ideate reviewer."}, status_code=403)
+    return None
 
 def _signed_in(request: Request) -> Optional[str]:
     user = _resolve_user(request)
@@ -427,7 +523,7 @@ def _avatar(email: str) -> str:
 
 def _clean_payload(idea: Dict[str, Any]) -> Dict[str, Any]:
     """Drops what the server owns or must never store."""
-    out = {k: v for k, v in idea.items() if k not in ("score", "sample")}
+    out = {k: v for k, v in idea.items() if k not in ("score", "sample", "review", "catalogRef")}
     return out
 
 
@@ -437,10 +533,9 @@ def _str(v: Any, limit: int) -> str:
 
 def _row_from_idea(idea: Dict[str, Any], owner: str, value_per_year: Optional[float]) -> Dict[str, Any]:
     spark = idea.get("spark") if isinstance(idea.get("spark"), dict) else {}
-    catalog_ref = idea.get("catalogRef") if isinstance(idea.get("catalogRef"), dict) else None
     approved = _approved(idea)
     journey = journey_points(idea)
-    total_wo_quality = journey + outcome_points(idea, _is_library_approved(catalog_ref))
+    total_wo_quality = journey
     return {
         "id": _str(idea.get("id"), 64),
         "created_by": owner,
@@ -455,9 +550,104 @@ def _row_from_idea(idea: Dict[str, Any], owner: str, value_per_year: Optional[fl
         "value_per_year": value_per_year if isinstance(value_per_year, (int, float)) and value_per_year >= 0 else None,
         "journey_points": journey,
         "total_points": total_wo_quality,
-        "catalog_ref": catalog_ref,
+        "catalog_ref": None,
         "locked_at": idea.get("lockedAt") or None,
     }
+
+
+def _revision(idea: Dict[str, Any]) -> Optional[int]:
+    value = idea.get("revision")
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 1 else None
+
+
+def _has_build_link(idea: Dict[str, Any]) -> bool:
+    return bool(idea.get("sessionId") or idea.get("lockedAt") or idea.get("buildStage"))
+
+
+def _new_build_link(existing: Optional[Dict[str, Any]], idea: Dict[str, Any]) -> bool:
+    old = (existing or {}).get("payload") or {}
+    if not _has_build_link(idea):
+        return False
+    if not _has_build_link(old):
+        return True
+    old_session = old.get("sessionId")
+    new_session = idea.get("sessionId")
+    return bool(new_session and new_session != old_session)
+
+
+def _build_authorization_error(row: Dict[str, Any], owner: str) -> Optional[JSONResponse]:
+    if row.get("created_by") != owner:
+        return JSONResponse(
+            {"error": "Only the idea owner can build this idea.", "reason": "Owner access is required.", "code": "not_owner"},
+            status_code=403,
+        )
+    current = _revision(row.get("payload") or {})
+    if row.get("review_status") != "approved":
+        return JSONResponse(
+            {
+                "error": "This idea must be approved before starting a build.",
+                "reason": "Submit the current revision and wait for approval.",
+                "code": "approval_required",
+                "review": _review_metadata(row),
+            },
+            status_code=409,
+        )
+    if current is None or row.get("approved_revision") != current:
+        return JSONResponse(
+            {
+                "error": "This idea changed after approval. Submit the current revision for review.",
+                "reason": "The approved revision is stale.",
+                "code": "stale_approval",
+                "review": _review_metadata(row),
+            },
+            status_code=409,
+        )
+    return None
+
+
+def _history_entry(action: str, revision: int, actor: str, note: Optional[str] = None) -> Dict[str, Any]:
+    return {
+        "action": action,
+        "revision": revision,
+        "by": actor,
+        "at": datetime.utcnow().isoformat() + "Z",
+        "note": note or None,
+    }
+
+
+def mark_submitted(idea_id: str, owner: str, revision: int, catalog_ref: Dict[str, Any]) -> bool:
+    """Persist the server-owned catalog link and pending review metadata."""
+    schema = _ensure_table()
+    entry = _history_entry("submitted", revision, owner)
+    if not schema:
+        with _memory_lock:
+            row = _memory.get(idea_id)
+            if not row or row.get("created_by") != owner or _revision(row.get("payload") or {}) != revision:
+                return False
+            history = list(row.get("review_history") or [])
+            history.append(entry)
+            payload = dict(row.get("payload") or {})
+            payload["catalogRef"] = catalog_ref
+            row.update(
+                payload=payload,
+                catalog_ref=catalog_ref,
+                review_status="pending",
+                submitted_revision=revision,
+                submitted_at=datetime.utcnow(),
+                review_history=history,
+                updated_at=datetime.utcnow(),
+            )
+        return True
+    execute_insert, _, _, _ = _db()
+    return bool(execute_insert(
+        f"UPDATE {schema}.ideate_ideas SET catalog_ref = %s::jsonb, "
+        f"payload = payload || jsonb_build_object('catalogRef', %s::jsonb), "
+        f"review_status = 'pending', submitted_revision = %s, submitted_at = CURRENT_TIMESTAMP, "
+        f"review_history = COALESCE(review_history, '[]'::jsonb) || %s::jsonb, updated_at = CURRENT_TIMESTAMP "
+        f"WHERE id = %s AND created_by = %s AND deleted_at IS NULL "
+        f"AND COALESCE((payload->>'revision')::integer, 0) = %s",
+        (json.dumps(catalog_ref), json.dumps(catalog_ref), revision, json.dumps([entry]), idea_id, owner, revision),
+    ))
 
 
 # ============== Endpoints ==============
@@ -465,6 +655,176 @@ def _row_from_idea(idea: Dict[str, Any], owner: str, value_per_year: Optional[fl
 class SaveIdeaRequest(BaseModel):
     idea: Dict[str, Any]
     value_per_year: Optional[float] = None
+
+
+class ReviewActionRequest(BaseModel):
+    action: str
+    note: Optional[str] = None
+
+
+def _review_payload(row: Dict[str, Any], viewer: str = "") -> Dict[str, Any]:
+    owner = row.get("created_by") or ""
+    idea = _with_score(row)
+    return {
+        "id": row.get("id"),
+        "title": row.get("title") or idea.get("title") or "Untitled idea",
+        "industry": row.get("industry") or idea.get("industry") or "",
+        "idea": idea,
+        "isOwner": bool(viewer) and owner == viewer,
+        "owner": {"email": owner, "displayName": _display_name(owner), "avatar": _avatar(owner)},
+        "review": _review_metadata(row),
+        "updatedAt": _iso(row.get("updated_at")),
+        "businessContext": {
+            "spark": idea.get("spark"),
+            "brief": idea.get("brief"),
+            "impact": idea.get("impact"),
+            "summary": idea.get("summary"),
+            "valuePerYear": row.get("value_per_year"),
+        },
+        "score": idea.get("score"),
+    }
+
+
+def _update_catalog_review(catalog_ref: Any, status: str) -> bool:
+    ref = _json(catalog_ref)
+    if not isinstance(ref, dict):
+        return False
+    schema = _ensure_table()
+    if not schema:
+        return True
+    execute_insert, _, _, _ = _db()
+    source = {
+        "pending": "ideate_pending",
+        "approved": "ideate_approved",
+        "changes_requested": "ideate_changes",
+        "rejected": "ideate_rejected",
+    }[status]
+    return bool(execute_insert(
+        f"UPDATE {schema}.usecase_descriptions SET is_active = %s, source = %s, updated_at = CURRENT_TIMESTAMP "
+        f"WHERE industry = %s AND use_case = %s AND version = %s",
+        (status == "approved", source, ref.get("industry"), ref.get("useCase"), ref.get("version")),
+    ))
+
+
+def _store_review_action(row: Dict[str, Any], reviewer: str, status: str, action: str, note: Optional[str]) -> bool:
+    idea_id = row["id"]
+    revision = int(row["submitted_revision"])
+    entry = _history_entry(action, revision, reviewer, note)
+    schema = _ensure_table()
+    if not schema:
+        with _memory_lock:
+            current = _memory.get(idea_id)
+            if (
+                not current
+                or current.get("review_status") != "pending"
+                or current.get("submitted_revision") != revision
+                or _revision(current.get("payload") or {}) != revision
+            ):
+                return False
+            history = list(current.get("review_history") or [])
+            history.append(entry)
+            current.update(
+                review_status=status,
+                reviewed_revision=revision,
+                reviewed_at=datetime.utcnow(),
+                reviewed_by=reviewer,
+                review_note=note,
+                approved_revision=revision if status == "approved" else current.get("approved_revision"),
+                review_history=history,
+                updated_at=datetime.utcnow(),
+            )
+        return True
+    execute_insert, _, _, _ = _db()
+    approved_sql = "approved_revision = %s," if status == "approved" else ""
+    params: List[Any] = [status, revision, reviewer, note]
+    if status == "approved":
+        params.append(revision)
+    params.extend([json.dumps([entry]), idea_id, revision, revision])
+    return bool(execute_insert(
+        f"UPDATE {schema}.ideate_ideas SET review_status = %s, reviewed_revision = %s, "
+        f"reviewed_at = CURRENT_TIMESTAMP, reviewed_by = %s, review_note = %s, {approved_sql} "
+        f"review_history = COALESCE(review_history, '[]'::jsonb) || %s::jsonb, updated_at = CURRENT_TIMESTAMP "
+        f"WHERE id = %s AND review_status = 'pending' AND submitted_revision = %s "
+        f"AND COALESCE((payload->>'revision')::integer, 0) = %s",
+        tuple(params),
+    ))
+
+
+@router.get("/ideate/capabilities", summary="Current user's Ideate permissions")
+@router.get("/ideate/reviews/capability", summary="Whether the current user may review ideas")
+async def ideate_capabilities(request: Request):
+    user = _signed_in(request)
+    return {
+        "signedIn": bool(user),
+        "email": user,
+        "canReview": bool(reviewer_email(request)),
+        "reviewPolicy": "authenticated" if os.getenv("IDEATE_REVIEWERS", "*").strip() == "*" else "allowlist",
+    }
+
+
+@router.get("/ideate/reviews", summary="Reviewer queue across idea owners")
+async def list_ideate_reviews(request: Request, status: str = ""):
+    denied = _review_forbidden(request)
+    if denied:
+        return denied
+    if status and status != "all" and status not in REVIEW_STATUSES:
+        return JSONResponse({"error": "Unknown review status."}, status_code=400)
+    rows = _review_rows()
+    if status and status != "all":
+        rows = [row for row in rows if row.get("review_status") == status]
+    viewer = _signed_in(request) or ""
+    return {"ideas": [_review_payload(row, viewer) for row in rows]}
+
+
+@router.get("/ideate/reviews/{idea_id}", summary="Reviewer detail for one submitted idea")
+async def get_ideate_review(idea_id: str, request: Request):
+    denied = _review_forbidden(request)
+    if denied:
+        return denied
+    row = _get_row(idea_id)
+    if not row or row.get("deleted_at") or row.get("review_status") not in REVIEW_STATUSES:
+        return JSONResponse({"error": "This submitted idea isn't available."}, status_code=404)
+    return _review_payload(row, _signed_in(request) or "")
+
+
+@router.post("/ideate/reviews/{idea_id}/action", summary="Approve, request changes, or reject a submitted idea")
+@router.post("/ideate/reviews/{idea_id}/actions", summary="Approve, request changes, or reject a submitted idea")
+async def review_ideate_idea(idea_id: str, body: ReviewActionRequest, request: Request):
+    denied = _review_forbidden(request)
+    if denied:
+        return denied
+    if body.action not in REVIEW_ACTIONS:
+        return JSONResponse({"error": "Action must be approve, request_changes, or reject."}, status_code=400)
+    note = (body.note or "").strip() or None
+    if body.action in {"request_changes", "changes_requested", "reject"} and not note:
+        return JSONResponse({"error": "A review note is required for this action."}, status_code=400)
+    row = _get_row(idea_id)
+    if not row or row.get("deleted_at"):
+        return JSONResponse({"error": "This submitted idea isn't available."}, status_code=404)
+    if row.get("review_status") != "pending":
+        return JSONResponse({"error": "Only a pending submission can be reviewed.", "review": _review_metadata(row)}, status_code=409)
+    current = _revision(row.get("payload") or {})
+    if current is None or current != row.get("submitted_revision"):
+        return JSONResponse(
+            {"error": "The idea changed after submission. Ask the owner to resubmit the current revision."},
+            status_code=409,
+        )
+    status = {
+        "approve": "approved",
+        "request_changes": "changes_requested",
+        "changes_requested": "changes_requested",
+        "reject": "rejected",
+    }[body.action]
+    if not _update_catalog_review(row.get("catalog_ref"), status):
+        return JSONResponse({"error": "The linked catalog entry could not be updated."}, status_code=500)
+    reviewer = reviewer_email(request) or ""
+    if not _store_review_action(row, reviewer, status, status, note):
+        _update_catalog_review(row.get("catalog_ref"), "pending")
+        return JSONResponse({"error": "The review changed concurrently. Reload and try again."}, status_code=409)
+    _approved_cache["at"] = 0.0
+    _leaderboard_cache.clear()
+    updated = _get_row(idea_id) or {**row, "review_status": status}
+    return _review_payload(updated, _signed_in(request) or "")
 
 
 @router.get("/ideate/ideas", summary="My saved ideas, with their points")
@@ -493,15 +853,55 @@ async def save_idea(idea_id: str, body: SaveIdeaRequest, request: Request):
         return JSONResponse({"error": "This idea belongs to someone else."}, status_code=403)
     if existing and existing.get("deleted_at"):
         return JSONResponse({"error": "This idea was deleted.", "deleted": True}, status_code=410)
+    if _new_build_link(existing, idea):
+        candidate = {**(existing or {}), "payload": idea}
+        blocked = _build_authorization_error(candidate, user)
+        if blocked:
+            return blocked
 
     row = _row_from_idea(idea, user, body.value_per_year)
+    if existing and existing.get("catalog_ref"):
+        row["catalog_ref"] = existing["catalog_ref"]
+        row["payload"]["catalogRef"] = existing["catalog_ref"]
+        row["total_points"] += outcome_points(row["payload"], _is_library_approved(existing["catalog_ref"]))
     if existing and existing.get("quality_score") is not None:
         row["total_points"] += int(existing["quality_score"])
     if not _write_row(row):
         return JSONResponse({"error": "Couldn't save the idea. Your work is still in this browser."}, status_code=500)
     _leaderboard_cache.clear()
     merged = {**(existing or {}), **row}
-    return {"id": idea_id, "score": _points(merged, idea)}
+    return {"id": idea_id, "score": _points(merged, idea), "review": _review_metadata(merged)}
+
+
+@router.post("/ideate/ideas/{idea_id}/submit-review", summary="Submit the saved current revision for governed review")
+async def submit_saved_idea_for_review(idea_id: str, request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to submit an idea."}, status_code=401)
+    row = _get_row(idea_id)
+    if not row or row.get("deleted_at"):
+        return JSONResponse({"error": "Save this idea before submitting it for review."}, status_code=404)
+    if row.get("created_by") != user:
+        return JSONResponse({"error": "Only the idea owner can submit it for review."}, status_code=403)
+    idea = row.get("payload") or {}
+    spark = idea.get("spark") if isinstance(idea.get("spark"), dict) else {}
+    from src.backend.api.ideate import IdeateSubmitRequest, ideate_submit
+
+    result = await ideate_submit(
+        IdeateSubmitRequest(
+            idea_id=idea_id,
+            idea={"id": idea_id, "revision": idea.get("revision")},
+            business_case=idea.get("summary") if isinstance(idea.get("summary"), dict) else None,
+            brief=str(idea.get("brief") or ""),
+            industry=spark.get("catalogIndustry") or None,
+            industry_label=str(spark.get("catalogIndustryLabel") or spark.get("industry") or row.get("industry") or "Other"),
+            use_case_label=str(idea.get("title") or row.get("title") or "Untitled idea"),
+            category=str(idea.get("category") or "").strip() or None,
+            use_case=(row.get("catalog_ref") or {}).get("useCase") if isinstance(row.get("catalog_ref"), dict) else None,
+        ),
+        request,
+    )
+    return result
 
 
 @router.get("/ideate/ideas/{idea_id}", summary="Read one idea (read-only for anyone signed in)")
@@ -518,6 +918,59 @@ async def get_idea(idea_id: str, request: Request):
         "owner": {"displayName": _display_name(owner), "avatar": _avatar(owner)},
         "isOwner": owner == user,
     }
+
+
+def _authorize_build_response(
+    idea_id: str,
+    request: Request,
+    requested_revision: Optional[int] = None,
+    operation: str = "start",
+):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to build an idea."}, status_code=401)
+    if operation not in {"start", "update"}:
+        return JSONResponse({"error": "Operation must be start or update.", "code": "invalid_operation"}, status_code=400)
+    row = _get_row(idea_id)
+    if not row or row.get("deleted_at"):
+        return JSONResponse({"error": "This idea isn't available."}, status_code=404)
+    current = _revision(row.get("payload") or {})
+    if requested_revision is not None and requested_revision != current:
+        return JSONResponse(
+            {
+                "error": "The requested build revision is not the current saved revision.",
+                "reason": "Save the current idea before building.",
+                "code": "revision_mismatch",
+                "review": _review_metadata(row),
+            },
+            status_code=409,
+        )
+    blocked = _build_authorization_error(row, user)
+    if blocked:
+        return blocked
+    return {
+        "authorized": True,
+        "ideaId": idea_id,
+        "revision": current,
+        "approvedRevision": row.get("approved_revision"),
+        "review": _review_metadata(row),
+        "operation": operation,
+    }
+
+
+@router.get("/ideate/ideas/{idea_id}/build-authorization", summary="Check whether the current approved revision may build")
+async def get_build_authorization(
+    idea_id: str,
+    request: Request,
+    revision: Optional[int] = None,
+    operation: str = "start",
+):
+    return _authorize_build_response(idea_id, request, revision, operation)
+
+
+@router.post("/ideate/ideas/{idea_id}/authorize-build", summary="Authorize applying or starting the current idea revision")
+async def authorize_build(idea_id: str, request: Request):
+    return _authorize_build_response(idea_id, request)
 
 
 @router.delete("/ideate/ideas/{idea_id}", summary="Delete one of my ideas")

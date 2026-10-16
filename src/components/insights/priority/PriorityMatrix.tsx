@@ -6,13 +6,17 @@ interface PriorityMatrixProps {
   portfolio: PriorityAssessment[];
   onImproveValue?: () => void;
   onImproveFeasibility?: () => void;
+  onSelectIdea?: (ideaId: string) => void;
+  portfolioLimit?: number | null;
+  subtitle?: string;
 }
 
 const x = (n: number) => 11 + n * 0.82;
 const y = (n: number) => 91 - n * 0.78;
 
-export function PriorityMatrix({ current, portfolio, onImproveValue, onImproveFeasibility }: PriorityMatrixProps) {
-  const others = portfolio.filter(p => p.ideaId !== current.ideaId).slice(0, 10);
+export function PriorityMatrix({ current, portfolio, onImproveValue, onImproveFeasibility, onSelectIdea, portfolioLimit = 10, subtitle }: PriorityMatrixProps) {
+  const allOthers = portfolio.filter(p => p.ideaId !== current.ideaId);
+  const others = portfolioLimit == null ? allOthers : allOthers.slice(0, portfolioLimit);
   const [fx0, fx1] = current.feasibilityRange;
   const [vy0, vy1] = current.valueRange;
   return (
@@ -21,7 +25,7 @@ export function PriorityMatrix({ current, portfolio, onImproveValue, onImproveFe
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p id="priority-heading" className="text-ui-xl font-semibold text-foreground">Value vs. feasibility</p>
-            <p className="text-ui-sm text-muted-foreground mt-1">Evidence from your idea, value inputs, selected data, and build plan.</p>
+            <p className="text-ui-sm text-muted-foreground mt-1">{subtitle ?? 'Evidence from your idea, value inputs, selected data, and build plan.'}</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-primary/10 px-2.5 py-1 text-ui-xs font-semibold text-primary">{current.quadrant}</span>
@@ -52,8 +56,8 @@ export function PriorityMatrix({ current, portfolio, onImproveValue, onImproveFe
             <text x="3.5" y="53" textAnchor="middle" transform="rotate(-90 3.5 53)" className="fill-muted-foreground text-[3px] font-medium">Value →</text>
 
             {others.map(p => (
-              <g key={p.ideaId}>
-                <circle cx={x(p.feasibility)} cy={y(p.value)} r="1.5" className={p.provisional ? 'fill-muted-foreground/35 stroke-card' : 'fill-primary/35 stroke-card'} strokeWidth=".45" />
+              <g key={p.ideaId} onClick={() => onSelectIdea?.(p.ideaId)} className={onSelectIdea ? 'cursor-pointer' : undefined}>
+                <circle cx={x(p.feasibility)} cy={y(p.value)} r={onSelectIdea ? '2.3' : '1.5'} className={p.provisional ? 'fill-muted-foreground/35 stroke-card' : 'fill-primary/35 stroke-card'} strokeWidth=".45" />
                 <title>{`${p.title}: value ${p.value}, feasibility ${p.feasibility}${p.provisional ? ', provisional' : ''}`}</title>
               </g>
             ))}
@@ -70,8 +74,11 @@ export function PriorityMatrix({ current, portfolio, onImproveValue, onImproveFe
                 strokeDasharray="1 1"
               />
             )}
-            <circle cx={x(current.feasibility)} cy={y(current.value)} r="3.6" className="fill-primary/20 stroke-primary" strokeWidth=".75" />
-            <circle cx={x(current.feasibility)} cy={y(current.value)} r="1.35" className="fill-primary" />
+            <g onClick={() => onSelectIdea?.(current.ideaId)} className={onSelectIdea ? 'cursor-pointer' : undefined}>
+              <circle cx={x(current.feasibility)} cy={y(current.value)} r="3.6" className="fill-primary/20 stroke-primary" strokeWidth=".75" />
+              <circle cx={x(current.feasibility)} cy={y(current.value)} r="1.35" className="fill-primary" />
+              <title>{`${current.title}: selected`}</title>
+            </g>
             <g transform={`translate(${Math.min(73, x(current.feasibility) + 4)} ${Math.max(20, y(current.value) - 2)})`}>
               <rect x="0" y="-4" width="18" height="7" rx="2" className="fill-card stroke-border" strokeWidth=".4" />
               <text x="2" y="0" className="fill-foreground text-[2.6px] font-semibold">{current.value}V · {current.feasibility}F</text>

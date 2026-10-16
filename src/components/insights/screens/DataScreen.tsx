@@ -14,18 +14,18 @@ type Option = { id: DataSource; icon: typeof Database | null; title: string; bod
 const OPTIONS: Option[] = [
   {
     id: 'existing', icon: Database,
-    title: 'It\'s already in Databricks',
+    title: 'Already in Databricks',
     body: 'Point Genie at tables you already have. Nothing gets moved or copied.',
   },
   {
     id: 'upload', icon: FileUp,
-    title: 'I have a file',
-    body: 'A spreadsheet or CSV export. Genie Code helps you bring it in.',
+    title: 'I have a schema definition file',
+    body: 'Upload a metadata CSV that defines your tables and columns. Genie Code will propose matching sample data.',
   },
   {
     id: 'sample', icon: FlaskConical,
-    title: 'Just show me with sample data',
-    body: 'Realistic made-up data shaped around your questions. Great for a first try.',
+    title: 'Generate synthetic sample data',
+    body: 'Create realistic sample data from your idea and questions, without an existing schema.',
   },
 ];
 
@@ -42,9 +42,18 @@ interface DataScreenProps {
 }
 
 function useBlueprintOption(hint: ModelHint): Option | null {
-  const { data } = useBlueprintCatalog();
+  const { data, loading } = useBlueprintCatalog();
   const pick = useModelPick(hint);
-  if (!data) return null;
+  if (!data) {
+    return loading ? {
+      id: 'blueprint',
+      icon: null,
+      tag: 'New',
+      title: 'Start from an industry data model',
+      body: 'Loading the ready-made industry models that best fit your idea…',
+      footnote: 'From Databricks Industry Solutions · lakehouse-industry-data-models',
+    } : null;
+  }
   const match = data.industries.find(i => i.slug === pick.slug);
   const size = match ? ` ${match.counts.tables} connected tables and ${match.counts.kpiSets} sets of KPIs, set up with realistic sample data.` : '';
   return {
@@ -64,16 +73,20 @@ function useBlueprintOption(hint: ModelHint): Option | null {
 
 export function DataScreen({ hint, value, location, progress, onChange, onLocationChange, onBack, onNext, onOpenInstalled }: DataScreenProps) {
   const blueprintOption = useBlueprintOption(hint);
-  const { data: catalog } = useBlueprintCatalog();
+  const { data: catalog, loading: catalogLoading } = useBlueprintCatalog();
   // Only the model that fits this idea; other installed models are a distraction here.
   const installed = useInstalledModels()
     .filter(m => m.ready && m.slug && m.slug === blueprintOption?.slug)
     .map(m => ({ ...m, label: catalog?.industries.find(i => i.slug === m.slug)?.label ?? m.slug }));
-  const options = blueprintOption ? [...OPTIONS, blueprintOption] : OPTIONS;
+  const options = blueprintOption ? [OPTIONS[0], blueprintOption, ...OPTIONS.slice(1)] : OPTIONS;
   const matchInstalled = installed.length > 0;
   const recommended: { id: DataSource; why: string } = matchInstalled
     ? { id: 'blueprint', why: 'A matching industry model is already in your workspace, with data ready to ask questions of.' }
     : { id: 'existing', why: 'Most teams already have this data in Databricks. Nothing moves, and the answers are on real numbers.' };
+
+  useEffect(() => {
+    if (!catalogLoading && !blueprintOption && value === 'blueprint') onChange('existing');
+  }, [blueprintOption, catalogLoading, onChange, value]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -100,8 +113,8 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
 
       <FadeIn delay={0.05}>
         <Headline
-          title="Where does your data live?"
-          subtitle="No need to move anything. Your Genie works on top of the data you already have."
+          title="How should your Genie start with data?"
+          subtitle="Use governed tables, a ready-made model, your schema definition, or idea-grounded synthetic data."
         />
         <p className="flex items-center gap-1.5 text-ui-xs text-muted-foreground mt-3">
           <Info className="w-3 h-3 shrink-0" /> Decides what Genie Code sets up first. You can change it later.
@@ -110,7 +123,13 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
       </FadeIn>
 
       <div role="radiogroup" className="grid gap-3">
-        {options.map((opt, i) => {
+        {catalogLoading ? (
+          <div className="grid gap-3" aria-label="Loading data choices">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="h-[106px] rounded-2xl border border-border bg-card animate-pulse" />
+            ))}
+          </div>
+        ) : options.map((opt, i) => {
           const selected = value === opt.id;
           const isRec = opt.id === recommended.id;
           const Icon = opt.icon;

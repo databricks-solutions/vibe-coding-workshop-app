@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Copy, Download, FileText, Hammer, History, Loader2, Search, Send, Shuffle, TriangleAlert } from 'lucide-react';
+import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Copy, Download, FileText, Hammer, History, Loader2, Pencil, Search, Send, ShieldCheck, Shuffle, TriangleAlert } from 'lucide-react';
 import { SubmitDialog } from '../ui/SubmitDialog';
+import { ReviewDialog } from '../ui/ReviewDialog';
+import { ApprovalTracker } from '../ui/ApprovalTracker';
+import { personName, useCanReview, useReviewRefresh } from '../engine/approval';
 import { BusinessCaseSheet, InlineBusinessCase } from '../ui/BusinessCase';
 import { BusinessCaseButton } from '../ui/BusinessCaseButton';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
@@ -39,6 +42,8 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   const { copied, handleCopy } = useCopyToClipboard();
   const [toast, setToast] = useState<string | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const canReview = useCanReview();
   const [fullBrief, setFullBrief] = useState(false);
   const [caseOpen, setCaseOpen] = useState(false);
   const sectionNames = idea.mode === 'insights' ? INSIGHTS_SECTIONS : SECTIONS;
@@ -71,18 +76,11 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   const building = isBuilding(idea) && idea.buildTarget === 'insights';
   const changed = needsBuildUpdate(idea);
   const update = building && changed && idea.approved.includes('brief');
+  const review = idea.review;
+  const reviewApproved = review?.status === 'approved' && review.approvedRevision === (idea.revision ?? 0);
+  const canOpenExistingBuild = building && !changed;
+  useReviewRefresh(review?.status === 'pending');
   const goBuild = () => {
-    if (!building) {
-      const now = new Date().toISOString();
-      flow.patch({
-        buildTarget: 'insights',
-        buildStatus: 'building',
-        status: 'committed',
-        lockedAt: idea.lockedAt ?? now,
-        buildStage: 'data',
-      });
-      flow.logDecision('Ready to build in Insights');
-    }
     const fresh = !!idea.sessionId && idea.buildTarget !== 'insights';
     navigate(update
       ? updateBuildHref({ ...idea, buildTarget: 'insights' })
@@ -129,20 +127,45 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
 
         <section className="rounded-3xl border border-primary/25 bg-primary/[0.04] p-5 sm:p-6 space-y-4" aria-label="Next actions">
           <div>
-            <p className="text-ui-xl font-semibold text-foreground">Continue from idea to data</p>
+            <p className="text-ui-xl font-semibold text-foreground">{canOpenExistingBuild ? 'Your existing build is ready' : reviewApproved ? 'Approved and ready to build' : review?.status === 'pending' ? 'Pending approval' : review?.status === 'changes_requested' ? 'Changes requested' : review?.status === 'rejected' ? 'Not approved yet' : 'Choose what happens next'}</p>
             <p className="text-ui-sm text-muted-foreground mt-1">
-              Your idea is already carried over. Insights opens at data selection, then walks you through the Genie Accelerator build.
+              {canOpenExistingBuild
+                ? 'You can reopen work that was already started. Approval is still required before starting a new build or applying a changed revision.'
+                : reviewApproved
+                ? 'The current revision is approved. Server authorization is checked again when you start the build.'
+                : review?.status === 'pending'
+                  ? canReview
+                    ? "You're an approver, so you can review this revision and approve it yourself. Building unlocks as soon as it's approved."
+                    : 'An approver is looking at this revision. This page updates the moment they decide.'
+                  : review?.status === 'changes_requested' || review?.status === 'rejected'
+                    ? `${personName(review.reviewer)}: ${review.note || 'Edit the idea using the journey steps, then resubmit the new revision.'}`
+                    : 'Park the idea for later, or submit the one-pager and business case for required approval.'}
             </p>
+            {review && review.status !== 'draft' && <ApprovalTracker idea={idea} building={building} size="md" className="mt-4" />}
           </div>
-          <button onClick={goBuild} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-ui-lg font-semibold shadow-sm hover:opacity-90 active:scale-[0.99]">
-            <Hammer className="w-4 h-4" />
-            {update ? 'Update the Insights build' : building ? 'Continue to the Insights build' : 'Continue to data in Insights'}
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          <button onClick={() => setSubmitOpen(true)} className="w-full flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-border bg-card text-ui-md font-medium text-foreground hover:bg-secondary/60">
-            {idea.catalogRef ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Send className="w-4 h-4 text-primary" />}
-            {idea.catalogRef ? 'Update on the use case map' : 'Submit to use case map'}
-          </button>
+          {canOpenExistingBuild || reviewApproved ? (
+            <button onClick={goBuild} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-ui-lg font-semibold shadow-sm hover:opacity-90 active:scale-[0.99]">
+              <Hammer className="w-4 h-4" />
+              {update ? 'Update the Insights build' : building ? 'Continue to the existing build' : 'Start building'}
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : review?.status === 'changes_requested' || review?.status === 'rejected' ? (
+            <button onClick={() => flow.setViewStep('spark')} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-ui-lg font-semibold shadow-sm hover:opacity-90 active:scale-[0.99]">
+              <Pencil className="w-4 h-4" /> Revise the idea
+            </button>
+          ) : review?.status === 'pending' ? (canReview ? (
+            <button onClick={() => setReviewOpen(true)} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-amber-500 text-white text-ui-lg font-semibold shadow-sm hover:bg-amber-400 active:scale-[0.99] animate-pulse-glow">
+              <ShieldCheck className="w-4 h-4" /> Review &amp; approve
+            </button>
+          ) : (
+            <button onClick={() => navigate(`/ideate?focus=${encodeURIComponent(idea.id)}&event=submitted`)} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-secondary text-foreground text-ui-lg font-semibold hover:bg-secondary/80 active:scale-[0.99]">
+              Back to my ideas <ArrowRight className="w-4 h-4" />
+            </button>
+          )) : (
+            <button onClick={() => setSubmitOpen(true)} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-ui-lg font-semibold shadow-sm hover:opacity-90 active:scale-[0.99]">
+              <Send className="w-4 h-4" /> Submit for approval
+            </button>
+          )}
           <div className="flex items-center justify-center gap-5 pt-1 text-ui-sm">
             <button onClick={flow.pivot} className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
               <Shuffle className="w-4 h-4" /> Pivot this idea
@@ -157,6 +180,7 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-foreground text-background text-ui-sm shadow-lg animate-slide-up-fade">{toast}</div>
         )}
         {submitOpen && <SubmitDialog idea={idea} onClose={() => setSubmitOpen(false)} />}
+        {reviewOpen && <ReviewDialog idea={idea} onClose={() => setReviewOpen(false)} onStartBuild={() => { setReviewOpen(false); goBuild(); }} />}
         {caseOpen && (
           <BusinessCaseSheet
             ideaId={idea.id}

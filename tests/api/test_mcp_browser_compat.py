@@ -22,6 +22,8 @@ MCP_HEADERS = {
 
 
 def load_app(monkeypatch, enabled: bool, allowed_origins: str | None = None):
+    import src.backend
+
     if enabled:
         monkeypatch.setenv("MCP_MOUNT_ENABLED", "true")
     else:
@@ -30,9 +32,11 @@ def load_app(monkeypatch, enabled: bool, allowed_origins: str | None = None):
         monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     else:
         monkeypatch.setenv("ALLOWED_ORIGINS", allowed_origins)
-    sys.modules.pop("app", None)
+    monkeypatch.delitem(sys.modules, "app", raising=False)
     if enabled:
-        sys.modules.pop("src.backend.mcp_server", None)
+        if hasattr(src.backend, "mcp_server"):
+            monkeypatch.setattr(src.backend, "mcp_server", getattr(src.backend, "mcp_server"))
+        monkeypatch.delitem(sys.modules, "src.backend.mcp_server", raising=False)
     return importlib.import_module("app")
 
 

@@ -544,6 +544,48 @@ export interface IdeaScoreResponse {
   approvedInLibrary?: boolean;
 }
 
+export type IdeaReviewStatus = 'draft' | 'pending' | 'changes_requested' | 'rejected' | 'approved';
+export type IdeaReviewDecision = 'approve' | 'changes_requested' | 'reject';
+
+export interface IdeaReviewMetadataResponse {
+  status: IdeaReviewStatus;
+  revision: number;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewer?: string | null;
+  note?: string | null;
+  approvedRevision?: number | null;
+  history: Array<{
+    action: 'submitted' | 'approved' | 'changes_requested' | 'rejected' | 'reopened';
+    at: string;
+    by?: string | null;
+    note?: string | null;
+    revision: number;
+  }>;
+}
+
+export interface IdeaReviewItem {
+  id: string;
+  title: string;
+  industry: string;
+  owner: { email: string; displayName: string; avatar?: string };
+  review: IdeaReviewMetadataResponse;
+  idea?: Record<string, unknown>;
+  updatedAt?: string | null;
+}
+
+export interface IdeaReviewDetail extends IdeaReviewItem {
+  idea: Record<string, unknown>;
+  isOwner: boolean;
+}
+
+export interface BuildAuthorizationResponse {
+  authorized: boolean;
+  reason?: string | null;
+  code?: string | null;
+  review?: IdeaReviewMetadataResponse;
+}
+
 /** One idea on the Insights leaderboard. */
 export interface InsightsLeaderboardEntry {
   rank: number;
@@ -2114,6 +2156,7 @@ class ApiClient {
 
   /** Submit a committed idea to the use case catalog. It lands inactive until an admin turns it on. */
   async ideateSubmit(params: {
+    idea_id?: string;
     idea: Record<string, unknown>;
     business_case?: Record<string, unknown> | null;
     value_profile?: Record<string, unknown> | null;
@@ -2123,7 +2166,7 @@ class ApiClient {
     use_case_label: string;
     category?: string;
     use_case?: string;
-  }): Promise<{ industry: string; industryLabel: string; useCase: string; useCaseLabel: string; version: number }> {
+  }): Promise<{ industry: string; industryLabel: string; useCase: string; useCaseLabel: string; version: number; review?: IdeaReviewMetadataResponse }> {
     const response = await fetch(`${this.baseUrl}/ideate/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2143,7 +2186,7 @@ class ApiClient {
   }
 
   /** Save one idea; returns the points the server computed for it. */
-  async ideaSave(idea: Record<string, unknown>, valuePerYear?: number | null): Promise<{ id: string; score: IdeaScoreResponse }> {
+  async ideaSave(idea: Record<string, unknown>, valuePerYear?: number | null): Promise<{ id: string; score: IdeaScoreResponse; review?: IdeaReviewMetadataResponse }> {
     const response = await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(String(idea.id))}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -2171,6 +2214,44 @@ class ApiClient {
     const response = await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(id)}/score`, { method: 'POST' });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    return body;
+  }
+
+  /** Whether the signed-in user may review ideas. */
+  async ideaReviewCapability(): Promise<{ canReview: boolean; email?: string | null; reviewPolicy?: 'authenticated' | 'allowlist' }> {
+    return this.fetch('/ideate/reviews/capability');
+  }
+
+  /** Review queue; pending is the default workspace view. */
+  async ideaReviews(status: IdeaReviewStatus | 'all' = 'pending'): Promise<IdeaReviewItem[]> {
+    const body = await this.fetch<{ ideas?: IdeaReviewItem[]; items?: IdeaReviewItem[] }>(
+      `/ideate/reviews?status=${encodeURIComponent(status)}`,
+    );
+    return body.ideas ?? body.items ?? (body as unknown as IdeaReviewItem[]);
+  }
+
+  async ideaReviewDetail(id: string): Promise<IdeaReviewDetail> {
+    return this.fetch(`/ideate/reviews/${encodeURIComponent(id)}`);
+  }
+
+  /** Reviewer decides the current submitted revision. */
+  async ideaReviewAction(
+    id: string,
+    action: IdeaReviewDecision,
+    note?: string,
+  ): Promise<{ review: IdeaReviewMetadataResponse }> {
+    return this.fetch(`/ideate/reviews/${encodeURIComponent(id)}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action: action === 'changes_requested' ? 'request_changes' : action, note: note?.trim() || null }),
+    });
+  }
+
+  /** Canonical server gate for every build start or revision update. */
+  async ideaBuildAuthorization(id: string, revision: number, operation: 'start' | 'update'): Promise<BuildAuthorizationResponse> {
+    const q = new URLSearchParams({ revision: String(revision), operation });
+    const response = await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(id)}/build-authorization?${q}`);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status, review: body.review });
     return body;
   }
 

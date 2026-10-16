@@ -30,6 +30,8 @@ from src.backend.services import lakebase
 
 @pytest.fixture(autouse=True)
 def _offline_step_prompt_fmapi(monkeypatch):
+    from src.backend import mcp_server as current_mcp_server
+
     async def _fake_collect(*args, **kwargs):
         # Offline default: no live generation -> _step_payload keeps the template.
         return None
@@ -43,16 +45,17 @@ def _offline_step_prompt_fmapi(monkeypatch):
     # assemble + generate that would outlive these stubs and reach the real
     # assembler/DB. Off here; test_step_prompt_prefetch.py turns it on with its own stubs.
     monkeypatch.setenv("VIBE_STEP_PROMPT_PREFETCH", "0")
-    mcp_server._STEP_PROMPT_CACHE.clear()
-    with mcp_server._STEP_PROMPT_LOCK:
-        mcp_server._STEP_PROMPT_NEGATIVE.clear()
+    current_mcp_server._STEP_PROMPT_CACHE.clear()
+    with current_mcp_server._STEP_PROMPT_LOCK:
+        current_mcp_server._STEP_PROMPT_NEGATIVE.clear()
     yield
-    mcp_server._STEP_PROMPT_CACHE.clear()
-    with mcp_server._STEP_PROMPT_LOCK:
-        mcp_server._STEP_PROMPT_NEGATIVE.clear()
+    current_mcp_server._STEP_PROMPT_CACHE.clear()
+    with current_mcp_server._STEP_PROMPT_LOCK:
+        current_mcp_server._STEP_PROMPT_NEGATIVE.clear()
 
 
 _NO_LEGACY_SAVE_STUB = object()
+mcp_server.save_session = _NO_LEGACY_SAVE_STUB  # type: ignore[attr-defined]
 
 
 @pytest.fixture(autouse=True)
@@ -68,38 +71,43 @@ def _route_mcp_delta_through_legacy_save_stub(monkeypatch):
     ``save_session`` columns. An empty delta is the same no-op as in production.
     With no stub, the real locked function runs (test_mcp_delta_persist.py).
     """
+    from src.backend import mcp_server as current_mcp_server
 
-    real = mcp_server.save_session_applying_mcp_delta
-    monkeypatch.setattr(mcp_server, "save_session", _NO_LEGACY_SAVE_STUB, raising=False)
+    for mod in {mcp_server, current_mcp_server}:
+        real = mod.save_session_applying_mcp_delta
+        monkeypatch.setattr(mod, "save_session", _NO_LEGACY_SAVE_STUB, raising=False)
 
-    def bridge(session_id, *, add_gates, set_outputs, set_params, **save_kwargs):
-        stub = mcp_server.save_session
-        if stub is _NO_LEGACY_SAVE_STUB:
-            return real(
-                session_id,
-                add_gates=add_gates,
-                set_outputs=set_outputs,
-                set_params=set_params,
-                **save_kwargs,
-            )
-        fields = {key: value for key, value in save_kwargs.items() if value is not None}
-        if not (add_gates or set_outputs or set_params or fields):
-            return True
-        record = mcp_server.load_session(session_id) or {}
-        gates, outputs, params = lakebase._apply_mcp_delta(
-            list(record.get("completed_gates") or []),
-            dict(record.get("captured_outputs") or {}),
-            dict(record.get("session_parameters") or {}),
-            add_gates=add_gates,
-            set_outputs=set_outputs,
-            set_params=set_params,
-        )
-        if add_gates:
-            fields["completed_gates"] = gates
-        if set_outputs:
-            fields["captured_outputs"] = outputs
-        if set_params:
-            fields["session_parameters"] = params
-        return stub(session_id=session_id, **fields)
+        def _make_bridge(m, r):
+            def bridge(session_id, *, add_gates, set_outputs, set_params, **save_kwargs):
+                stub = m.save_session
+                if stub is _NO_LEGACY_SAVE_STUB:
+                    return r(
+                        session_id,
+                        add_gates=add_gates,
+                        set_outputs=set_outputs,
+                        set_params=set_params,
+                        **save_kwargs,
+                    )
+                fields = {key: value for key, value in save_kwargs.items() if value is not None}
+                if not (add_gates or set_outputs or set_params or fields):
+                    return True
+                record = m.load_session(session_id) or {}
+                gates, outputs, params = lakebase._apply_mcp_delta(
+                    list(record.get("completed_gates") or []),
+                    dict(record.get("captured_outputs") or {}),
+                    dict(record.get("session_parameters") or {}),
+                    add_gates=add_gates,
+                    set_outputs=set_outputs,
+                    set_params=set_params,
+                )
+                if add_gates:
+                    fields["completed_gates"] = gates
+                if set_outputs:
+                    fields["captured_outputs"] = outputs
+                if set_params:
+                    fields["session_parameters"] = params
+                return stub(session_id=session_id, **fields)
 
-    monkeypatch.setattr(mcp_server, "save_session_applying_mcp_delta", bridge)
+            return bridge
+
+        monkeypatch.setattr(mod, "save_session_applying_mcp_delta", _make_bridge(mod, real))

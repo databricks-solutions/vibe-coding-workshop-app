@@ -41,6 +41,9 @@ export interface MomentCardProps {
   onGoTo: (step: number) => void;
   /** Replaces the prompt action area (used by the setup moment). */
   customBody?: ReactNode;
+  /** Allows a custom body to hold the moment open until its own output is ready. */
+  customBodyReady?: boolean;
+  customDoneLabel?: string;
 }
 
 export function MomentHeader({ moment, moments }: { moment: Moment; moments?: Moment[] }) {
@@ -120,7 +123,8 @@ function DoneBadge({ skipped }: { skipped?: boolean }) {
 export function MomentCard(props: MomentCardProps) {
   const {
     moment, moments, tag, isDone, isSkipped, lockedBy, assistantName, assistantLink, industry, useCase, sessionId,
-    savedPrompt, previousOutputs, readOnly, unavailable, onGenerated, onDone, onUndo, onSkip, onBack, onGoTo, customBody,
+    savedPrompt, previousOutputs, readOnly, unavailable, onGenerated, onDone, onUndo, onSkip, onBack, onGoTo,
+    customBody, customBodyReady = true, customDoneLabel,
   } = props;
   const prompt = useMomentPrompt({ step: moment.step, tag, industry, useCase, sessionId, savedPrompt, previousOutputs, onGenerated });
   const { copied, handleCopy } = useCopyToClipboard();
@@ -149,16 +153,16 @@ export function MomentCard(props: MomentCardProps) {
       if (!(e.metaKey || e.ctrlKey) || e.key !== 'Enter') return;
       if ((e.target as HTMLElement)?.closest('input, textarea')) return;
       if (readOnly) return;
-      if (isDone || isCustom || (prompt.status === 'ready' && copiedOnce)) {
+      if (isDone || (isCustom && customBodyReady) || (prompt.status === 'ready' && copiedOnce)) {
         e.preventDefault();
         onDone();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isDone, isCustom, prompt.status, copiedOnce, onDone, readOnly]);
+  }, [isDone, isCustom, customBodyReady, prompt.status, copiedOnce, onDone, readOnly]);
 
-  const canFinish = isDone || prompt.status === 'ready';
+  const canFinish = isDone || (isCustom ? customBodyReady : prompt.status === 'ready');
 
   let body: ReactNode;
   if (customBody) {
@@ -289,13 +293,13 @@ export function MomentCard(props: MomentCardProps) {
       <MomentFooter
         isDone={isDone}
         isSkipped={isSkipped}
-        canFinish={customBody ? true : canFinish && !unavailable}
+        canFinish={canFinish && !unavailable}
         readOnly={readOnly}
         onDone={onDone}
         onUndo={onUndo}
         onSkip={onSkip}
         onBack={onBack}
-        doneLabel={customBody ? 'It\'s set up, next' : undefined}
+        doneLabel={customBody ? customDoneLabel ?? 'It\'s set up, next' : undefined}
       />
     </article>
   );

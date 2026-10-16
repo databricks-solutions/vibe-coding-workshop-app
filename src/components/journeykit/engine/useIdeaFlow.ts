@@ -30,6 +30,18 @@ const stamp = () => new Date().toISOString();
 /** Status codes that mean the AI helper is not there at all, rather than a one-off failure. */
 const UNAVAILABLE = new Set([404, 503]);
 
+function reopenReview(idea: Idea, revision: number) {
+  const review = idea.review;
+  if (!review || review.status === 'draft') return review;
+  const at = stamp();
+  return {
+    ...review,
+    status: 'draft' as const,
+    revision,
+    history: [...review.history, { action: 'reopened' as const, at, revision, note: 'Idea changed after review' }],
+  };
+}
+
 /** Clears everything produced at or after `step`, so downstream steps rebuild from fresh context. */
 function resetFrom(idea: Idea, step: StepKey): Partial<Idea> {
   const i = stepIndex(step, idea.mode);
@@ -52,7 +64,10 @@ function resetFrom(idea: Idea, step: StepKey): Partial<Idea> {
   }
   if (after('impact')) patch.impact = undefined;
   if (after('brief')) Object.assign(patch, { brief: undefined, lockedAt: undefined });
-  if (idea.approved.some(after)) Object.assign(patch, { revision: (idea.revision ?? 0) + 1, revisingFrom: step });
+  if (idea.approved.some(after)) {
+    const revision = (idea.revision ?? 0) + 1;
+    Object.assign(patch, { revision, revisingFrom: step, review: reopenReview(idea, revision) });
+  }
   return patch;
 }
 
@@ -63,14 +78,16 @@ function resetFrom(idea: Idea, step: StepKey): Partial<Idea> {
  */
 function reopenFrom(idea: Idea, step: StepKey): Partial<Idea> {
   const i = stepIndex(step, idea.mode);
+  const revision = (idea.revision ?? 0) + 1;
   return {
     approved: idea.approved.filter(s => stepIndex(s, idea.mode) < i),
     brief: step === 'brief' ? idea.brief : undefined,
     gaps: undefined,
     summary: undefined,
     lockedAt: undefined,
-    revision: (idea.revision ?? 0) + 1,
+    revision,
     revisingFrom: step,
+    review: reopenReview(idea, revision),
   };
 }
 

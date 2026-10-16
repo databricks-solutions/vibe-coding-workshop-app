@@ -103,13 +103,17 @@ def test_executor_concurrency(monkeypatch, fresh_loop):
 # ---- E3 -------------------------------------------------------------------
 
 def _load_app(monkeypatch, mcp_enabled):
+    import src.backend
+
     if mcp_enabled:
         monkeypatch.setenv("MCP_MOUNT_ENABLED", "true")
     else:
         monkeypatch.delenv("MCP_MOUNT_ENABLED", raising=False)
-    sys.modules.pop("app", None)
+    monkeypatch.delitem(sys.modules, "app", raising=False)
     if mcp_enabled:
-        sys.modules.pop("src.backend.mcp_server", None)
+        if hasattr(src.backend, "mcp_server"):
+            monkeypatch.setattr(src.backend, "mcp_server", getattr(src.backend, "mcp_server"))
+        monkeypatch.delitem(sys.modules, "src.backend.mcp_server", raising=False)
     return importlib.import_module("app")
 
 

@@ -77,6 +77,10 @@ class Base(unittest.TestCase):
         self._ensure = ii._ensure_table
         self._llm = ii.call_databricks_serving_endpoint
         self._approved = ii._library_approved
+        self._reviewers = os.environ.get("IDEATE_REVIEWERS")
+        self._admins = os.environ.get("APP_ADMINS")
+        os.environ["IDEATE_REVIEWERS"] = "*"
+        os.environ.pop("APP_ADMINS", None)
         ii._ensure_table = lambda: None
         ii._library_approved = lambda: set()
         ii._memory.clear()
@@ -87,6 +91,14 @@ class Base(unittest.TestCase):
         ii._ensure_table = self._ensure
         ii.call_databricks_serving_endpoint = self._llm
         ii._library_approved = self._approved
+        if self._reviewers is None:
+            os.environ.pop("IDEATE_REVIEWERS", None)
+        else:
+            os.environ["IDEATE_REVIEWERS"] = self._reviewers
+        if self._admins is None:
+            os.environ.pop("APP_ADMINS", None)
+        else:
+            os.environ["APP_ADMINS"] = self._admins
 
     def save(self, data, user=ALICE, value=None):
         return run(ii.save_idea(data["id"], ii.SaveIdeaRequest(idea=data, value_per_year=value), req(user)))
@@ -231,6 +243,8 @@ class TestLeaderboard(Base):
 
     def test_mode_filter_and_deleted_ideas(self):
         self.save(idea())
+        self.save(idea(id="idea-0003", mode="insights", approved=["spark"]), user=BOB)
+        ii._memory["idea-0003"].update(review_status="approved", approved_revision=1)
         self.save(idea(id="idea-0003", mode="insights", approved=["spark"], lockedAt="2026-01-01T00:00:00", buildStage="studio"), user=BOB)
         rows = run(ii.insights_leaderboard(req(), mode="insights"))
         self.assertEqual([r["idea_id"] for r in rows], ["idea-0003"])
@@ -238,6 +252,147 @@ class TestLeaderboard(Base):
         self.assertEqual(rows[0]["outcome"], 100)
         run(ii.delete_idea("idea-0001", req()))
         self.assertEqual([r["idea_id"] for r in run(ii.insights_leaderboard(req()))], ["idea-0003"])
+
+
+class TestReviewLifecycle(Base):
+    def submit(self, idea_id="idea-0001", revision=1, user=ALICE):
+        return ii.mark_submitted(
+            idea_id,
+            user,
+            revision,
+            {"industry": "travel", "useCase": "crew_swaps", "version": 1},
+        )
+
+    def test_default_reviewer_policy_and_explicit_allowlist_with_admin_override(self):
+        self.assertEqual(ii.reviewer_email(req(BOB)), BOB)
+        os.environ["IDEATE_REVIEWERS"] = "reviewer@example.com"
+        self.assertIsNone(ii.reviewer_email(req(BOB)))
+        os.environ["APP_ADMINS"] = BOB.upper()
+        self.assertEqual(ii.reviewer_email(req(BOB)), BOB)
+        denied = run(ii.list_ideate_reviews(req(ALICE)))
+        self.assertEqual(denied.status_code, 403)
+
+    def test_cross_owner_queue_detail_and_approval_history(self):
+        self.save(idea())
+        self.assertTrue(self.submit())
+        queue = run(ii.list_ideate_reviews(req(BOB)))
+        self.assertEqual(queue["ideas"][0]["owner"]["email"], ALICE)
+        self.assertEqual(queue["ideas"][0]["idea"]["brief"], idea()["brief"])
+        self.assertIn("score", queue["ideas"][0])
+        detail = run(ii.get_ideate_review("idea-0001", req(BOB)))
+        self.assertEqual(detail["review"]["status"], "pending")
+
+        approved = run(ii.review_ideate_idea(
+            "idea-0001",
+            ii.ReviewActionRequest(action="approve", note="Ready for build"),
+            req(BOB),
+        ))
+        self.assertEqual(approved["review"]["status"], "approved")
+        self.assertEqual(approved["review"]["approvedRevision"], 1)
+        self.assertEqual(approved["review"]["latestNote"], "Ready for build")
+        self.assertEqual(
+            [event["action"] for event in approved["review"]["history"]],
+            ["submitted", "approved"],
+        )
+
+    def test_notes_required_for_changes_and_rejection(self):
+        self.save(idea())
+        self.submit()
+        for action in ("request_changes", "reject"):
+            out = run(ii.review_ideate_idea(
+                "idea-0001", ii.ReviewActionRequest(action=action), req(BOB),
+            ))
+            self.assertEqual(out.status_code, 400)
+        changed = run(ii.review_ideate_idea(
+            "idea-0001",
+            ii.ReviewActionRequest(action="request_changes", note="Add a kill criterion"),
+            req(BOB),
+        ))
+        self.assertEqual(changed["review"]["status"], "changes_requested")
+        self.assertEqual(changed["review"]["latestNote"], "Add a kill criterion")
+
+    def test_rejection_records_note_and_can_be_resubmitted(self):
+        self.save(idea())
+        self.submit()
+        rejected = run(ii.review_ideate_idea(
+            "idea-0001",
+            ii.ReviewActionRequest(action="reject", note="Not aligned to the program"),
+            req(BOB),
+        ))
+        self.assertEqual(rejected["review"]["status"], "rejected")
+        self.assertEqual(rejected["review"]["history"][-1]["action"], "rejected")
+        self.save(idea(revision=2))
+        self.assertTrue(self.submit(revision=2))
+        self.assertEqual(ii._memory["idea-0001"]["review_status"], "pending")
+
+    def test_frontend_aliases_and_response_contract(self):
+        self.save(idea())
+        self.submit()
+        capability = run(ii.ideate_capabilities(req(BOB)))
+        self.assertTrue(capability["canReview"])
+        queue = run(ii.list_ideate_reviews(req(BOB), status="all"))
+        item = queue["ideas"][0]
+        self.assertEqual((item["id"], item["title"], item["review"]["revision"]), (
+            "idea-0001", "Faster crew swaps", 1,
+        ))
+        self.assertFalse(item["isOwner"])
+        changed = run(ii.review_ideate_idea(
+            "idea-0001",
+            ii.ReviewActionRequest(action="changes_requested", note="Tighten scope"),
+            req(BOB),
+        ))
+        self.assertEqual(changed["review"]["history"][-1]["action"], "changes_requested")
+
+    def test_stale_submitted_revision_cannot_be_approved_and_resubmit_returns_pending(self):
+        self.save(idea())
+        self.submit()
+        self.save(idea(revision=2))
+        stale = run(ii.review_ideate_idea(
+            "idea-0001", ii.ReviewActionRequest(action="approve"), req(BOB),
+        ))
+        self.assertEqual(stale.status_code, 409)
+        self.assertTrue(self.submit(revision=2))
+        self.assertEqual(ii._memory["idea-0001"]["review_status"], "pending")
+        self.assertEqual(ii._memory["idea-0001"]["submitted_revision"], 2)
+
+    def test_build_authorization_owner_approval_and_staleness(self):
+        self.save(idea())
+        self.submit()
+        self.assertEqual(run(ii.authorize_build("idea-0001", req(BOB))).status_code, 403)
+        self.assertEqual(run(ii.authorize_build("idea-0001", req(ALICE))).status_code, 409)
+        run(ii.review_ideate_idea(
+            "idea-0001", ii.ReviewActionRequest(action="approve"), req(BOB),
+        ))
+        allowed = run(ii.authorize_build("idea-0001", req(ALICE)))
+        self.assertTrue(allowed["authorized"])
+        mismatch = run(ii.get_build_authorization("idea-0001", req(ALICE), revision=99, operation="update"))
+        self.assertEqual(mismatch.status_code, 409)
+        self.save(idea(revision=2))
+        self.assertEqual(run(ii.authorize_build("idea-0001", req(ALICE))).status_code, 409)
+
+    def test_save_blocks_new_build_link_but_preserves_existing_link(self):
+        self.save(idea())
+        blocked = self.save(idea(sessionId="session-new", lockedAt="now"))
+        self.assertEqual(blocked.status_code, 409)
+        self.submit()
+        run(ii.review_ideate_idea(
+            "idea-0001", ii.ReviewActionRequest(action="approve"), req(BOB),
+        ))
+        linked = self.save(idea(sessionId="session-1", lockedAt="now"))
+        self.assertNotIsInstance(linked, ii.JSONResponse)
+        # Existing builds remain saveable/reopenable even after the idea revision changes.
+        reopened = self.save(idea(revision=2, sessionId="session-1", lockedAt="later", buildStage="studio"))
+        self.assertNotIsInstance(reopened, ii.JSONResponse)
+        # A different build/session remains governed.
+        replacement = self.save(idea(revision=2, sessionId="session-2", lockedAt="later"))
+        self.assertEqual(replacement.status_code, 409)
+
+    def test_review_metadata_is_server_owned_and_legacy_rows_default_to_draft(self):
+        out = self.save(idea(review={"status": "approved", "approvedRevision": 1}))
+        self.assertEqual(out["review"]["status"], "draft")
+        self.assertIsNone(out["review"]["approvedRevision"])
+        fetched = run(ii.get_idea("idea-0001", req()))
+        self.assertEqual(fetched["idea"]["review"]["status"], "draft")
 
 
 if __name__ == "__main__":

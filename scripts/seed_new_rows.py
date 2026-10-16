@@ -53,13 +53,14 @@ SEED_TABLES = [
 
 # Seed files that are safe on every invocation (ON CONFLICT DO NOTHING or
 # WHERE NOT EXISTS inserts, updated_by='seed'-guarded UPDATEs) and therefore run
-# in create mode always. 10-12 come from main's setup-lakebase.sh list.
+# in create mode always. 10-13 come from main's setup-lakebase.sh list.
 POST_SEED_MIGRATIONS = [
     "08_seed_step_visibility_overrides.sql",
     "09_seed_path_visibility_overrides.sql",
     "10_seed_usecase_collections.sql",
     "11_seed_industry_outcome_maps.sql",
     "12_seed_office_plays.sql",
+    "13_update_schema_upload_prompts.sql",
 ]
 
 

@@ -118,8 +118,16 @@ export function PathAndArchitecture({
   return (
     <div id="path-architecture-section" className="bg-card rounded-lg border border-border overflow-hidden">
       {/* Clickable Header */}
-      <button
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
         onClick={() => setUserOverride(!isExpanded)}
+        onKeyDown={event => {
+          if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+          event.preventDefault();
+          setUserOverride(!isExpanded);
+        }}
         className="group w-full p-4 flex items-center gap-3 hover:bg-secondary/30 transition-colors cursor-pointer"
       >
         <div className="p-2 rounded-md bg-primary/20">
@@ -155,7 +163,7 @@ export function PathAndArchitecture({
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
           {isExpanded ? 'Collapse' : 'Expand'}
         </span>
-      </button>
+      </div>
 
       {/* Collapsible Content */}
       <div className={`transition-all duration-300 ease-in-out ${

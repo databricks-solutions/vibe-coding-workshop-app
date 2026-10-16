@@ -877,6 +877,11 @@ def save_session_merging_gates(
                 stored_skipped = (
                     _parse_json_list(_parse_json_obj(row[1]).get("skipped_gates")) if row else []
                 )
+                if row and not stored_completed and not stored_skipped:
+                    from src.backend.services.legacy_session_compat import hydrate_locked_legacy_gates
+                    stored_completed, stored_skipped = hydrate_locked_legacy_gates(
+                        cursor, table_name, session_id, stored_completed, stored_skipped
+                    )
                 merged_completed = _merge_app_gates(
                     app_completed_gates, stored_completed, base_completed_gates
                 )
@@ -991,10 +996,20 @@ def save_session_applying_mcp_delta(
                     (session_id,),
                 )
                 row = cursor.fetchone()
+                stored_gates = _parse_json_list(row[0]) if row else []
+                stored_outputs = _parse_json_obj(row[1]) if row else {}
+                stored_params = _parse_json_obj(row[2]) if row else {}
+                if row and not stored_gates and not _parse_json_list(stored_params.get("skipped_gates")):
+                    from src.backend.services.legacy_session_compat import hydrate_locked_legacy_gates
+                    stored_gates, synth_skipped = hydrate_locked_legacy_gates(
+                        cursor, table_name, session_id, stored_gates, []
+                    )
+                    if synth_skipped:
+                        stored_params = {**stored_params, "skipped_gates": synth_skipped}
                 merged_gates, merged_outputs, merged_params = _apply_mcp_delta(
-                    _parse_json_list(row[0]) if row else [],
-                    _parse_json_obj(row[1]) if row else {},
-                    _parse_json_obj(row[2]) if row else {},
+                    stored_gates,
+                    stored_outputs,
+                    stored_params,
                     add_gates=add_gates,
                     set_outputs=set_outputs,
                     set_params=set_params,
@@ -1136,7 +1151,6 @@ def load_session(session_id: str) -> Optional[Dict]:
 
             cursor.execute(query, (session_id,))
             row = cursor.fetchone()
-            cursor.close()
 
             if row:
                 logger.info(f"Session {session_id} found in Lakebase")
@@ -1200,6 +1214,19 @@ def load_session(session_id: str) -> Optional[Dict]:
                         completed_gates = []
                 if not isinstance(completed_gates, list):
                     completed_gates = []
+
+                if not completed_gates:
+                    from src.backend.services.legacy_session_compat import hydrate_legacy_session_row
+                    completed_gates, session_params = hydrate_legacy_session_row(
+                        cursor,
+                        table_name,
+                        row["session_id"],
+                        completed_gates,
+                        session_params,
+                        workshop_level=row.get("workshop_level"),
+                        row_dict=row,
+                    )
+                cursor.close()
                 
                 return {
                     "session_id": row["session_id"],
@@ -1223,6 +1250,7 @@ def load_session(session_id: str) -> Optional[Dict]:
                     "is_saved": is_saved,
                 }
             
+            cursor.close()
             logger.info(f"Session {session_id} not found in Lakebase")
             return None
 
@@ -1399,7 +1427,10 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                 """
             
             cursor.execute(query, (created_by, limit))
-            rows = cursor.fetchall()
+            rows = [dict(r) for r in (cursor.fetchall() or [])]
+            if rows:
+                from src.backend.services.legacy_session_compat import hydrate_legacy_session_rows
+                hydrate_legacy_session_rows(cursor, table_name, rows)
             cursor.close()
 
             # Build PR1's tag->GLOBAL-number inverse map ONCE (reused per row, the
@@ -1493,7 +1524,6 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
 
             cursor.execute(query, (created_by,))
             row = cursor.fetchone()
-            cursor.close()
 
             if row:
                 logger.info(f"Found default session {row['session_id']} for user {created_by}")
@@ -1549,6 +1579,19 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
                 if not isinstance(completed_gates, list):
                     completed_gates = []
 
+                if not completed_gates:
+                    from src.backend.services.legacy_session_compat import hydrate_legacy_session_row
+                    completed_gates, session_params = hydrate_legacy_session_row(
+                        cursor,
+                        table_name,
+                        row["session_id"],
+                        completed_gates,
+                        session_params,
+                        workshop_level=row.get("workshop_level"),
+                        row_dict=row,
+                    )
+                cursor.close()
+
                 return {
                     "session_id": row["session_id"],
                     "industry": row.get("industry"),
@@ -1570,6 +1613,7 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
                     "is_saved": False,  # New Session is never "saved"
                 }
             else:
+                cursor.close()
                 logger.info(f"No default session found for user {created_by}")
                 return None
                 
@@ -1986,6 +2030,8 @@ def get_leaderboard(limit: int = 10, since: Optional[datetime] = None) -> List[D
             else:
                 cursor.execute(query)
             rows = cursor.fetchall()
+            from src.backend.services.legacy_session_compat import extend_with_legacy_leaderboard_rows
+            rows = extend_with_legacy_leaderboard_rows(cursor, table_name, rows, since=since)
             cursor.close()
 
             # Aggregate by user - keep session with highest score
@@ -2405,6 +2451,62 @@ def get_analytics() -> Dict[str, Any]:
             FROM {table_name}
             WHERE created_by IS NOT NULL AND created_by != ''
         """)
+        from src.backend.services.legacy_session_compat import enrich_analytics_cohorts
+        score_rows, avg_rows, step_rows, recent_rows, user_rows = enrich_analytics_cohorts(
+            get_connection,
+            _dict_cursor,
+            table_name,
+            score_rows,
+            avg_rows,
+            step_rows,
+            recent_rows,
+            user_rows,
+        )
+        if score_rows:
+            scores = []
+            for sr in score_rows:
+                try:
+                    cs_global, sk_global = _row_completion_globals(sr, _inverse_map)
+                    if not cs_global:
+                        continue
+                    scores.append(_calculate_score(sorted(cs_global), sorted(sk_global)))
+                except Exception:
+                    pass
+            avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+            usage["avg_score"] = avg_score
+        if avg_rows:
+            _step_total = 0
+            for ar in avg_rows:
+                try:
+                    _completed, _ = _row_completion_globals(ar, _inverse_map)
+                    _step_total += len(_completed)
+                except Exception:
+                    pass
+            usage["avg_steps_per_session"] = float(round(_step_total / len(avg_rows), 1))
+        if step_rows:
+            step_completion_counts = _aggregate_step_completion(step_rows, _inverse_map)
+        if recent_rows:
+            recent_sessions = []
+            for rr in recent_rows:
+                email = rr.get("created_by", "")
+                completed, _skipped = _row_completion_globals(rr, _inverse_map)
+                completed_count = len(completed)
+                lvl = rr.get("workshop_level") or ""
+                ca = rr.get("created_at")
+                if hasattr(ca, "isoformat"):
+                    ca = ca.isoformat()
+                elif hasattr(ca, "strftime"):
+                    ca = ca.strftime("%Y-%m-%dT%H:%M:%S")
+                recent_sessions.append({
+                    "session_id": rr.get("session_id"),
+                    "display_name": _format_display_name(email),
+                    "industry_label": rr.get("industry_label") or "",
+                    "use_case_label": rr.get("use_case_label") or "",
+                    "workshop_level": lvl,
+                    "workshop_level_label": _WORKSHOP_LEVEL_LABELS.get(lvl, lvl or "Unknown"),
+                    "completed_count": completed_count,
+                    "created_at": str(ca or ""),
+                })
         user_agg: Dict[str, Dict[str, Any]] = {}
         for ur in user_rows:
             email = ur.get("created_by", "")

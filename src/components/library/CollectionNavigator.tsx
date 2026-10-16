@@ -22,6 +22,16 @@ interface Props {
 
 const COLLAPSE_KEY = 'library.nav.collapsed';
 
+function initialCollapsedGroups(): Record<string, boolean> {
+  const defaults = Object.fromEntries(KINDS.map(kind => [kind.id, true]));
+  try {
+    const stored = localStorage.getItem(COLLAPSE_KEY);
+    return stored === null ? defaults : JSON.parse(stored);
+  } catch {
+    return defaults;
+  }
+}
+
 function NavItem({ icon, label, active, onClick, trailing }: { icon: ReactNode; label: string; active: boolean; onClick: () => void; trailing?: ReactNode }) {
   return (
     <button
@@ -40,9 +50,7 @@ function NavItem({ icon, label, active, onClick, trailing }: { icon: ReactNode; 
 }
 
 export function CollectionNavigator({ model, view, actions, onNavigate, onSearch, onCreateCollection, onEditCollection, onDeleteCollection }: Props) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}'); } catch { return {}; }
-  });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(initialCollapsedGroups);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
 

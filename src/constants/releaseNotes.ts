@@ -85,6 +85,14 @@ export const RELEASES: Release[] = [
         icon: 'terminal',
       },
       {
+        title: 'Ideate approval workflow and inline review',
+        description:
+          'Ideas are submitted and approved per revision before building. Reviewers can approve, request changes, or reject with required notes inline from the idea card and page or from the Library review queue, and approved ideas hand off directly into a fresh build.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'shield',
+      },
+      {
         title: 'Recommended track and Other tracks',
         description:
           'The path picker now has two tabs. The Genie Accelerator tab holds the recommended track; Other tracks shows every other path as before, including Build Forward and Reverse ETL. You can move between them in one click, and Genie Code understands track names such as "Apps + Lakebase" or "lakehouse with AI".',
