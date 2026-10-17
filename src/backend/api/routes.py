@@ -1060,13 +1060,13 @@ def format_use_case_name(use_case: str) -> str:
 # frontend's DEFAULT_CODING_ASSISTANTS_CONFIG (src/constants/codingAssistants.ts)
 # so backend bootstrap and frontend fallback stay in sync.
 DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
-    {"id": "cursor", "recommended": True},
-    {"id": "genie-code", "recommended": True},
-    {"id": "ai-gateway", "recommended": True},
-    {"id": "coda", "recommended": True},
-    {"id": "omnigent", "recommended": False},
-    {"id": "copilot", "recommended": False},
-    {"id": "vscode", "recommended": False},
+    {"id": "cursor", "recommended": True, "defaultTrack": "end-to-end"},
+    {"id": "genie-code", "recommended": True, "defaultTrack": "genie-accelerator"},
+    {"id": "ai-gateway", "recommended": True, "defaultTrack": "end-to-end"},
+    {"id": "coda", "recommended": True, "defaultTrack": "end-to-end"},
+    {"id": "omnigent", "recommended": False, "defaultTrack": "end-to-end"},
+    {"id": "copilot", "recommended": False, "defaultTrack": "end-to-end"},
+    {"id": "vscode", "recommended": False, "defaultTrack": "end-to-end"},
 ])
 
 
@@ -3534,10 +3534,38 @@ def default_genie_ontology() -> bool:
     return os.getenv("VIBE_DEFAULT_GENIE_ONTOLOGY", "").strip().lower() not in _GENIE_ONTOLOGY_OFF_VALUES
 
 
+def default_workshop_track() -> str:
+    """Default workshop track for non-Genie-Code coding assistants.
+    Configured via VIBE_DEFAULT_TRACK (defaults to 'end-to-end')."""
+    val = os.getenv("VIBE_DEFAULT_TRACK", "").strip()
+    return val if val else "end-to-end"
+
+
+def default_genie_code_track() -> str:
+    """Default workshop track when Genie Code is selected as the coding assistant.
+    Configured via VIBE_GENIE_CODE_DEFAULT_TRACK (defaults to 'genie-accelerator')."""
+    val = os.getenv("VIBE_GENIE_CODE_DEFAULT_TRACK", "").strip()
+    return val if val else "genie-accelerator"
+
+
+def default_recommended_track() -> str:
+    """Workshop track highlighted with the Recommended badge in the UI.
+    Configured via VIBE_RECOMMENDED_TRACK (defaults to 'genie-accelerator')."""
+    val = os.getenv("VIBE_RECOMMENDED_TRACK", "").strip()
+    return val if val else "genie-accelerator"
+
+
 @router.get("/config/workshop-defaults")
 async def get_workshop_defaults() -> Dict[str, Any]:
-    """New-session defaults: the Genie Accelerator track, with ontology from the facilitator switch."""
-    return {"defaultTrack": "genie-accelerator", "includeGenieOntology": default_genie_ontology()}
+    """New-session defaults: defaultTrack ('end-to-end' for standard assistants),
+    genieCodeDefaultTrack ('genie-accelerator' for Genie Code), recommendedTrack
+    ('genie-accelerator' badge), and ontology from the facilitator switch."""
+    return {
+        "defaultTrack": default_workshop_track(),
+        "genieCodeDefaultTrack": default_genie_code_track(),
+        "recommendedTrack": default_recommended_track(),
+        "includeGenieOntology": default_genie_ontology(),
+    }
 
 
 @router.get("/config/section-tags")
@@ -4529,6 +4557,8 @@ async def update_workshop_parameter(param_key: str, update: WorkshopParameterUpd
                 raise HTTPException(status_code=400, detail=f"coding_assistants_config[{i}].id must be a string")
             if 'recommended' in entry and not isinstance(entry.get('recommended'), bool):
                 raise HTTPException(status_code=400, detail=f"coding_assistants_config[{i}].recommended must be a boolean")
+            if 'defaultTrack' in entry and entry['defaultTrack'] is not None and not isinstance(entry.get('defaultTrack'), str):
+                raise HTTPException(status_code=400, detail=f"coding_assistants_config[{i}].defaultTrack must be a string")
             if entry['id'] in seen_ids:
                 raise HTTPException(status_code=400, detail=f"coding_assistants_config has duplicate id '{entry['id']}'")
             seen_ids.add(entry['id'])

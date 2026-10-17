@@ -87,7 +87,7 @@ export const CHAPTER_LEARNING: Record<string, ChapterLearning> = {
       'Built and wired FastAPI routes and React components to the synced tables',
       'Deployed and validated end-to-end data freshness and query performance',
     ],
-    services: ['lakebase', 'gold'],
+    services: ['syncedTables', 'lakebase', 'gold', 'databricksApp'],
   },
   'Refinement': {
     congratsTitle: 'Refinement Complete!',

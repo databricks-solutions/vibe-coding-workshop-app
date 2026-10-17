@@ -25,7 +25,8 @@
 
 import { useState, useEffect } from 'react';
 import { GenieCodeStartLine } from './ConnectToGenieCodePanel';
-import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Sparkles, Terminal } from 'lucide-react';
+import { useGenieCodeMode } from '../constants/genieCodeMcpConnection';
+import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Sparkles, Terminal, Zap, ClipboardCopy, Star } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
 
@@ -70,6 +71,8 @@ function resolveVariant(codingAssistant?: string | null): SetUpProjectVariant {
 
 const DEFAULT_FOLDER = 'vibe-coding-workshop-template';
 const REPO_URL = 'https://github.com/databricks-solutions/vibe-coding-workshop-template.git';
+const SKILLS_REPO_WEB_URL = 'https://github.com/databricks-solutions/vibe-coding-workshop-template';
+const APP_REPO_WEB_URL = 'https://github.com/databricks-solutions/vibe-coding-workshop-app';
 
 function deriveFolderName(label?: string): string {
   if (!label || !label.trim()) return DEFAULT_FOLDER;
@@ -133,19 +136,19 @@ function CommandBox({ label, cmd, copiedKey, onCopy }: {
   const isCopied = copiedKey === `${label}-${cmd}`;
   
   return (
-    <div className="flex items-center gap-2 bg-slate-900/70 rounded-lg px-3 py-2 border border-slate-700/50">
-      <code className="flex-1 text-emerald-400 font-mono text-xs break-all">
+    <div className="flex items-center gap-2 bg-muted/80 dark:bg-slate-900/70 rounded-lg px-3 py-2 border border-border">
+      <code className="flex-1 text-emerald-700 dark:text-emerald-400 font-mono text-xs break-all">
         {cmd}
       </code>
       <button
         onClick={() => onCopy(`${label}-${cmd}`, cmd)}
-        className="flex-shrink-0 p-1.5 rounded hover:bg-slate-700/50 transition-colors"
+        className="flex-shrink-0 p-1.5 rounded hover:bg-secondary transition-colors"
         title={isCopied ? "Copied!" : "Copy command"}
       >
         {isCopied ? (
-          <Check className="w-3.5 h-3.5 text-emerald-400" />
+          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
         ) : (
-          <Copy className="w-3.5 h-3.5 text-slate-400" />
+          <Copy className="w-3.5 h-3.5 text-muted-foreground" />
         )}
       </button>
     </div>
@@ -163,20 +166,20 @@ function PromptBox({ label, prompt, copiedKey, onCopy }: {
   const isCopied = copiedKey === `${label}-${prompt}`;
 
   return (
-    <div className="relative bg-slate-900/70 rounded-lg border border-slate-700/50">
+    <div className="relative bg-muted/80 dark:bg-slate-900/70 rounded-lg border border-border">
       <button
         onClick={() => onCopy(`${label}-${prompt}`, prompt)}
-        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700/70 transition-colors text-xs"
+        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-card/90 dark:bg-slate-800/80 hover:bg-secondary transition-colors text-xs border border-border/60"
         title={isCopied ? 'Copied!' : 'Copy prompt'}
       >
         {isCopied ? (
-          <Check className="w-3.5 h-3.5 text-emerald-400" />
+          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
         ) : (
-          <Copy className="w-3.5 h-3.5 text-slate-400" />
+          <Copy className="w-3.5 h-3.5 text-muted-foreground" />
         )}
-        <span className={isCopied ? 'text-emerald-400' : 'text-slate-400'}>{isCopied ? 'Copied' : 'Copy'}</span>
+        <span className={isCopied ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>{isCopied ? 'Copied' : 'Copy'}</span>
       </button>
-      <pre className="whitespace-pre-wrap break-words text-emerald-300/90 font-mono text-xs leading-relaxed px-3 py-2.5 pr-20 overflow-x-auto">
+      <pre className="whitespace-pre-wrap break-words text-emerald-800 dark:text-emerald-300/90 font-mono text-xs leading-relaxed px-3 py-2.5 pr-20 overflow-x-auto">
         {prompt}
       </pre>
     </div>
@@ -224,6 +227,7 @@ export function SetUpProjectStep({
   const folderName = deriveFolderName(useCaseLabel);
   const cloneCmd = `git clone ${REPO_URL} ${folderName}`;
   const variant = resolveVariant(codingAssistant);
+  const [genieMode, setGenieMode] = useGenieCodeMode();
 
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [workspaceUrl, setWorkspaceUrl] = useState<string>(DEFAULT_WORKSPACE_URL);
@@ -442,7 +446,8 @@ export function SetUpProjectStep({
               
               {/* Links */}
               <div className="flex flex-wrap gap-2 mt-3">
-                <LinkButton label="View Repository" url="https://github.com/databricks-solutions/vibe-coding-workshop-template" color="orange" />
+                <LinkButton label="Skills Repo" url={SKILLS_REPO_WEB_URL} color="orange" />
+                <LinkButton label="App Repo" url={APP_REPO_WEB_URL} color="purple" />
                 <LinkButton label="Git Troubleshooting" url="https://docs.github.com/en/get-started/getting-started-with-git/set-up-git" color="blue" />
               </div>
             </div>
@@ -620,7 +625,8 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
 
                 {/* Links */}
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <LinkButton label="View Repository" url="https://github.com/databricks-solutions/vibe-coding-workshop-template" color="orange" />
+                  <LinkButton label="Skills Repo" url={SKILLS_REPO_WEB_URL} color="orange" />
+                  <LinkButton label="App Repo" url={APP_REPO_WEB_URL} color="purple" />
                   <LinkButton label="CoDA Deployment Docs" url="https://github.com/databrickslabs/coding-agents-databricks-apps/blob/main/docs/deployment.md" color="blue" />
                 </div>
               </div>
@@ -638,9 +644,54 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                =========================================================== */}
           {/* Session linking: the line that continues THIS session in Genie Code. */}
           {variant === 'genie-code' && (
-            <div data-testid="genie-code-start-note" className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2.5 space-y-1">
-              <p className="text-ui-sm font-semibold text-foreground">Using Genie Code over MCP?</p>
-              <GenieCodeStartLine workshopLevel={workshopLevel} sessionId={sessionId} lead="Enter" />
+            <div data-testid="genie-code-start-note" className="rounded-xl border border-primary/30 bg-primary/[0.05] p-4 space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-ui-sm font-semibold text-foreground flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    How are you running Genie Code?
+                  </p>
+                  <p className="text-ui-xs text-muted-foreground mt-0.5">
+                    Pick your mode below — Interactive MCP Autopilot is recommended so you never have to copy and paste step prompts.
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-secondary/70 border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setGenieMode('mcp')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-ui-xs font-semibold transition-colors ${
+                      genieMode === 'mcp'
+                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    Interactive MCP
+                    <Star className="w-3 h-3 fill-current" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGenieMode('copy-paste')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-ui-xs font-semibold transition-colors ${
+                      genieMode === 'copy-paste'
+                        ? 'bg-violet-600 text-white shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <ClipboardCopy className="w-3.5 h-3.5" />
+                    Copy &amp; Paste
+                  </button>
+                </div>
+              </div>
+
+              {genieMode === 'mcp' && (
+                <div className="space-y-1.5">
+                  <p className="text-ui-xs font-medium text-foreground">
+                    After running the 1-time workspace clone below, paste this single line in Genie Code to start your interactive walk:
+                  </p>
+                  <GenieCodeStartLine workshopLevel={workshopLevel} sessionId={sessionId} lead="Enter" />
+                </div>
+              )}
             </div>
           )}
 
@@ -761,7 +812,8 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
 
                   {/* Links */}
                   <div className="flex flex-wrap gap-2 mt-3">
-                    <LinkButton label="View Repository" url="https://github.com/databricks-solutions/vibe-coding-workshop-template" color="orange" />
+                    <LinkButton label="Skills Repo" url={SKILLS_REPO_WEB_URL} color="orange" />
+                    <LinkButton label="App Repo" url={APP_REPO_WEB_URL} color="purple" />
                     <LinkButton label="Genie Code Docs" url="https://docs.databricks.com/aws/en/genie-code/" color="blue" />
                   </div>
                 </div>

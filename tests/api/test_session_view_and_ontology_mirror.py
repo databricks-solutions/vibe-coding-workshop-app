@@ -168,7 +168,12 @@ def test_workshop_defaults_route(client, monkeypatch, raw, expected):
         monkeypatch.setenv("VIBE_DEFAULT_GENIE_ONTOLOGY", raw)
     response = client.get("/api/config/workshop-defaults")
     assert response.status_code == 200
-    assert response.json() == {"defaultTrack": "genie-accelerator", "includeGenieOntology": expected}
+    assert response.json() == {
+        "defaultTrack": "end-to-end",
+        "genieCodeDefaultTrack": "genie-accelerator",
+        "recommendedTrack": "genie-accelerator",
+        "includeGenieOntology": expected,
+    }
 
 
 def test_app_template_sets_the_switch_on(monkeypatch):

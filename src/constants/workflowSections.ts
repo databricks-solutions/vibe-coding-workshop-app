@@ -909,7 +909,7 @@ export interface LevelUIOverrides {
 
 export const LEVEL_UI_OVERRIDES: Partial<Record<WorkshopLevel, LevelUIOverrides>> = {
   'genie-accelerator': {
-    defaultUseCaseMode: 'custom',
+    defaultUseCaseMode: 'library',
   },
   'skills-accelerator': {
     defaultUseCaseMode: 'library',

@@ -19,12 +19,17 @@ import type { ChipTone } from '../constants/chapterBlocks';
 
 // Shared pill geometry + the muted (off) look, so every chip is byte-identical.
 const CHIP_BASE =
-  'group flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 py-1.5 transition-colors duration-150';
+  'group h-full flex items-center justify-center rounded-md border transition-colors duration-150';
 const CHIP_OFF =
   'bg-secondary/40 border-border/40 text-muted-foreground hover:bg-secondary/70 hover:border-border/70 hover:text-foreground';
 
-function chipClass(on: boolean, tone: ChipTone, extra?: string): string {
-  return `${CHIP_BASE} ${on ? `${tone.box} text-foreground shadow-sm` : CHIP_OFF}${extra ? ` ${extra}` : ''}`;
+type ChipLayout = 'vertical' | 'horizontal';
+
+function chipClass(on: boolean, tone: ChipTone, layout: ChipLayout, extra?: string): string {
+  const layoutClass = layout === 'horizontal'
+    ? 'flex-row gap-2 px-3 py-2'
+    : 'flex-col gap-0.5 px-1.5 py-2';
+  return `${CHIP_BASE} ${layoutClass} ${on ? `${tone.box} text-foreground shadow-sm` : CHIP_OFF}${extra ? ` ${extra}` : ''}`;
 }
 
 interface ModuleChipProps {
@@ -39,6 +44,8 @@ interface ModuleChipProps {
   disabled?: boolean;
   /** Drives the horizontal shake used when a toggle is blocked. */
   shaking?: boolean;
+  /** Compact horizontal rows are used by Activation; all other chips are vertical. */
+  layout?: ChipLayout;
   /** Extra classes appended to the pill (e.g. hover:scale-105 for display chips). */
   className?: string;
 }
@@ -52,6 +59,7 @@ export function ModuleChip({
   title,
   disabled,
   shaking,
+  layout = 'vertical',
   className,
 }: ModuleChipProps) {
   const inner = (
@@ -72,7 +80,7 @@ export function ModuleChip({
         animate={shaking ? { x: [0, -2, 2, -2, 2, 0] } : { x: 0 }}
         transition={{ duration: 0.32 }}
         title={title}
-        className={chipClass(on, tone, className)}
+        className={chipClass(on, tone, layout, className)}
       >
         {inner}
       </motion.button>
@@ -80,7 +88,7 @@ export function ModuleChip({
   }
 
   return (
-    <div className={chipClass(on, tone, className)} title={title}>
+    <div className={chipClass(on, tone, layout, className)} title={title}>
       {inner}
     </div>
   );

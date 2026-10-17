@@ -289,7 +289,7 @@ export function LibraryHome({ model, onNavigate, onOpen, onPreview, onCreateColl
           ) : (
             <div className="space-y-2">
               {model.pendingReview.slice(0, 4).map(u => (
-                <button key={keyOf(u)} onClick={() => onOpen(u)} className="w-full flex items-center gap-3 rounded-2xl ring-1 ring-amber-500/25 bg-amber-500/[0.05] px-4 py-3 text-left hover:bg-amber-500/10 transition-colors">
+                <button key={keyOf(u)} onClick={() => onNavigate(`/library/review?id=${encodeURIComponent(`catalog:${u.industry}.${u.use_case}`)}`)} className="w-full flex items-center gap-3 rounded-2xl ring-1 ring-amber-500/25 bg-amber-500/[0.05] px-4 py-3 text-left hover:bg-amber-500/10 transition-colors">
                   <Avatar email={u.created_by} />
                   <div className="flex-1 min-w-0">
                     <div className="text-ui-sm font-medium text-foreground truncate">{u.use_case_label}</div>

@@ -14,10 +14,6 @@
 // block title, icon, colours and service chips from here; each surface still
 // owns its own layout (horizontal strip vs. vertical panel vs. toggle column)
 // but the *content* is defined exactly once.
-//
-// Colours use the shared strip/flip-card grammar (a slate-800 box with a
-// coloured border, a coloured title, coloured sub-chips and a coloured
-// connector arrow) so the strip and the flip card read identically.
 // ---------------------------------------------------------------------------
 
 import type { LucideIcon } from 'lucide-react';
@@ -91,23 +87,20 @@ export const CHAPTER_BLOCKS: Record<ChapterBlockId, ChapterBlock> = {
     title: 'Lakehouse',
     icon: Database,
     colors: {
-      title: 'text-teal-300',
-      border: 'border-teal-500/60',
-      chip: 'bg-teal-900/30 border-teal-500/30 hover:bg-teal-900/50 hover:border-teal-400',
-      chipText: 'text-teal-200',
-      arrow: 'text-teal-400',
+      title: 'text-teal-700 dark:text-teal-300',
+      border: 'border-teal-500/50',
+      chip: 'bg-teal-500/12 dark:bg-teal-900/35 border-teal-500/40 hover:bg-teal-500/20 dark:hover:bg-teal-900/55 hover:border-teal-400',
+      chipText: 'text-teal-800 dark:text-teal-200',
+      arrow: 'text-teal-600 dark:text-teal-400',
     },
-    // Teal tinted container (matches the persona Lakehouse column); chips carry
-    // their own per-layer palette below so Bronze/Silver/Gold match the
-    // interactive medallion selector one-for-one.
     accent: {
-      container: 'border-teal-500/30 bg-teal-500/[0.05]',
-      chip: { box: 'bg-teal-500/15 border-teal-500/50', icon: 'text-teal-400' },
+      container: 'border-teal-500/35 bg-teal-500/[0.06]',
+      chip: { box: 'bg-teal-500/15 border-teal-500/50', icon: 'text-teal-600 dark:text-teal-400' },
     },
     services: [
-      { label: 'Bronze', serviceKey: 'bronze', toggleId: 'bronze', chipTone: { box: 'bg-orange-500/15 border-orange-500/50', icon: 'text-orange-400' } },
-      { label: 'Silver', serviceKey: 'silver', toggleId: 'silver', chipTone: { box: 'bg-slate-300/15 border-slate-300/50', icon: 'text-slate-200' } },
-      { label: 'Gold', serviceKey: 'gold', toggleId: 'gold', chipTone: { box: 'bg-amber-400/15 border-amber-400/50', icon: 'text-amber-300' } },
+      { label: 'Bronze', serviceKey: 'bronze', toggleId: 'bronze', chipTone: { box: 'bg-orange-500/15 border-orange-500/50', icon: 'text-orange-600 dark:text-orange-400' } },
+      { label: 'Silver', serviceKey: 'silver', toggleId: 'silver', chipTone: { box: 'bg-slate-500/15 border-slate-500/45 dark:bg-slate-300/15 dark:border-slate-300/50', icon: 'text-slate-700 dark:text-slate-200' } },
+      { label: 'Gold', serviceKey: 'gold', toggleId: 'gold', chipTone: { box: 'bg-amber-500/15 border-amber-500/50', icon: 'text-amber-600 dark:text-amber-300' } },
     ],
   },
   'semantic-layer': {
@@ -115,19 +108,19 @@ export const CHAPTER_BLOCKS: Record<ChapterBlockId, ChapterBlock> = {
     title: 'Semantic Layer',
     icon: FileCode,
     colors: {
-      title: 'text-cyan-300',
-      border: 'border-cyan-500/60',
-      chip: 'bg-cyan-900/30 border-cyan-500/30 hover:bg-cyan-900/50 hover:border-cyan-400',
-      chipText: 'text-cyan-200',
-      arrow: 'text-cyan-400',
+      title: 'text-cyan-700 dark:text-cyan-300',
+      border: 'border-cyan-500/50',
+      chip: 'bg-cyan-500/12 dark:bg-cyan-900/35 border-cyan-500/40 hover:bg-cyan-500/20 dark:hover:bg-cyan-900/55 hover:border-cyan-400',
+      chipText: 'text-cyan-800 dark:text-cyan-200',
+      arrow: 'text-cyan-600 dark:text-cyan-400',
     },
     accent: {
-      container: 'border-cyan-500/30 bg-cyan-500/[0.05]',
-      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-400' },
+      container: 'border-cyan-500/35 bg-cyan-500/[0.06]',
+      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-600 dark:text-cyan-400' },
     },
     services: [
       { label: 'Metric View', serviceKey: 'metricViews' },
-      { label: 'Synonyms', serviceKey: 'metricViews' },
+      { label: 'Synonyms', serviceKey: 'metricViewSynonyms' },
     ],
   },
   'ai-agents': {
@@ -135,20 +128,16 @@ export const CHAPTER_BLOCKS: Record<ChapterBlockId, ChapterBlock> = {
     title: 'AI and Agents',
     icon: Brain,
     colors: {
-      title: 'text-sky-300',
-      border: 'border-sky-500/60',
-      chip: 'bg-sky-900/30 border-sky-500/30 hover:bg-sky-900/50 hover:border-sky-400',
-      chipText: 'text-sky-200',
-      arrow: 'text-sky-400',
+      title: 'text-sky-700 dark:text-sky-300',
+      border: 'border-sky-500/50',
+      chip: 'bg-sky-500/12 dark:bg-sky-900/35 border-sky-500/40 hover:bg-sky-500/20 dark:hover:bg-sky-900/55 hover:border-sky-400',
+      chipText: 'text-sky-800 dark:text-sky-200',
+      arrow: 'text-sky-600 dark:text-sky-400',
     },
-    // Cyan chips + tinted container — matches the interactive AI-module
-    // selector's existing cyan chips exactly.
     accent: {
-      container: 'border-cyan-500/30 bg-cyan-500/[0.05]',
-      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-400' },
+      container: 'border-cyan-500/35 bg-cyan-500/[0.06]',
+      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-600 dark:text-cyan-400' },
     },
-    // The canonical AI-and-Agents trio (Genie · Agent · Dashboard), shared with
-    // the persona AI-module column.
     services: [
       { label: 'Genie', serviceKey: 'genieSpaces', icon: MessageSquareText, toggleId: 'genie' },
       { label: 'Agent', serviceKey: 'agents', icon: Bot, toggleId: 'agent' },
@@ -160,21 +149,20 @@ export const CHAPTER_BLOCKS: Record<ChapterBlockId, ChapterBlock> = {
     title: 'Ontology',
     icon: Globe,
     colors: {
-      title: 'text-violet-300',
-      border: 'border-violet-500/60',
-      chip: 'bg-violet-900/30 border-violet-500/30 hover:bg-violet-900/50 hover:border-violet-400',
-      chipText: 'text-violet-200',
-      arrow: 'text-violet-400',
+      title: 'text-violet-700 dark:text-violet-300',
+      border: 'border-violet-500/50',
+      chip: 'bg-violet-500/12 dark:bg-violet-900/35 border-violet-500/40 hover:bg-violet-500/20 dark:hover:bg-violet-900/55 hover:border-violet-400',
+      chipText: 'text-violet-800 dark:text-violet-200',
+      arrow: 'text-violet-600 dark:text-violet-400',
     },
-    // One calm accent for the new Genie boxes: cyan (matches AI and Agents).
     accent: {
-      container: 'border-cyan-500/30 bg-cyan-500/[0.05]',
-      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-400' },
+      container: 'border-cyan-500/35 bg-cyan-500/[0.06]',
+      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-600 dark:text-cyan-400' },
     },
     services: [
-      { label: 'Domains', serviceKey: 'discoverOntology' },
-      { label: 'Pages', serviceKey: 'discoverOntology' },
-      { label: 'Routing', serviceKey: 'discoverOntology' },
+      { label: 'Domains', serviceKey: 'discoverDomains' },
+      { label: 'Pages', serviceKey: 'discoverPages' },
+      { label: 'Routing', serviceKey: 'discoverRouting' },
     ],
   },
   activation: {
@@ -182,16 +170,15 @@ export const CHAPTER_BLOCKS: Record<ChapterBlockId, ChapterBlock> = {
     title: 'Activation',
     icon: Rocket,
     colors: {
-      title: 'text-emerald-300',
-      border: 'border-emerald-500/60',
-      chip: 'bg-emerald-900/30 border-emerald-500/30 hover:bg-emerald-900/50 hover:border-emerald-400',
-      chipText: 'text-emerald-200',
-      arrow: 'text-emerald-400',
+      title: 'text-emerald-700 dark:text-emerald-300',
+      border: 'border-emerald-500/50',
+      chip: 'bg-emerald-500/12 dark:bg-emerald-900/35 border-emerald-500/40 hover:bg-emerald-500/20 dark:hover:bg-emerald-900/55 hover:border-emerald-400',
+      chipText: 'text-emerald-800 dark:text-emerald-200',
+      arrow: 'text-emerald-600 dark:text-emerald-400',
     },
-    // One calm accent for the new Genie boxes: cyan (matches AI and Agents).
     accent: {
-      container: 'border-cyan-500/30 bg-cyan-500/[0.05]',
-      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-400' },
+      container: 'border-cyan-500/35 bg-cyan-500/[0.06]',
+      chip: { box: 'bg-cyan-500/15 border-cyan-500/50', icon: 'text-cyan-600 dark:text-cyan-400' },
     },
     services: [
       { label: 'Synced Tables', serviceKey: 'syncedTables' },
@@ -208,8 +195,13 @@ const GENIE_ACCELERATOR_HIDDEN_TOGGLES: Partial<Record<ChapterBlockId, string[]>
 };
 
 /** Services to show for a block inside the Genie Accelerator surfaces. Both the
- *  selector strip and the flip card read this so the two views can't drift. */
+ *  selector strip and the flip card read this so the two views can't drift.
+ *  Also upgrades the 'Genie' chip from generic `genieSpaces` to `genieAgent`. */
 export function genieAcceleratorServices(block: ChapterBlock): ServiceChip[] {
   const hidden = GENIE_ACCELERATOR_HIDDEN_TOGGLES[block.id];
-  return hidden ? block.services.filter(s => !s.toggleId || !hidden.includes(s.toggleId)) : block.services;
+  const filtered = hidden ? block.services.filter(s => !s.toggleId || !hidden.includes(s.toggleId)) : block.services;
+  if (block.id === 'ai-agents') {
+    return filtered.map(s => (s.toggleId === 'genie' ? { ...s, serviceKey: 'genieAgent' } : s));
+  }
+  return filtered;
 }

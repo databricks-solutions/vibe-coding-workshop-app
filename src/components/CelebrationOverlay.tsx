@@ -11,6 +11,7 @@ import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import { 
   Trophy, Sparkles, Star, ThumbsUp, ThumbsDown, X,
   Globe, HardDrive, Database, Layers, Zap, Bot, LayoutDashboard, Brain,
+  FileCode, MessageSquareText, BookOpen, RefreshCw, Cpu, Wrench, ShieldCheck,
   type LucideIcon
 } from 'lucide-react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -27,18 +28,31 @@ import { AnimatedPoints } from './celebration/AnimatedPoints';
 // Maps each service key to its lucide icon + color (matching Architecture Overview)
 
 const SERVICE_ICONS: Record<string, { icon: LucideIcon; colorClass: string }> = {
-  databricksApp:  { icon: Globe,           colorClass: 'text-[#FF3621]' },
-  lakebase:       { icon: HardDrive,       colorClass: 'text-violet-400' },
-  dataIngestion:  { icon: Database,        colorClass: 'text-teal-400' },
-  bronze:         { icon: Layers,          colorClass: 'text-orange-400' },
-  silver:         { icon: Sparkles,        colorClass: 'text-slate-300' },
-  gold:           { icon: Zap,             colorClass: 'text-yellow-400' },
-  sdp:            { icon: Layers,          colorClass: 'text-teal-300' },
-  tvf:            { icon: Database,        colorClass: 'text-amber-400' },
-  metricViews:    { icon: LayoutDashboard, colorClass: 'text-amber-400' },
-  genieSpaces:    { icon: Brain,           colorClass: 'text-blue-400' },
-  aiBIDashboards: { icon: LayoutDashboard, colorClass: 'text-green-400' },
-  agents:         { icon: Bot,             colorClass: 'text-blue-400' },
+  databricksApp:        { icon: Globe,             colorClass: 'text-[#FF3621]' },
+  lakebase:             { icon: HardDrive,         colorClass: 'text-violet-400' },
+  dataIngestion:        { icon: Database,          colorClass: 'text-teal-400' },
+  bronze:               { icon: Layers,            colorClass: 'text-orange-400' },
+  silver:               { icon: Sparkles,          colorClass: 'text-slate-300' },
+  gold:                 { icon: Zap,               colorClass: 'text-yellow-400' },
+  sdp:                  { icon: Layers,            colorClass: 'text-teal-300' },
+  tvf:                  { icon: Database,          colorClass: 'text-amber-400' },
+  metricViews:          { icon: FileCode,          colorClass: 'text-cyan-400' },
+  metricViewSynonyms:   { icon: FileCode,          colorClass: 'text-cyan-300' },
+  genieSpaces:          { icon: Brain,             colorClass: 'text-blue-400' },
+  genieAgent:           { icon: MessageSquareText, colorClass: 'text-sky-400' },
+  discoverOntology:     { icon: Globe,             colorClass: 'text-violet-400' },
+  discoverDomains:      { icon: Globe,             colorClass: 'text-violet-400' },
+  discoverPages:        { icon: BookOpen,          colorClass: 'text-violet-300' },
+  discoverRouting:      { icon: Sparkles,          colorClass: 'text-violet-400' },
+  syncedTables:         { icon: RefreshCw,         colorClass: 'text-emerald-400' },
+  aiBIDashboards:       { icon: LayoutDashboard,   colorClass: 'text-green-400' },
+  agents:               { icon: Bot,               colorClass: 'text-blue-400' },
+  agentFramework:       { icon: Cpu,               colorClass: 'text-blue-400' },
+  toolsMcp:             { icon: Wrench,            colorClass: 'text-cyan-400' },
+  lakebaseMemory:       { icon: HardDrive,         colorClass: 'text-violet-400' },
+  mlflowPromptRegistry: { icon: FileCode,          colorClass: 'text-purple-400' },
+  mlflowEval:           { icon: ShieldCheck,       colorClass: 'text-emerald-400' },
+  mlflowMonitoring:     { icon: Sparkles,          colorClass: 'text-amber-400' },
 };
 
 function ServiceIcon({ serviceKey }: { serviceKey: ServiceKey }) {

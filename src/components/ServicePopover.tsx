@@ -3,13 +3,14 @@
  * 
  * Used across:
  * - Architecture Overview diagram (click on services)
+ * - Workshop Path stage strip & chips
  * - Chapter Completion modal (clickable service names in learning content)
  * 
  * Includes:
- * - ServicePopover: Click-to-open popover with service info + embedded chat
+ * - ServicePopover: Click-to-open popover with service info, benefits/considerations toggle + embedded chat
  * - ServiceChat: Embedded quick-question chat in popovers
  * - ServiceChatModal: Full-screen chat modal
- * - serviceData (ServicePopover.utils.ts): Databricks service definitions (12 services)
+ * - serviceData (ServicePopover.utils.ts): Databricks service definitions (22 services)
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,6 +18,7 @@ import { createPortal } from 'react-dom';
 import {
   ExternalLink,
   CheckCircle2,
+  AlertTriangle,
   Info,
   Send,
   Loader2,
@@ -25,9 +27,9 @@ import {
 } from 'lucide-react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import ReactMarkdown from 'react-markdown';
-import { serviceData, type ServiceKey } from './ServicePopover.utils';
+import { serviceData, type ServiceInfo, type ServiceKey, type ServiceQuickQuestion } from './ServicePopover.utils';
 
-export type { ServiceInfo, ServiceKey } from './ServicePopover.utils';
+export type { ServiceInfo, ServiceKey, ServiceQuickQuestion } from './ServicePopover.utils';
 
 // =============================================================================
 // TYPES
@@ -38,17 +40,11 @@ interface ChatMessage {
   content: string;
 }
 
-interface QuickQuestion {
-  label: string;
-  question: string;
-}
-
-
 // =============================================================================
-// SHARED QUICK QUESTIONS
+// SHARED QUICK QUESTIONS (Fallback when a service doesn't define custom ones)
 // =============================================================================
 
-const DEFAULT_QUICK_QUESTIONS: QuickQuestion[] = [
+const DEFAULT_QUICK_QUESTIONS: ServiceQuickQuestion[] = [
   { 
     label: '⚠️ What are the considerations?', 
     question: 'What are the key considerations, limitations, and potential challenges when using this service?' 
@@ -67,18 +63,18 @@ const markdownComponents = {
   p: ({children}: {children?: React.ReactNode}) => <p className="my-2">{children}</p>,
   ul: ({children}: {children?: React.ReactNode}) => <ul className="my-2 space-y-1">{children}</ul>,
   ol: ({children}: {children?: React.ReactNode}) => <ol className="my-2 space-y-1 list-decimal list-inside">{children}</ol>,
-  li: ({children}: {children?: React.ReactNode}) => <li className="flex items-start gap-2"><span className="text-blue-400 shrink-0 mt-0.5">•</span><span className="flex-1">{children}</span></li>,
+  li: ({children}: {children?: React.ReactNode}) => <li className="flex items-start gap-2"><span className="text-primary shrink-0 mt-0.5">•</span><span className="flex-1">{children}</span></li>,
   strong: ({children}: {children?: React.ReactNode}) => <strong className="text-foreground font-semibold">{children}</strong>,
   code: ({children}: {children?: React.ReactNode}) => <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">{children}</code>,
-  pre: ({children}: {children?: React.ReactNode}) => <pre className="bg-slate-900 p-3 rounded-lg overflow-x-auto my-2">{children}</pre>,
-  a: ({href, children}: {href?: string; children?: React.ReactNode}) => <a href={href} className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+  pre: ({children}: {children?: React.ReactNode}) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto my-2">{children}</pre>,
+  a: ({href, children}: {href?: string; children?: React.ReactNode}) => <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>,
 };
 
 const markdownComponentsSmall = {
   p: ({children}: {children?: React.ReactNode}) => <p className="my-1">{children}</p>,
   ul: ({children}: {children?: React.ReactNode}) => <ul className="my-1 space-y-0.5">{children}</ul>,
   ol: ({children}: {children?: React.ReactNode}) => <ol className="my-1 space-y-0.5 list-decimal list-inside">{children}</ol>,
-  li: ({children}: {children?: React.ReactNode}) => <li className="flex items-start gap-1"><span className="text-blue-400 shrink-0">•</span><span>{children}</span></li>,
+  li: ({children}: {children?: React.ReactNode}) => <li className="flex items-start gap-1"><span className="text-primary shrink-0">•</span><span>{children}</span></li>,
   strong: ({children}: {children?: React.ReactNode}) => <strong className="text-foreground font-semibold">{children}</strong>,
   code: ({children}: {children?: React.ReactNode}) => <code className="bg-secondary px-1 rounded text-ui-3xs">{children}</code>,
 };
@@ -87,13 +83,24 @@ const markdownComponentsSmall = {
 // HELPER: Build system prompt for service chat
 // =============================================================================
 
-function buildSystemPrompt(serviceName: string, serviceDescription: string, docUrl: string, conversationHistory: string, wordLimit: string) {
-  return `You are a Databricks expert assistant. Your knowledge is strictly limited to Databricks products, services, and official documentation.
+function buildSystemPrompt(
+  service: ServiceInfo,
+  conversationHistory: string,
+  wordLimit: string
+) {
+  const benefitsList = service.benefits.map(b => `  - ${b}`).join('\n');
+  const limitationsList = service.limitations.map(l => `  - ${l}`).join('\n');
+
+  return `You are a Databricks expert assistant. Your knowledge is strictly grounded in official 2026 Databricks products, services, and documentation.
 
 SERVICE CONTEXT:
-- Service: ${serviceName}
-- Description: ${serviceDescription}
-- Documentation: ${docUrl}
+- Service: ${service.name}${service.badge ? ` (${service.badge})` : ''}
+- Description: ${service.description}
+- Official Documentation: ${service.docUrl}
+- Key Benefits & Capabilities:
+${benefitsList}
+- Considerations & Limitations:
+${limitationsList}
 
 ${conversationHistory ? `CONVERSATION HISTORY:\n${conversationHistory}\n` : ''}
 CRITICAL FORMATTING RULES - USE MARKDOWN LISTS:
@@ -107,10 +114,10 @@ FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
 - Second point - keep each bullet concise
 - Third point with more details
 
-**Additional Info:**
+**Best Practices:**
 
 - More details here
-- Use \`code\` for technical terms
+- Use \`code\` for technical terms, SQL, or YAML keys
 
 STRICT RULES:
 1. Use markdown dash lists (- item) for ALL bullet points
@@ -118,7 +125,7 @@ STRICT RULES:
 3. Use **bold** for key terms and concepts
 4. Keep each bullet to 1-2 lines max
 5. Be concise - ${wordLimit} words total
-6. Only answer about ${serviceName}
+6. Only answer about ${service.name} and how it integrates with Databricks
 
 NEVER use • symbol. ALWAYS use - for bullets. Each - must start on a new line.`;
 }
@@ -167,7 +174,6 @@ async function streamServiceChat(
           try {
             const parsed = JSON.parse(data);
             if (parsed.type === 'retry') {
-              // Silently skip retry events — backend handles backoff
               continue;
             }
             if (parsed.type === 'error') {
@@ -199,9 +205,7 @@ async function streamServiceChat(
 interface ServiceChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  serviceName: string;
-  serviceDescription: string;
-  docUrl: string;
+  service: ServiceInfo;
   initialMessages: ChatMessage[];
   onMessagesUpdate: (messages: ChatMessage[]) => void;
 }
@@ -209,9 +213,7 @@ interface ServiceChatModalProps {
 function ServiceChatModal({ 
   isOpen, 
   onClose, 
-  serviceName, 
-  serviceDescription, 
-  docUrl,
+  service,
   initialMessages,
   onMessagesUpdate
 }: ServiceChatModalProps) {
@@ -222,6 +224,8 @@ function ServiceChatModal({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   useEscapeKey(isOpen, onClose);
+
+  const quickQuestions = service.quickQuestions?.length ? service.quickQuestions : DEFAULT_QUICK_QUESTIONS;
 
   useEffect(() => {
     setMessages(initialMessages);
@@ -244,10 +248,10 @@ function ServiceChatModal({
     setQuestion('');
     
     const conversationHistory = newMessages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
-    const systemPrompt = buildSystemPrompt(serviceName, serviceDescription, docUrl, conversationHistory, '150-300');
+    const systemPrompt = buildSystemPrompt(service, conversationHistory, '150-300');
 
     try {
-      const fullText = await streamServiceChat(q, serviceName, systemPrompt, setStreamingContent);
+      const fullText = await streamServiceChat(q, service.name, systemPrompt, setStreamingContent);
       const assistantMessage: ChatMessage = { role: 'assistant', content: fullText };
       const updatedMessages = [...newMessages, assistantMessage];
       setMessages(updatedMessages);
@@ -263,7 +267,7 @@ function ServiceChatModal({
     } finally {
       setIsLoading(false);
     }
-  }, [serviceName, serviceDescription, docUrl, isLoading, messages, onMessagesUpdate]);
+  }, [service, isLoading, messages, onMessagesUpdate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,67 +283,74 @@ function ServiceChatModal({
       data-service-chat-modal
     >
       <div 
-        className="w-full max-w-2xl h-[80vh] bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200"
+        className="w-full max-w-2xl h-[80vh] bg-popover text-popover-foreground border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
         data-service-chat-modal-content
       >
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-blue-600 to-primary px-5 py-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <MessageCircle className="w-5 h-5" />
-              Ask about {serviceName}
-            </h3>
-            <p className="text-xs text-white/70 mt-0.5">{serviceDescription.slice(0, 80)}...</p>
+          <div className="min-w-0 pr-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 shrink-0" />
+                <span>Ask about {service.name}</span>
+              </h3>
+              {service.badge && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/25">
+                  {service.badge}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-white/85 mt-1 line-clamp-2">{service.description}</p>
           </div>
           <button 
             onClick={onClose}
-            className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white shrink-0"
           >
             ✕
           </button>
         </div>
 
         {/* Sticky Documentation Link */}
-        <div className="sticky top-0 z-10 px-4 py-2 bg-slate-800/95 backdrop-blur-sm border-b border-slate-700 flex items-center justify-between">
-          <span className="text-ui-xs text-slate-400">📚 Official Documentation</span>
+        <div className="sticky top-0 z-10 px-4 py-2 bg-secondary/70 backdrop-blur-sm border-b border-border flex items-center justify-between">
+          <span className="text-ui-xs text-muted-foreground">{service.docLabel}</span>
           <a
-            href={docUrl}
+            href={service.docUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline transition-colors"
           >
             <ExternalLink className="w-3 h-3" />
-            <span>View Docs</span>
+            <span>Open Official Docs</span>
           </a>
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-background/40">
           {messages.length === 0 && !streamingContent && !isLoading && (
             <div className="py-6">
               <div className="text-center mb-6">
-                <HelpCircle className="w-10 h-10 text-blue-500/60 mx-auto mb-3" />
-                <p className="text-slate-300 text-sm font-medium">Ask any question about {serviceName}</p>
-                <p className="text-slate-500 text-xs mt-1">I'll help you understand features, best practices, and more</p>
+                <HelpCircle className="w-10 h-10 text-primary/70 mx-auto mb-3" />
+                <p className="text-foreground text-sm font-medium">Ask any question about {service.name}</p>
+                <p className="text-muted-foreground text-xs mt-1">Grounded in 2026 Databricks documentation and workshop patterns</p>
               </div>
               
               <div className="max-w-md mx-auto">
-                <p className="text-ui-xs text-slate-500 uppercase tracking-wide mb-3 text-center">Quick Questions</p>
+                <p className="text-ui-xs text-muted-foreground uppercase tracking-wide mb-3 text-center">Suggested Questions</p>
                 <div className="space-y-2">
-                  {DEFAULT_QUICK_QUESTIONS.map((qq, idx) => (
+                  {quickQuestions.map((qq, idx) => (
                     <button
                       key={idx}
                       onClick={() => askQuestion(qq.question)}
-                      className="w-full text-left px-4 py-3 text-sm bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-all border border-slate-700 hover:border-blue-500/50 flex items-center gap-3 group"
+                      className="w-full text-left px-4 py-3 text-sm bg-card hover:bg-secondary/60 text-foreground rounded-xl transition-all border border-border hover:border-primary/50 flex items-center gap-3 group"
                     >
                       <span className="text-lg">{qq.label.split(' ')[0]}</span>
-                      <span>{qq.label.split(' ').slice(1).join(' ')}</span>
-                      <Send className="w-4 h-4 ml-auto text-slate-600 group-hover:text-blue-400 transition-colors" />
+                      <span className="flex-1">{qq.label.split(' ').slice(1).join(' ')}</span>
+                      <Send className="w-4 h-4 ml-auto text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                     </button>
                   ))}
                 </div>
-                <p className="text-center text-ui-xs text-slate-600 mt-4">
+                <p className="text-center text-ui-xs text-muted-foreground mt-4">
                   Or type your own question below
                 </p>
               </div>
@@ -351,12 +362,12 @@ function ServiceChatModal({
               <div className={`max-w-[85%] rounded-xl px-4 py-3 ${
                 msg.role === 'user' 
                   ? 'bg-blue-600 text-white' 
-                  : 'bg-slate-800 border border-slate-700'
+                  : 'bg-card border border-border'
               }`}>
                 {msg.role === 'user' ? (
                   <p className="text-sm">{msg.content}</p>
                 ) : (
-                  <div className="text-sm text-slate-200 leading-relaxed">
+                  <div className="text-sm text-foreground leading-relaxed">
                     <ReactMarkdown components={markdownComponents}>
                       {msg.content}
                     </ReactMarkdown>
@@ -368,8 +379,8 @@ function ServiceChatModal({
 
           {streamingContent && (
             <div className="flex justify-start">
-              <div className="max-w-[85%] rounded-xl px-4 py-3 bg-slate-800 border border-slate-700">
-                <div className="text-sm text-slate-200 leading-relaxed">
+              <div className="max-w-[85%] rounded-xl px-4 py-3 bg-card border border-border">
+                <div className="text-sm text-foreground leading-relaxed">
                   <ReactMarkdown components={markdownComponents}>
                     {streamingContent}
                   </ReactMarkdown>
@@ -380,8 +391,8 @@ function ServiceChatModal({
 
           {isLoading && !streamingContent && (
             <div className="flex justify-start">
-              <div className="rounded-xl px-4 py-3 bg-slate-800 border border-slate-700">
-                <div className="flex items-center gap-2 text-sm text-slate-400">
+              <div className="rounded-xl px-4 py-3 bg-card border border-border">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Thinking...</span>
                 </div>
@@ -393,26 +404,26 @@ function ServiceChatModal({
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-slate-700 p-4 bg-slate-800/50">
+        <div className="border-t border-border p-4 bg-card">
           <form onSubmit={handleSubmit} className="flex items-center gap-3">
             <input
               ref={inputRef}
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a follow-up question..."
+              placeholder={`Ask a question about ${service.name}...`}
               disabled={isLoading}
-              className="flex-1 px-4 py-3 text-sm bg-slate-800 border border-slate-600 rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+              className="flex-1 px-4 py-3 text-sm bg-background border border-border rounded-xl text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={!question.trim() || isLoading}
-              className="p-3 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-xl transition-colors"
+              className="p-3 bg-primary hover:opacity-90 disabled:bg-secondary disabled:cursor-not-allowed rounded-xl transition-colors"
             >
               {isLoading ? (
-                <Loader2 className="w-5 h-5 text-white animate-spin" />
+                <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" />
               ) : (
-                <Send className="w-5 h-5 text-white" />
+                <Send className="w-5 h-5 text-primary-foreground" />
               )}
             </button>
           </form>
@@ -428,12 +439,10 @@ function ServiceChatModal({
 // =============================================================================
 
 interface ServiceChatProps {
-  serviceName: string;
-  serviceDescription: string;
-  docUrl: string;
+  service: ServiceInfo;
 }
 
-function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatProps) {
+function ServiceChat({ service }: ServiceChatProps) {
   const [question, setQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState('');
@@ -444,6 +453,8 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
   const responseRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const quickQuestions = service.quickQuestions?.length ? service.quickQuestions : DEFAULT_QUICK_QUESTIONS;
+
   const askQuestion = useCallback(async (q: string) => {
     if (!q.trim() || isLoading) return;
     
@@ -452,12 +463,12 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
     setHasAsked(true);
     setCurrentQuestion(q);
     
-    const systemPrompt = buildSystemPrompt(serviceName, serviceDescription, docUrl, '', '100-150');
+    const systemPrompt = buildSystemPrompt(service, '', '100-150');
 
     try {
       const fullText = await streamServiceChat(
         q + '\n\nUse markdown dash lists (- item) on separate lines.',
-        serviceName,
+        service.name,
         systemPrompt,
         setResponse
       );
@@ -471,7 +482,7 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
     } finally {
       setIsLoading(false);
     }
-  }, [serviceName, serviceDescription, docUrl, isLoading]);
+  }, [service, isLoading]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -499,16 +510,16 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
 
   return (
     <>
-      <div className="border-t border-slate-700">
+      <div className="border-t border-border">
         {/* Chat Header */}
-        <div className="px-3 py-2 bg-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="w-3 h-3 text-blue-400" />
-            <span className="text-ui-2xs font-medium text-slate-300">Ask about {serviceName}</span>
+        <div className="px-3.5 py-2 bg-secondary/50 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <MessageCircle className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="text-ui-2xs font-medium text-foreground truncate">Ask about {service.name}</span>
           </div>
           <button
             onClick={handleExpand}
-            className="flex items-center gap-1 px-2 py-0.5 text-ui-3xs bg-blue-600/80 hover:bg-blue-500 text-white rounded transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 text-ui-3xs bg-primary text-primary-foreground hover:opacity-90 rounded transition-colors font-medium shrink-0"
             title="Open full chat window"
           >
             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -520,14 +531,14 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
 
         {/* Quick Questions */}
         {!hasAsked && !isLoading && (
-          <div className="px-3 py-2 space-y-1.5">
-            {DEFAULT_QUICK_QUESTIONS.map((qq, idx) => (
+          <div className="px-3.5 py-2 space-y-1.5">
+            {quickQuestions.map((qq, idx) => (
               <button
                 key={idx}
                 onClick={() => handleQuickQuestion(qq.question)}
-                className="w-full text-left px-2.5 py-1.5 text-ui-2xs bg-slate-700/60 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors flex items-center gap-2 border border-slate-600/50"
+                className="w-full text-left px-2.5 py-1.5 text-ui-2xs bg-secondary/70 hover:bg-secondary text-foreground rounded-lg transition-colors flex items-center gap-2 border border-border hover:border-primary/40"
               >
-                {qq.label}
+                <span className="truncate">{qq.label}</span>
               </button>
             ))}
           </div>
@@ -537,25 +548,25 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
         {(hasAsked || isLoading) && (
           <div 
             ref={responseRef}
-            className="px-3 py-2 max-h-28 overflow-y-auto bg-slate-900/50 relative"
+            className="px-3.5 py-2 max-h-32 overflow-y-auto bg-background/60 relative"
           >
             {isLoading && !response && (
-              <div className="flex items-center gap-2 text-ui-2xs text-slate-400">
+              <div className="flex items-center gap-2 text-ui-2xs text-muted-foreground">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Thinking...</span>
               </div>
             )}
             {response && (
               <>
-                <div className="text-ui-3xs text-blue-400 mb-1.5 italic">Q: {currentQuestion.slice(0, 50)}...</div>
-                <div className="text-ui-2xs text-slate-300 leading-relaxed whitespace-pre-line
+                <div className="text-ui-3xs text-primary mb-1.5 italic truncate">Q: {currentQuestion}</div>
+                <div className="text-ui-2xs text-foreground/90 leading-relaxed whitespace-pre-line
                   [&_strong]:text-foreground [&_strong]:font-semibold
                   [&_code]:bg-secondary [&_code]:px-1 [&_code]:rounded [&_code]:text-ui-3xs">
                   <ReactMarkdown components={markdownComponentsSmall}>
                     {response}
                   </ReactMarkdown>
                 </div>
-                <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-slate-900/90 to-transparent pointer-events-none" />
+                <div className=" sticky bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-popover/90 to-transparent pointer-events-none" />
               </>
             )}
           </div>
@@ -563,17 +574,17 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
 
         {/* Input Form or Expand Prompt */}
         {hasAsked && response && !isLoading ? (
-          <div className="px-3 py-2 bg-slate-900/30 flex items-center justify-center">
+          <div className="px-3.5 py-2 bg-secondary/30 flex items-center justify-center">
             <button
               onClick={handleExpand}
-              className="flex items-center gap-2 px-3 py-1.5 text-ui-2xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-ui-2xs bg-primary text-primary-foreground hover:opacity-90 rounded-lg transition-colors font-medium"
             >
               <MessageCircle className="w-3 h-3" />
               Open full chat for follow-up questions
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="px-3 py-2 bg-slate-900/30">
+          <form onSubmit={handleSubmit} className="px-3.5 py-2 bg-secondary/30">
             <div className="flex items-center gap-2">
               <input
                 ref={inputRef}
@@ -582,19 +593,19 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
                 onChange={(e) => setQuestion(e.target.value)}
                 placeholder="Or type your own question..."
                 disabled={isLoading}
-                className="flex-1 px-2 py-1.5 text-ui-2xs bg-slate-800 border border-slate-600 rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                className="flex-1 px-2.5 py-1.5 text-ui-2xs bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary disabled:opacity-50"
                 onClick={(e) => e.stopPropagation()}
               />
               <button
                 type="submit"
                 disabled={!question.trim() || isLoading}
-                className="p-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg transition-colors"
+                className="p-1.5 bg-primary text-primary-foreground hover:opacity-90 disabled:bg-secondary disabled:cursor-not-allowed rounded-lg transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
                 {isLoading ? (
-                  <Loader2 className="w-3 h-3 text-white animate-spin" />
+                  <Loader2 className="w-3 h-3 animate-spin" />
                 ) : (
-                  <Send className="w-3 h-3 text-white" />
+                  <Send className="w-3 h-3" />
                 )}
               </button>
             </div>
@@ -605,9 +616,7 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
       <ServiceChatModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        serviceName={serviceName}
-        serviceDescription={serviceDescription}
-        docUrl={docUrl}
+        service={service}
         initialMessages={chatMessages}
         onMessagesUpdate={handleMessagesUpdate}
       />
@@ -623,10 +632,9 @@ export interface ServicePopoverProps {
   children: React.ReactNode;
   serviceKey: ServiceKey;
   position?: 'top' | 'bottom' | 'left' | 'right';
-  /** When true, uses block-level display and hides the Info icon (for architecture diagram boxes) */
+  /** When true, uses block-level display and applies the interactive border-beam glow + corner badge */
   block?: boolean;
-  /** When true (with block), suppresses the corner info-dot badge so the trigger
-   *  reads as a clean chip. The click-for-details popover still works. */
+  /** When true (with block), renders a compact corner indicator for tight chips instead of a full badge */
   hideBadge?: boolean;
 }
 
@@ -640,12 +648,13 @@ export function ServicePopover({
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'benefits' | 'considerations'>('benefits');
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLDivElement>(null);
   const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const service = serviceData[serviceKey];
-  const POPOVER_WIDTH = 340;
-  const POPOVER_HEIGHT = 480;
+  const POPOVER_WIDTH = 360;
+  const POPOVER_HEIGHT = 510;
   const OFFSET = 12;
   const TRANSITION_MS = 200;
   
@@ -697,13 +706,15 @@ export function ServicePopover({
     }
   }, [isOpen, position]);
 
-  // On open/close, mount the popover or start its exit transition during render;
-  // the effect below finishes the transition.
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen);
-    if (isOpen) setShouldRender(true);
-    else setIsVisible(false);
+    if (isOpen) {
+      setShouldRender(true);
+      setActiveTab('benefits');
+    } else {
+      setIsVisible(false);
+    }
   }
 
   useEffect(() => {
@@ -756,6 +767,8 @@ export function ServicePopover({
     }
   }, [isOpen]);
 
+  if (!service) return <>{children}</>;
+
   const popoverContent = shouldRender ? createPortal(
     <div 
       data-popover
@@ -763,68 +776,106 @@ export function ServicePopover({
       className={`transition-all ease-out ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden">
+      <div className="bg-popover text-popover-foreground border border-border rounded-2xl shadow-2xl overflow-hidden ring-1 ring-primary/20">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-primary px-4 py-2.5 flex items-center justify-between">
-          <h4 className="text-sm font-bold text-white flex items-center gap-2">
-            <Info className="w-4 h-4" />
-            {service.name}
-          </h4>
+        <div className="bg-gradient-to-r from-blue-600 to-primary px-4 py-2.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <Info className="w-4 h-4 shrink-0" />
+              <span className="truncate">{service.name}</span>
+            </h4>
+            {service.badge && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-black/25 text-white/95 border border-white/25 leading-none shrink-0">
+                {service.badge}
+              </span>
+            )}
+          </div>
           <button 
             onClick={(e) => { e.stopPropagation(); closePopover(); }}
-            className="text-white/70 hover:text-white text-lg leading-none"
+            className="text-white/80 hover:text-white text-lg leading-none shrink-0"
+            aria-label="Close popover"
           >
             ×
           </button>
         </div>
         
         {/* Description */}
-        <div className="px-4 py-2.5 border-b border-slate-700">
-          <p className="text-ui-xs text-slate-300 leading-relaxed">
+        <div className="px-4 py-2.5 border-b border-border bg-card/60">
+          <p className="text-ui-xs text-foreground/90 leading-relaxed">
             {service.description}
           </p>
         </div>
         
-        {/* Benefits */}
-        <div className="px-4 py-2.5 border-b border-slate-700">
-          <h5 className="text-ui-2xs font-semibold text-emerald-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-            <CheckCircle2 className="w-3 h-3" />
-            Key Benefits
-          </h5>
-          <ul className="space-y-0.5">
-            {service.benefits.slice(0, 4).map((benefit, idx) => (
-              <li key={idx} className="text-ui-2xs text-slate-300 flex items-start gap-1.5">
-                <span className="text-emerald-400 mt-0.5">•</span>
-                <span>{benefit}</span>
-              </li>
-            ))}
-          </ul>
+        {/* Segmented Benefits / Considerations Section */}
+        <div className="px-4 py-2.5 border-b border-border">
+          <div className="flex items-center gap-1 mb-2 p-0.5 rounded-lg bg-secondary/50 border border-border/60">
+            <button
+              type="button"
+              onClick={() => setActiveTab('benefits')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-md text-ui-2xs font-semibold uppercase tracking-wide transition-all ${
+                activeTab === 'benefits'
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground border border-transparent'
+              }`}
+            >
+              <CheckCircle2 className="w-3 h-3 shrink-0" />
+              <span>Key Benefits</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('considerations')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-md text-ui-2xs font-semibold uppercase tracking-wide transition-all ${
+                activeTab === 'considerations'
+                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground border border-transparent'
+              }`}
+            >
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span>Considerations</span>
+            </button>
+          </div>
+
+          {activeTab === 'benefits' ? (
+            <ul className="space-y-1">
+              {service.benefits.slice(0, 5).map((benefit, idx) => (
+                <li key={idx} className="text-ui-2xs text-foreground/85 flex items-start gap-1.5 leading-snug">
+                  <span className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0">•</span>
+                  <span>{benefit}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="space-y-1">
+              {service.limitations.map((limitation, idx) => (
+                <li key={idx} className="text-ui-2xs text-foreground/85 flex items-start gap-1.5 leading-snug">
+                  <span className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0">•</span>
+                  <span>{limitation}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         
         {/* Documentation Link */}
-        <div className="px-4 py-2 bg-slate-800/50 flex items-center justify-between">
+        <div className="px-4 py-2 bg-secondary/40 flex items-center justify-between gap-2">
           <a
             href={service.docUrl}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 text-ui-2xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+            className="flex items-center gap-1.5 text-ui-2xs font-semibold text-primary hover:underline transition-colors truncate"
           >
-            <ExternalLink className="w-3 h-3" />
-            {service.docLabel}
+            <ExternalLink className="w-3 h-3 shrink-0" />
+            <span className="truncate">{service.docLabel}</span>
           </a>
-          <span className="text-ui-3xs text-slate-500 flex items-center gap-1">
+          <span className="text-ui-3xs text-muted-foreground flex items-center gap-1 shrink-0">
             <HelpCircle className="w-2.5 h-2.5" />
-            Ask a question below
+            Ask AI below
           </span>
         </div>
 
         {/* AI Chat Section */}
-        <ServiceChat 
-          serviceName={service.name}
-          serviceDescription={service.description}
-          docUrl={service.docUrl}
-        />
+        <ServiceChat service={service} />
       </div>
     </div>,
     document.body
@@ -832,23 +883,27 @@ export function ServicePopover({
 
   return (
     <div 
-      className={`relative ${block ? 'block group/sp' : 'inline-block'}`}
+      className={`relative ${block ? `block h-full group/sp service-interactive-tile ${isOpen ? 'is-open' : ''}` : 'inline-block'}`}
       ref={triggerRef}
     >
       <div 
-        className={block ? 'cursor-pointer' : 'cursor-pointer inline-flex items-center gap-0.5'}
+        className={block ? 'cursor-pointer relative z-10 h-full flex flex-col [&>*]:flex-1' : 'cursor-pointer inline-flex items-center gap-0.5'}
         onClick={toggleOpen}
-        title="Click for details"
+        title={`Click to explore ${service.name}`}
       >
         {children}
-        {!block && <Info className="w-3 h-3 text-blue-400/60 shrink-0" />}
+        {!block && <Info className="w-3 h-3 text-primary/80 shrink-0" />}
       </div>
 
-      {block && !hideBadge && (
-        <div className="absolute -top-1.5 -right-1.5 z-10 pointer-events-none">
-          <div className="relative flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/20 border border-blue-400/40 backdrop-blur-sm transition-all duration-200 group-hover/sp:bg-blue-500/40 group-hover/sp:border-blue-400/70 group-hover/sp:scale-110">
-            <Info className="w-2.5 h-2.5 text-blue-400/80 group-hover/sp:text-blue-300" />
-            <span className="absolute inset-0 rounded-full bg-blue-400/30 animate-ping opacity-0 group-hover/sp:opacity-100" />
+      {block && (
+        <div className={`absolute ${hideBadge ? 'top-1 right-1' : 'top-1.5 right-1.5'} z-20 pointer-events-none`}>
+          <div
+            className={`service-info-badge relative flex items-center justify-center rounded-full transition-all duration-200 group-hover/sp:scale-110 ${
+              hideBadge ? 'w-4 h-4' : 'w-5 h-5'
+            }`}
+          >
+            <Info className={`relative z-10 ${hideBadge ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} strokeWidth={2.6} />
+            <span className="service-info-pulse absolute inset-0 rounded-full" />
           </div>
         </div>
       )}

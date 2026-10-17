@@ -84,7 +84,7 @@ export function DefineIntentSection({
     : '';
 
   return (
-    <div id="define-intent-section">
+    <div id="define-intent-section" className="scroll-mt-4 [overflow-anchor:none]">
       <PromptGenerator
         onPromptGenerated={onIntentDefined}
         onBrandUrlChange={onBrandUrlChange}

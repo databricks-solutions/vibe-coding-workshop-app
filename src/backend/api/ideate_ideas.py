@@ -305,23 +305,180 @@ def _owner_rows(email: str) -> List[Dict[str, Any]]:
     return [_row_out(r) for r in rows]
 
 
+def _catalog_source_to_status(source: Optional[str], is_active: Any) -> Optional[str]:
+    if source == "ideate_approved" or (source in {"ideate", "ideate_pending", "ideate_changes", "ideate_rejected"} and bool(is_active)):
+        return "approved"
+    if source in {"ideate", "ideate_pending"} and not bool(is_active):
+        return "pending"
+    if source == "ideate_changes":
+        return "changes_requested"
+    if source in {"ideate_rejected", "ideate_dismissed"}:
+        return "rejected"
+    return None
+
+
+def _synthetic_catalog_row(uc: Dict[str, Any], status: str) -> Dict[str, Any]:
+    industry = uc.get("industry") or "other"
+    use_case = uc.get("use_case") or "use_case"
+    title = uc.get("use_case_label") or use_case
+    industry_label = uc.get("industry_label") or industry
+    owner = uc.get("created_by") or "unknown"
+    version = int(uc.get("version") or 1)
+    brief = uc.get("prompt_template") or ""
+    updated = uc.get("updated_at") or uc.get("inserted_at")
+    profile = None
+    try:
+        from src.backend.api.value_profiles import get_profile
+        profile = get_profile(industry, use_case)
+    except Exception:
+        profile = None
+    value_per_year = None
+    if isinstance(profile, dict):
+        low = profile.get("typicalLow")
+        high = profile.get("typicalHigh")
+        if isinstance(low, (int, float)) and isinstance(high, (int, float)) and high > 0:
+            value_per_year = round((low + high) / 2.0)
+    catalog_ref = {"industry": industry, "useCase": use_case, "version": version}
+    payload: Dict[str, Any] = {
+        "id": f"catalog:{industry}.{use_case}",
+        "mode": "ideate",
+        "title": title,
+        "seed": title,
+        "industry": industry_label,
+        "status": "committed",
+        "step": "brief",
+        "approved": ["spark", "brief"],
+        "spark": {
+            "title": title,
+            "statement": title,
+            "industry": industry_label,
+            "catalogIndustry": industry,
+            "catalogIndustryLabel": industry_label,
+            "valueHypothesis": profile.get("valuePool") if isinstance(profile, dict) else None,
+        },
+        "brief": brief,
+        "revision": version,
+        "catalogRef": catalog_ref,
+        "useCaseContext": {"valueProfile": profile} if profile else None,
+        "createdAt": _iso(updated) or datetime.utcnow().isoformat() + "Z",
+        "updatedAt": _iso(updated) or datetime.utcnow().isoformat() + "Z",
+    }
+    return {
+        "id": f"catalog:{industry}.{use_case}",
+        "created_by": owner,
+        "mode": "ideate",
+        "title": title,
+        "industry": industry_label,
+        "status": "committed",
+        "step": "brief",
+        "approved": ["spark", "brief"],
+        "payload": payload,
+        "value_per_year": value_per_year,
+        "journey_points": journey_points(payload),
+        "quality_score": None,
+        "quality_breakdown": None,
+        "total_points": journey_points(payload),
+        "catalog_ref": catalog_ref,
+        "created_at": updated,
+        "updated_at": updated,
+        "submitted_at": updated,
+        "submitted_revision": version,
+        "review_status": status,
+        "reviewed_revision": version if status != "pending" else None,
+        "approved_revision": version if status == "approved" else None,
+        "review_history": [{"action": "submitted", "revision": version, "by": owner, "at": _iso(updated) or ""}],
+    }
+
+
 def _review_rows() -> List[Dict[str, Any]]:
     schema = _ensure_table()
     if not schema:
         with _memory_lock:
             rows = [
                 dict(r) for r in _memory.values()
-                if not r.get("deleted_at") and r.get("review_status") in REVIEW_STATUSES
+                if not r.get("deleted_at") and (r.get("review_status") in REVIEW_STATUSES or r.get("catalog_ref"))
             ]
-        rows.sort(key=lambda r: _iso(r.get("submitted_at")) or "", reverse=True)
+            for r in rows:
+                if r.get("review_status") not in REVIEW_STATUSES and r.get("catalog_ref"):
+                    r["review_status"] = "pending"
+                    rev = _revision(r.get("payload") or {}) or 1
+                    r["submitted_revision"] = r.get("submitted_revision") or rev
+        rows.sort(key=lambda r: _iso(r.get("submitted_at") or r.get("updated_at")) or "", reverse=True)
         return rows
-    _, execute_query, _, _ = _db()
+    execute_insert, execute_query, _, _ = _db()
     rows = execute_query(
         f"SELECT * FROM {schema}.ideate_ideas "
-        f"WHERE deleted_at IS NULL AND review_status IN ('pending', 'changes_requested', 'approved', 'rejected') "
+        f"WHERE deleted_at IS NULL AND ("
+        f"  review_status IN ('pending', 'changes_requested', 'approved', 'rejected') "
+        f"  OR catalog_ref IS NOT NULL "
+        f"  OR (payload ? 'catalogRef')"
+        f") "
         f"ORDER BY submitted_at DESC NULLS LAST, updated_at DESC"
     ) or []
-    return [_row_out(r) for r in rows]
+    parsed_rows = [_row_out(r) for r in rows]
+
+    # Reconcile with usecase_descriptions so catalog rows and ideate_ideas never drift
+    catalog_rows: List[Dict[str, Any]] = []
+    try:
+        catalog_rows = execute_query(
+            f"SELECT DISTINCT ON (industry, use_case) "
+            f"industry, industry_label, use_case, use_case_label, prompt_template, version, "
+            f"is_active, category, created_by, source, inserted_at, updated_at "
+            f"FROM {schema}.usecase_descriptions "
+            f"WHERE use_case <> '_placeholder' "
+            f"AND source IN ('ideate', 'ideate_pending', 'ideate_changes', 'ideate_rejected', 'ideate_approved', 'ideate_dismissed') "
+            f"ORDER BY industry, use_case, version DESC"
+        ) or []
+    except Exception as e:
+        logger.info(f"[Ideas] catalog review reconciliation skipped: {e}")
+
+    catalog_by_key: Dict[tuple, Dict[str, Any]] = {
+        (c.get("industry"), c.get("use_case")): c for c in catalog_rows
+    }
+    linked_keys: set = set()
+    out_rows: List[Dict[str, Any]] = []
+
+    for r in parsed_rows:
+        ref = r.get("catalog_ref") or (r.get("payload") or {}).get("catalogRef")
+        ref = _json(ref) if ref else None
+        key = (ref.get("industry"), ref.get("useCase")) if isinstance(ref, dict) else None
+        if key and key[0] and key[1]:
+            linked_keys.add(key)
+            r["catalog_ref"] = ref
+        cat = catalog_by_key.get(key) if key else None
+        cat_status = _catalog_source_to_status(cat.get("source"), cat.get("is_active")) if cat else None
+        r_status = r.get("review_status")
+
+        if r_status not in REVIEW_STATUSES:
+            effective = cat_status or "pending"
+            rev = _revision(r.get("payload") or {}) or 1
+            r["review_status"] = effective
+            r["submitted_revision"] = r.get("submitted_revision") or rev
+            if effective == "approved":
+                r["approved_revision"] = r.get("approved_revision") or rev
+        elif cat and cat_status and cat_status != r_status:
+            # If the catalog row was approved/dismissed directly in Library, or ideate_ideas was reviewed
+            # while an older catalog version stayed ideate_pending, keep them consistent.
+            if r_status in {"approved", "changes_requested", "rejected"} and cat.get("source") in {"ideate", "ideate_pending"}:
+                _update_catalog_review(ref, r_status)
+            elif r_status == "pending" and cat_status in {"approved", "rejected"}:
+                rev = r.get("submitted_revision") or _revision(r.get("payload") or {}) or 1
+                r["review_status"] = cat_status
+                if cat_status == "approved":
+                    r["approved_revision"] = rev
+
+        if r.get("review_status") in REVIEW_STATUSES:
+            out_rows.append(r)
+
+    for key, cat in catalog_by_key.items():
+        if key in linked_keys:
+            continue
+        cat_status = _catalog_source_to_status(cat.get("source"), cat.get("is_active"))
+        if cat_status in REVIEW_STATUSES:
+            out_rows.append(_synthetic_catalog_row(cat, cat_status))
+
+    out_rows.sort(key=lambda r: _iso(r.get("submitted_at") or r.get("updated_at")) or "", reverse=True)
+    return out_rows
 
 
 def _active_rows() -> List[Dict[str, Any]]:
@@ -699,16 +856,42 @@ def _update_catalog_review(catalog_ref: Any, status: str) -> bool:
         "changes_requested": "ideate_changes",
         "rejected": "ideate_rejected",
     }[status]
-    return bool(execute_insert(
+    ok = bool(execute_insert(
         f"UPDATE {schema}.usecase_descriptions SET is_active = %s, source = %s, updated_at = CURRENT_TIMESTAMP "
-        f"WHERE industry = %s AND use_case = %s AND version = %s",
-        (status == "approved", source, ref.get("industry"), ref.get("useCase"), ref.get("version")),
+        f"WHERE industry = %s AND use_case = %s",
+        (status == "approved", source, ref.get("industry"), ref.get("useCase")),
     ))
+    try:
+        from src.backend.api.routes import _invalidate_cache
+        _invalidate_cache()
+    except Exception:
+        pass
+    return ok
+
+
+def _find_review_row(idea_id: str) -> Optional[Dict[str, Any]]:
+    row = _get_row(idea_id)
+    if row and not row.get("deleted_at"):
+        if row.get("review_status") in REVIEW_STATUSES:
+            return row
+        if row.get("catalog_ref") or (row.get("payload") or {}).get("catalogRef"):
+            for r in _review_rows():
+                if r.get("id") == idea_id:
+                    return r
+    for r in _review_rows():
+        if r.get("id") == idea_id:
+            return r
+        ref = r.get("catalog_ref")
+        if isinstance(ref, dict) and f"catalog:{ref.get('industry')}.{ref.get('useCase')}" == idea_id:
+            return r
+    return None
 
 
 def _store_review_action(row: Dict[str, Any], reviewer: str, status: str, action: str, note: Optional[str]) -> bool:
-    idea_id = row["id"]
-    revision = int(row["submitted_revision"])
+    idea_id = str(row["id"])
+    if idea_id.startswith("catalog:"):
+        return True
+    revision = int(row.get("submitted_revision") or _revision(row.get("payload") or {}) or 1)
     entry = _history_entry(action, revision, reviewer, note)
     schema = _ensure_table()
     if not schema:
@@ -744,8 +927,9 @@ def _store_review_action(row: Dict[str, Any], reviewer: str, status: str, action
         f"UPDATE {schema}.ideate_ideas SET review_status = %s, reviewed_revision = %s, "
         f"reviewed_at = CURRENT_TIMESTAMP, reviewed_by = %s, review_note = %s, {approved_sql} "
         f"review_history = COALESCE(review_history, '[]'::jsonb) || %s::jsonb, updated_at = CURRENT_TIMESTAMP "
-        f"WHERE id = %s AND review_status = 'pending' AND submitted_revision = %s "
-        f"AND COALESCE((payload->>'revision')::integer, 0) = %s",
+        f"WHERE id = %s AND (review_status = 'pending' OR review_status IS NULL) "
+        f"AND COALESCE(submitted_revision, COALESCE((payload->>'revision')::integer, 1)) = %s "
+        f"AND COALESCE((payload->>'revision')::integer, 1) = %s",
         tuple(params),
     ))
 
@@ -781,7 +965,7 @@ async def get_ideate_review(idea_id: str, request: Request):
     denied = _review_forbidden(request)
     if denied:
         return denied
-    row = _get_row(idea_id)
+    row = _find_review_row(idea_id)
     if not row or row.get("deleted_at") or row.get("review_status") not in REVIEW_STATUSES:
         return JSONResponse({"error": "This submitted idea isn't available."}, status_code=404)
     return _review_payload(row, _signed_in(request) or "")
@@ -798,13 +982,14 @@ async def review_ideate_idea(idea_id: str, body: ReviewActionRequest, request: R
     note = (body.note or "").strip() or None
     if body.action in {"request_changes", "changes_requested", "reject"} and not note:
         return JSONResponse({"error": "A review note is required for this action."}, status_code=400)
-    row = _get_row(idea_id)
+    row = _find_review_row(idea_id)
     if not row or row.get("deleted_at"):
         return JSONResponse({"error": "This submitted idea isn't available."}, status_code=404)
     if row.get("review_status") != "pending":
         return JSONResponse({"error": "Only a pending submission can be reviewed.", "review": _review_metadata(row)}, status_code=409)
+    is_catalog_only = str(row.get("id", "")).startswith("catalog:")
     current = _revision(row.get("payload") or {})
-    if current is None or current != row.get("submitted_revision"):
+    if not is_catalog_only and (current is None or current != row.get("submitted_revision")):
         return JSONResponse(
             {"error": "The idea changed after submission. Ask the owner to resubmit the current revision."},
             status_code=409,
@@ -823,7 +1008,17 @@ async def review_ideate_idea(idea_id: str, body: ReviewActionRequest, request: R
         return JSONResponse({"error": "The review changed concurrently. Reload and try again."}, status_code=409)
     _approved_cache["at"] = 0.0
     _leaderboard_cache.clear()
-    updated = _get_row(idea_id) or {**row, "review_status": status}
+    updated = _find_review_row(str(row.get("id"))) or {
+        **row,
+        "review_status": status,
+        "reviewed_revision": row.get("submitted_revision") or 1,
+        "reviewed_by": reviewer,
+        "review_note": note,
+        "approved_revision": (row.get("submitted_revision") or 1) if status == "approved" else row.get("approved_revision"),
+        "review_history": list(row.get("review_history") or []) + [
+            _history_entry(status, int(row.get("submitted_revision") or 1), reviewer, note)
+        ],
+    }
     return _review_payload(updated, _signed_in(request) or "")
 
 

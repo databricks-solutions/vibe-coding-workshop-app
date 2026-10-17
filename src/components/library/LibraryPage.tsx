@@ -252,7 +252,12 @@ export function LibraryPage() {
               />
             )}
             {view.name === 'review' && (
-              <ReviewQueue notify={notify} />
+              <ReviewQueue
+                notify={notify}
+                model={model}
+                actions={actions}
+                onOpenUseCase={openUseCase}
+              />
             )}
             {currentCollection && (
               <CollectionPage

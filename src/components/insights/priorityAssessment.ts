@@ -1,4 +1,4 @@
-import { alsoLeaves, caseFigures, chosenShape, placedLeaf, type Idea } from '../journeykit';
+import { alsoLeaves, caseFigures, chosenShape, placedLeaf, type Idea, type IdeaReviewStatus } from '../journeykit';
 import type { BlueprintChoice } from './blueprint/types';
 import type { DataSource } from './brief';
 import type { AddOn } from './recipes';
@@ -23,6 +23,10 @@ export interface PriorityAssessment {
   feasibilityEvidence: string[];
   valueActions: string[];
   feasibilityActions: string[];
+  status?: IdeaReviewStatus;
+  industry?: string;
+  owner?: string;
+  annualValue?: number | null;
 }
 
 interface PriorityContext {
@@ -30,6 +34,10 @@ interface PriorityContext {
   dataLocation?: string;
   blueprint?: BlueprintChoice | null;
   addOns?: AddOn[];
+  status?: IdeaReviewStatus;
+  industry?: string;
+  owner?: string;
+  annualValue?: number | null;
 }
 
 interface Term { weight: number; score?: number; evidence?: string; action?: string }
@@ -63,19 +71,40 @@ const effortScore = (effort?: string) => {
 
 export function assessPriority(idea: Idea, context: PriorityContext = {}): PriorityAssessment {
   const figures = caseFigures(idea);
+  const vp = idea.useCaseContext?.valueProfile ?? null;
+  const vpMid = vp && typeof vp.typicalLow === 'number' && typeof vp.typicalHigh === 'number' && vp.typicalHigh > 0
+    ? Math.round((vp.typicalLow + vp.typicalHigh) / 2)
+    : null;
   const shape = chosenShape(idea);
   const people = new Set([...(placedLeaf(idea)?.personas ?? []), ...alsoLeaves(idea).flatMap(l => l.personas)]);
   const reviewerValue = dimension(idea, 'value');
   const reviewerFeasibility = dimension(idea, 'feasibility');
 
   const roi = figures?.scenarios.expected.ratio;
-  const hardShare = figures && figures.value.expected > 0 ? figures.hard / figures.value.expected : undefined;
+  const hardShare = figures && figures.value.expected > 0
+    ? figures.hard / figures.value.expected
+    : vp?.hardShare === 'mostly hard'
+      ? 0.75
+      : vp?.hardShare === 'mixed'
+        ? 0.5
+        : vp?.hardShare === 'mostly soft'
+          ? 0.25
+          : undefined;
+  const profileValueScore = vpMid == null
+    ? undefined
+    : vpMid >= 2_000_000 ? 88 : vpMid >= 750_000 ? 76 : vpMid >= 250_000 ? 64 : 52;
   const valueTerms: Term[] = [
     {
       weight: 30,
-      score: roi === undefined ? undefined : roi >= 5 ? 95 : roi >= 3 ? 82 : roi >= 1.5 ? 66 : roi >= 1 ? 48 : 25,
-      evidence: roi === undefined ? undefined : `Expected value is ${roi.toFixed(1)}× first-year cost.`,
-      action: roi === undefined ? 'Complete the value inputs to estimate ROI and payback.' : roi < 1.5 ? 'Target a more valuable decision or reduce first-year cost.' : undefined,
+      score: roi !== undefined
+        ? (roi >= 5 ? 95 : roi >= 3 ? 82 : roi >= 1.5 ? 66 : roi >= 1 ? 48 : 25)
+        : profileValueScore,
+      evidence: roi !== undefined
+        ? `Expected value is ${roi.toFixed(1)}× first-year cost.`
+        : vpMid != null
+          ? `Typical annual value is ~$${vpMid.toLocaleString()}/yr (${vp?.driverLabel || vp?.driver || 'value profile'}).`
+          : undefined,
+      action: roi === undefined && vpMid == null ? 'Complete the value inputs to estimate ROI and payback.' : roi !== undefined && roi < 1.5 ? 'Target a more valuable decision or reduce first-year cost.' : undefined,
     },
     {
       weight: 20,
@@ -85,14 +114,22 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
     },
     {
       weight: 15,
-      score: figures ? (figures.rollout ? 82 : 62) : undefined,
-      evidence: figures?.rollout ? `Rollout covers ${figures.rollout.units} ${figures.rollout.unit}.` : undefined,
-      action: figures ? undefined : 'Size the frequency and credible first rollout.',
+      score: figures ? (figures.rollout ? 82 : 62) : (vp?.rolloutFull ? 74 : undefined),
+      evidence: figures?.rollout
+        ? `Rollout covers ${figures.rollout.units} ${figures.rollout.unit}.`
+        : vp?.rolloutFull && vp?.rolloutUnit
+          ? `Scales across ~${vp.rolloutFull} ${vp.rolloutUnit}.`
+          : undefined,
+      action: figures || vp?.rolloutFull ? undefined : 'Size the frequency and credible first rollout.',
     },
     {
       weight: 15,
-      score: figures ? (figures.costOfDelay > figures.ask.total ? 90 : 65) : undefined,
-      evidence: figures ? `Waiting carries about $${Math.round(figures.costOfDelay).toLocaleString()} in delayed value.` : undefined,
+      score: figures ? (figures.costOfDelay > figures.ask.total ? 90 : 65) : (idea.brief && idea.brief.length > 200 ? 68 : undefined),
+      evidence: figures
+        ? `Waiting carries about $${Math.round(figures.costOfDelay).toLocaleString()} in delayed value.`
+        : idea.brief && idea.brief.length > 200
+          ? 'Initiative brief documents the business problem and decision scope.'
+          : undefined,
       action: figures ? undefined : 'Estimate the cost of waiting or of one bad outcome.',
     },
     {
@@ -117,11 +154,11 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
     : context.dataSource === 'existing' ? (context.dataLocation?.trim() ? 88 : 58)
       : context.dataSource === 'upload' ? 62
         : context.dataSource === 'sample' ? 72
-          : undefined;
+          : idea.catalogRef ? 70 : undefined;
   const roleComplexity = people.size ? clamp(100 - Math.max(0, people.size - 1) * 13) : undefined;
   const buildComplexity = shape
     ? clamp((effortScore(shape.effort) + (context.addOns?.includes('copilot') ? 40 : context.addOns?.includes('app_view') ? 58 : 90)) / 2)
-    : undefined;
+    : (idea.brief && idea.brief.length > 250 ? 66 : undefined);
   const tableComplexity = bp
     ? bp.tableCount <= 10 ? 92 : bp.tableCount <= 25 ? 75 : bp.tableCount <= 50 ? 55 : 35
     : undefined;
@@ -129,7 +166,11 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
   const feasibilityTerms: Term[] = [
     {
       weight: 25, score: dataScore,
-      evidence: context.dataSource ? `Data path: ${context.dataSource}${context.dataLocation ? ` (${context.dataLocation})` : ''}.` : undefined,
+      evidence: context.dataSource
+        ? `Data path: ${context.dataSource}${context.dataLocation ? ` (${context.dataLocation})` : ''}.`
+        : idea.catalogRef
+          ? `Linked to catalog use case (${idea.catalogRef.industry}/${idea.catalogRef.useCase}).`
+          : undefined,
       action: dataScore === undefined || dataScore < 65 ? 'Identify the actual catalog/schema or choose a proven industry model.' : undefined,
     },
     {
@@ -149,7 +190,11 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
     },
     {
       weight: 15, score: buildComplexity,
-      evidence: shape ? `${shape.title} is a ${shape.effort || 'medium'}-effort ${shape.kind} build.` : undefined,
+      evidence: shape
+        ? `${shape.title} is a ${shape.effort || 'medium'}-effort ${shape.kind} build.`
+        : buildComplexity !== undefined
+          ? 'Structured one-pager brief ready for technical scoping.'
+          : undefined,
       action: buildComplexity !== undefined && buildComplexity < 65 ? 'Stage delivery: prove Genie/dashboard first, then add App write-back or automation.' : undefined,
     },
     {
@@ -168,6 +213,7 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
     : (highFeasibility ? 'Quick win' : 'Rework or park');
   const evidenceWeight = (v.weight + f.weight) / 2;
   const confidence: PriorityConfidence = evidenceWeight >= 80 ? 'High' : evidenceWeight >= 55 ? 'Medium' : 'Low';
+  const annualValue = context.annualValue ?? figures?.value.expected ?? vpMid ?? null;
 
   return {
     ideaId: idea.id,
@@ -185,5 +231,9 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
     feasibilityEvidence: f.evidence.slice(0, 4),
     valueActions: [...new Set(v.actions)].slice(0, 3),
     feasibilityActions: [...new Set(f.actions)].slice(0, 3),
+    status: context.status ?? idea.review?.status,
+    industry: context.industry ?? idea.spark?.industry ?? idea.industry,
+    owner: context.owner,
+    annualValue,
   };
 }

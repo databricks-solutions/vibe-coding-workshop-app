@@ -78,6 +78,29 @@ test('Set Up Project repeats the start line for Genie Code only', () => {
   assert.doesNotMatch(setup('cursor'), /genie-code-start-note/);
 });
 
+test('Copy & Paste Prompts Mode renders only the two mode cards with no MCP setup or redundant step boxes underneath', () => {
+  const g = globalThis as unknown as { window?: unknown };
+  const realWindow = g.window;
+  try {
+    g.window = {
+      location: { origin: 'https://app.example' },
+      localStorage: {
+        getItem: (k: string) => (k === 'vibe.genieCode.mode' ? 'copy-paste' : null),
+        setItem: () => {},
+      },
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    const html = renderToStaticMarkup(createElement(ConnectToGenieCodePanel, { workshopLevel: 'genie-accelerator', sessionId: SID }));
+    assert.doesNotMatch(html, /How Copy &amp; Paste Mode works|How Copy & Paste Mode works/);
+    assert.doesNotMatch(html, /Want hands-free mode instead/i);
+    assert.doesNotMatch(html, /data-testid="mcp-url"/);
+    assert.doesNotMatch(html, /data-testid="start-line"/);
+  } finally {
+    g.window = realWindow;
+  }
+});
+
 test('WorkflowDiagram no longer shows the panel for every assistant, and passes the session', () => {
   const source = readFileSync(new URL('../../src/components/WorkflowDiagram.tsx', import.meta.url), 'utf-8');
   assert.doesNotMatch(source, /<ConnectToGenieCodePanel\b/);

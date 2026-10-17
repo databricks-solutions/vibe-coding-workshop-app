@@ -38,7 +38,7 @@ import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
 import { orderedSectionsForRead, WORKSHOP_LEVELS, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { mergeStatus } from './constants/mergeStatus';
 import type { SessionLoadResponse, TrackOutlineItem } from './api/client';
-import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
+import { parseCodingAssistantsConfig, resolveDefaultTrackForAssistant, type CodingAssistantConfigEntry } from './constants/codingAssistants';
 import { deriveCompletedStepNumbers } from './constants/deriveProgress';
 import { emptyGateBase, hydrateGateBase, gateBaseFields, applyGateWriteResult, type GateBase, type GateWrite } from './utils/gateBase';
 import { ALL_SYNC_GROUPS, canApplyRefresh, changedGroups, groupsDifferingFromLocal, sessionViewFrom, syncSnapshot, type LocalSessionState, type SyncGroup } from './utils/sessionSync';
@@ -114,6 +114,7 @@ export default function App() {
   // First-load default target, resolved from the admin "preferred list"
   // (coding_assistants_config). Falls back to 'cursor' until/if config loads.
   const [defaultAssistantId, setDefaultAssistantId] = useState<string>('cursor');
+  const [codingAssistantsConfig, setCodingAssistantsConfig] = useState<CodingAssistantConfigEntry[] | null>(null);
   const [assistantConfigLoaded, setAssistantConfigLoaded] = useState(false);
   // Default to end-to-end which includes all chapters (complete workshop)
   const [workshopLevel, setWorkshopLevel] = useState<WorkshopLevel>('end-to-end');
@@ -434,6 +435,7 @@ export default function App() {
         if (cancelled) return;
         const config = parseCodingAssistantsConfig(dict?.coding_assistants_config);
         if (config && config.length > 0) {
+          setCodingAssistantsConfig(config);
           const resolved = config.find(c => c.recommended)?.id ?? config[0].id;
           setDefaultAssistantId(resolved);
         }
@@ -457,8 +459,31 @@ export default function App() {
   useEffect(() => {
     if (!readOnly && !isSessionLoading && assistantConfigLoaded && !codingAssistantExplicit && !codingAssistant) {
       setCodingAssistant(defaultAssistantId);
+      // If the admin made Genie Code (or another assistant with a specific default track)
+      // the top-recommended assistant, align the fresh session's path with it.
+      if (!levelExplicitlySelected && !useCaseLockedLevel && !workflowStarted(completedSteps) && direction !== 'reverse') {
+        const rawDefault = resolveDefaultTrackForAssistant(defaultAssistantId, workshopDefaults, codingAssistantsConfig);
+        if (rawDefault in WORKSHOP_LEVELS && rawDefault !== workshopLevel) {
+          const nextLevel = rawDefault as WorkshopLevel;
+          const nextOntology = nextLevel === 'genie-accelerator' && workshopDefaults.includeGenieOntology;
+          setWorkshopLevel(nextLevel);
+          setIncludeLakehouse(false);
+          setIncludeGenieOntology(nextOntology);
+          if (sessionId) {
+            const sid = sessionId;
+            apiClient.updateSessionMetadata({
+              session_id: sid,
+              workshop_level: nextLevel,
+              include_genie_ontology: nextOntology,
+              flags: engineFlagsFrom(aiAgentsModules, medallionLayers, false, nextOntology),
+            })
+              .then(() => fetchOutline(nextLevel, sid))
+              .catch(err => console.error('Error aligning initial assistant default track:', err));
+          }
+        }
+      }
     }
-  }, [readOnly, isSessionLoading, assistantConfigLoaded, codingAssistantExplicit, codingAssistant, defaultAssistantId]);
+  }, [readOnly, isSessionLoading, assistantConfigLoaded, codingAssistantExplicit, codingAssistant, defaultAssistantId, levelExplicitlySelected, useCaseLockedLevel, completedSteps, direction, workshopDefaults, codingAssistantsConfig, workshopLevel, sessionId, aiAgentsModules, medallionLayers, engineFlagsFrom, fetchOutline]);
 
   // The last stored session the UI was hydrated from, one string per sync group
   // (utils/sessionSync), and when it was last updated on the server.
@@ -563,22 +588,23 @@ export default function App() {
   };
 
   /**
-   * New-session defaults (R2/R3, every assistant): the facilitator's default
-   * track with its ontology default, persisted at once with the complete engine
-   * flags and the view marker, so a reload and GET /outline match what the UI
-   * shows. Not an explicit level pick: path-lock semantics are unchanged.
+   * New-session defaults: resolves the default track for the active coding
+   * assistant (Genie Code -> 'genie-accelerator'; all other assistants ->
+   * defaults.defaultTrack, which defaults to 'end-to-end' as before), with
+   * ontology from the facilitator switch when on Genie Accelerator.
    */
-  const newSessionLevel = (defaults: WorkshopDefaults): WorkshopLevel => (
-    defaults.defaultTrack in WORKSHOP_LEVELS ? defaults.defaultTrack as WorkshopLevel : 'genie-accelerator'
-  );
+  const newSessionLevel = (defaults: WorkshopDefaults, assistantId?: string | null): WorkshopLevel => {
+    const candidate = resolveDefaultTrackForAssistant(assistantId, defaults, codingAssistantsConfig);
+    return candidate in WORKSHOP_LEVELS ? (candidate as WorkshopLevel) : 'end-to-end';
+  };
   /** The UI half of the new-session defaults, shared with the failed-default-session path. */
   const applyNewSessionState = (level: WorkshopLevel, ontology: boolean) => {
     setWorkshopLevel(level);
     setIncludeLakehouse(false);
     setIncludeGenieOntology(ontology);
   };
-  const applyNewSessionDefaults = (id: string, defaults: WorkshopDefaults, view: WorkflowViewMode): WorkshopLevel => {
-    const level = newSessionLevel(defaults);
+  const applyNewSessionDefaults = (id: string, defaults: WorkshopDefaults, view: WorkflowViewMode, assistantId?: string | null): WorkshopLevel => {
+    const level = newSessionLevel(defaults, assistantId);
     const ontology = level === 'genie-accelerator' && defaults.includeGenieOntology;
     applyNewSessionState(level, ontology);
     apiClient.updateSessionMetadata(newSessionMetadata(
@@ -886,34 +912,47 @@ export default function App() {
 
   // Handle coding assistant selection.
   //
-  // Per-assistant cold-start default: some assistants (currently Genie Code,
-  // which is in active beta and can't yet drive the full Apps + Lakebase
-  // chapters) prefer a narrower default workshop level than the generic
-  // `end-to-end`. We apply that override ONLY on a legacy `end-to-end` session
-  // where the user hasn't explicitly chosen a level — saved sessions, any
-  // explicit pick and the new-session default (genie-accelerator) all win.
+  // Per-assistant default workshop path: Genie Code defaults to
+  // `genie-accelerator` (configurable via VIBE_GENIE_CODE_DEFAULT_TRACK or
+  // coding_assistants_config), while all other assistants default to
+  // `end-to-end` (configurable via VIBE_DEFAULT_TRACK or coding_assistants_config).
+  // Applied whenever the user hasn't explicitly chosen a path yet and the
+  // workflow hasn't started or been locked by a use case.
   const handleCodingAssistantChange = useCallback((assistantId: string) => {
     if (readOnly) return;
     setCodingAssistant(assistantId);
     setCodingAssistantExplicit(true);
-    const assistantDefault = DEFAULT_LEVEL_BY_ASSISTANT[assistantId as keyof typeof DEFAULT_LEVEL_BY_ASSISTANT];
+    const rawDefault = resolveDefaultTrackForAssistant(assistantId, workshopDefaults, codingAssistantsConfig);
+    const assistantDefault = rawDefault in WORKSHOP_LEVELS ? (rawDefault as WorkshopLevel) : undefined;
     const shouldApplyAssistantDefault =
       !levelExplicitlySelected &&
-      workshopLevel === 'end-to-end' &&
+      !useCaseLockedLevel &&
+      !workflowStarted(completedSteps) &&
+      direction !== 'reverse' &&
       assistantDefault !== undefined &&
       assistantDefault !== workshopLevel;
     if (shouldApplyAssistantDefault) {
       const nextLevel = assistantDefault as WorkshopLevel;
+      const nextOntology = nextLevel === 'genie-accelerator' && workshopDefaults.includeGenieOntology;
       setWorkshopLevel(nextLevel);
+      setIncludeLakehouse(false);
+      setIncludeGenieOntology(nextOntology);
       // Mirror the non-explicit chain reset that `computeChainContext` would
       // produce: a cold-start switch into the lakehouse/AI flow lives on the
       // LAKEHOUSE_CHAIN, not the APP_CHAIN.
-      setChainContext(computeChainContext(chainContext, workshopLevel, nextLevel));
+      const nextChain = computeChainContext(chainContext, workshopLevel, nextLevel);
+      setChainContext(nextChain);
       if (sessionId) {
+        const sid = sessionId;
         apiClient.updateSessionMetadata({
-          session_id: sessionId,
+          session_id: sid,
           workshop_level: nextLevel,
-        }).catch(err => console.error('Error saving assistant-default workshop level:', err));
+          include_genie_ontology: nextOntology,
+          ...(nextChain ? { chain_context: nextChain } : {}),
+          flags: engineFlagsFrom(aiAgentsModules, medallionLayers, false, nextOntology),
+        })
+          .then(() => fetchOutline(nextLevel, sid))
+          .catch(err => console.error('Error saving assistant-default workshop level:', err));
       }
     }
     if (sessionId) {
@@ -922,49 +961,58 @@ export default function App() {
         coding_assistant: assistantId,
       }).catch(err => console.error('Error saving coding assistant:', err));
     }
-  }, [sessionId, readOnly, levelExplicitlySelected, workshopLevel, chainContext]);
+  }, [sessionId, readOnly, levelExplicitlySelected, useCaseLockedLevel, completedSteps, direction, workshopLevel, chainContext, workshopDefaults, codingAssistantsConfig, aiAgentsModules, medallionLayers, engineFlagsFrom, fetchOutline]);
 
   const handleDirectionChange = useCallback((newDirection: WorkflowDirection) => {
     if (directionLocked) return;
     setDirection(newDirection);
-    // Accelerators are forward-progression flows and the whole Accelerators
-    // column is hidden in Reverse ETL direction. If the user flips to reverse
-    // while any accelerator level is currently selected, fall back to the
-    // Apps + Lakebase baseline so the path selection doesn't silently point
-    // to a no-longer-visible column.
-    const ACCELERATOR_LEVELS: WorkshopLevel[] = [
-      'accelerator',
-      'genie-accelerator',
-      'data-engineering-accelerator',
-      'skills-accelerator',
-      'agents-accelerator',
-    ];
-    // The track picker's Other tracks tab puts Reverse ETL one click from the
-    // Genie Accelerator, so the fallback level is saved in the SAME write as the
-    // direction and the outline is refetched for it: a level set only locally
-    // would compose GET /outline for the old track and be lost on reload.
-    const nextLevel: WorkshopLevel =
-      newDirection === 'reverse' && ACCELERATOR_LEVELS.includes(workshopLevel) ? 'app-database' : workshopLevel;
+    // When switching into Reverse ETL, only `reverse-*` levels (or `end-to-end`)
+    // highlight the Reverse ETL columns (`Lakehouse` -> `+ AI and Agents` ->
+    // `+ Lakebase (Synced)` -> `+ Analytics App`). If the user was on a forward
+    // level or an accelerator (e.g. `genie-accelerator`), default to `'reverse-app'`
+    // (the complete Reverse ETL track) with `chainContext: 'reverse'` so the
+    // Reverse ETL columns are immediately selected and ready to customize.
+    // When switching back to Build Forward from a `reverse-*` level, restore the
+    // active assistant's default forward track (`genie-accelerator` for Genie Code,
+    // `end-to-end` for others).
+    const isReverseLevel = workshopLevel.startsWith('reverse-');
+    let nextLevel: WorkshopLevel = workshopLevel;
+    let nextChain: ChainContext = chainContext;
+    if (newDirection === 'reverse') {
+      if (!isReverseLevel && workshopLevel !== 'end-to-end') {
+        nextLevel = 'reverse-app';
+      }
+      nextChain = 'reverse';
+    } else if (newDirection === 'forward' && isReverseLevel) {
+      const candidate = resolveDefaultTrackForAssistant(codingAssistant, workshopDefaults, codingAssistantsConfig);
+      nextLevel = candidate in WORKSHOP_LEVELS ? (candidate as WorkshopLevel) : 'end-to-end';
+      nextChain = computeChainContext(chainContext, workshopLevel, nextLevel);
+    }
     if (nextLevel !== workshopLevel) {
       setWorkshopLevel(nextLevel);
     }
+    if (nextChain !== chainContext) {
+      setChainContext(nextChain);
+    }
     if (sessionId) {
       const sid = sessionId;
+      const nextOntology = nextLevel === 'genie-accelerator' ? workshopDefaults.includeGenieOntology : includeGenieOntology;
+      if (nextOntology !== includeGenieOntology) {
+        setIncludeGenieOntology(nextOntology);
+      }
       apiClient.updateSessionMetadata({
         session_id: sid,
         direction: newDirection,
         ...(nextLevel !== workshopLevel ? { workshop_level: nextLevel } : {}),
-        // Complete composition (T3b-2b) so GET /outline recomposes for the new
-        // direction. The engine reads persisted `direction` to select the reverse
-        // variant; flags/chain_context reflect current live state.
-        ...compositionParams,
+        ...(nextChain ? { chain_context: nextChain } : {}),
+        flags: engineFlagsFrom(aiAgentsModules, medallionLayers, includeLakehouse, nextOntology),
       })
         // Refetch after direction persists so the reverse order lands BEFORE the
         // next render (T3c; closes the old reverse-order fallback).
         .then(() => fetchOutline(nextLevel, sid))
         .catch(err => console.error('Error persisting direction:', err));
     }
-  }, [directionLocked, sessionId, workshopLevel, compositionParams, fetchOutline]);
+  }, [directionLocked, sessionId, workshopLevel, chainContext, codingAssistant, workshopDefaults, codingAssistantsConfig, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom, fetchOutline]);
 
   // Genie Accelerator: toggle the optional Lakehouse (Bronze -> Gold) block.
   const handleIncludeLakehouseChange = useCallback((next: boolean) => {

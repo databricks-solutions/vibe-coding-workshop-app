@@ -44,6 +44,8 @@ export function isKnownAssistantId(id: string): id is AssistantId {
 export interface CodingAssistantConfigEntry {
   id: AssistantId;
   recommended: boolean;
+  /** Optional per-assistant default workshop path (e.g., 'genie-accelerator' for Genie Code, 'end-to-end' for others). */
+  defaultTrack?: string;
 }
 
 /**
@@ -68,11 +70,18 @@ export function parseCodingAssistantsConfig(
     if (!entry || typeof entry !== 'object') continue;
     const id = (entry as { id?: unknown }).id;
     const recommended = (entry as { recommended?: unknown }).recommended;
+    const defaultTrack = (entry as { defaultTrack?: unknown }).defaultTrack;
     if (typeof id !== 'string') continue;
     if (!isKnownAssistantId(id)) continue;
     if (seen.has(id)) continue;
     seen.add(id);
-    clean.push({ id, recommended: !!recommended });
+    clean.push({
+      id,
+      recommended: !!recommended,
+      ...(typeof defaultTrack === 'string' && defaultTrack.trim()
+        ? { defaultTrack: defaultTrack.trim() }
+        : {}),
+    });
   }
   return clean;
 }
@@ -86,17 +95,17 @@ export function parseCodingAssistantsConfig(
  * Omnigent leads the bottom row and is flagged "Beta".
  */
 export const DEFAULT_CODING_ASSISTANTS_CONFIG: CodingAssistantConfigEntry[] = [
-  { id: 'cursor', recommended: true },
-  { id: 'genie-code', recommended: true },
-  { id: 'ai-gateway', recommended: true },
-  { id: 'coda', recommended: true },
-  { id: 'omnigent', recommended: false },
-  { id: 'copilot', recommended: false },
-  { id: 'vscode', recommended: false },
+  { id: 'cursor', recommended: true, defaultTrack: 'end-to-end' },
+  { id: 'genie-code', recommended: true, defaultTrack: 'genie-accelerator' },
+  { id: 'ai-gateway', recommended: true, defaultTrack: 'end-to-end' },
+  { id: 'coda', recommended: true, defaultTrack: 'end-to-end' },
+  { id: 'omnigent', recommended: false, defaultTrack: 'end-to-end' },
+  { id: 'copilot', recommended: false, defaultTrack: 'end-to-end' },
+  { id: 'vscode', recommended: false, defaultTrack: 'end-to-end' },
 ];
 
 /**
- * Per-assistant cold-start workshop level, used as a LEGACY FALLBACK only.
+ * Per-assistant cold-start workshop level.
  *
  * Applied when the user picks an assistant on a fresh session (and when a
  * resumed session has no meaningful persisted `workshop_level` — see
@@ -121,3 +130,31 @@ export const DEFAULT_CODING_ASSISTANTS_CONFIG: CodingAssistantConfigEntry[] = [
 export const DEFAULT_LEVEL_BY_ASSISTANT: Partial<Record<AssistantId, string>> = {
   'genie-code': 'genie-accelerator',
 };
+
+/**
+ * Resolve the default workshop track for a given coding assistant.
+ *
+ * Precedence:
+ *   1. Explicit `defaultTrack` configured for `assistantId` in `coding_assistants_config`
+ *   2. For `'genie-code'`: `defaults.genieCodeDefaultTrack` (or `DEFAULT_LEVEL_BY_ASSISTANT['genie-code']` = `'genie-accelerator'`)
+ *   3. Any other entry in `DEFAULT_LEVEL_BY_ASSISTANT`
+ *   4. `defaults.defaultTrack` (which defaults to `'end-to-end'` for all other assistants)
+ */
+export function resolveDefaultTrackForAssistant(
+  assistantId: string | null | undefined,
+  defaults?: { defaultTrack?: string; genieCodeDefaultTrack?: string } | null,
+  assistantsConfig?: CodingAssistantConfigEntry[] | null,
+): string {
+  if (assistantId && assistantsConfig) {
+    const entry = assistantsConfig.find(a => a.id === assistantId);
+    if (entry?.defaultTrack) return entry.defaultTrack;
+  }
+  if (assistantId === 'genie-code') {
+    return defaults?.genieCodeDefaultTrack || DEFAULT_LEVEL_BY_ASSISTANT['genie-code'] || 'genie-accelerator';
+  }
+  if (assistantId && assistantId in DEFAULT_LEVEL_BY_ASSISTANT) {
+    const mapped = DEFAULT_LEVEL_BY_ASSISTANT[assistantId as AssistantId];
+    if (mapped) return mapped;
+  }
+  return defaults?.defaultTrack || 'end-to-end';
+}

@@ -264,7 +264,8 @@ export function AppSidebar({
         <div className="space-y-0.5">
           {!collapsed && (
             <>
-              <SidebarNavItem size="sm" href="https://github.com/databricks-solutions/vibe-coding-workshop-template" icon={GithubIcon} label="Repository template" />
+              <SidebarNavItem size="sm" href="https://github.com/databricks-solutions/vibe-coding-workshop-app" icon={GithubIcon} label="App Repo" />
+              <SidebarNavItem size="sm" href="https://github.com/databricks-solutions/vibe-coding-workshop-template" icon={GithubIcon} label="Skills Repo" />
               <SidebarNavItem size="sm" href="https://docs.databricks.com" icon={DocsIcon} label="Databricks Docs" />
               <SidebarNavItem size="sm" href="https://github.com/databricks-solutions/vibe-coding-workshop-app/issues/new" icon={IdeaIcon} label="Submit Feature Request" />
             </>

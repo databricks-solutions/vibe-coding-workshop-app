@@ -3483,10 +3483,13 @@ export function WorkflowDiagram({
         onSelect={(id) => onCodingAssistantChange?.(id)}
         onConfirm={() => {
           setCodingAssistantConfirmed(true);
+          const targetId = (!prerequisitesVisible || prerequisitesCompleted)
+            ? 'define-intent-section'
+            : 'prerequisites-section';
           setTimeout(() => {
-            const el = document.getElementById('prerequisites-section');
+            const el = document.getElementById(targetId);
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 100);
+          }, 420);
         }}
         forceExpanded={wizardStage === 1 && !stageTransitioning}
         forceCollapsed={wizardStage < 1}
@@ -3510,7 +3513,7 @@ export function WorkflowDiagram({
             setTimeout(() => {
               const el = document.getElementById('define-intent-section');
               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 400);
+            }, 420);
           }}
           highlightMarkDone={!prerequisitesCompleted && wizardStage === 2 && !readOnly}
           forceExpanded={forcePrereqExpanded || (wizardStage === 2 && !stageTransitioning)}
@@ -3535,7 +3538,7 @@ export function WorkflowDiagram({
         isSessionLoaded={isSessionLoaded}
         workshopLevel={workshopLevel}
         dataRefreshKey={effectiveRefreshKey}
-        forceCollapsed={wizardStage < 3}
+        forceCollapsed={wizardStage < 3 || (wizardStage === 3 && stageTransitioning)}
         forceExpanded={wizardStage === 3 && !stageTransitioning}
         onIntentDefined={handlePromptGenerated}
         onBrandUrlChange={onBrandUrlChange}

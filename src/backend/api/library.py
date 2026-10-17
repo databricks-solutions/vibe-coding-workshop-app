@@ -67,6 +67,11 @@ def _ensure_collection_row(schema: str, collection_id: str, user: str) -> None:
 @router.get("/config/library", summary="Collections, latest use cases and placements for the Library")
 async def get_library(response: Response) -> Dict[str, Any]:
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    try:
+        from src.backend.api import ideate_ideas as _ideas
+        _ideas._review_rows()
+    except Exception:
+        pass
     schema = get_schema()
     caps = ensure_library_schema(schema)
     source_col = "source" if caps["source"] else "'admin' AS source"

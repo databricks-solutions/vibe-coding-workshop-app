@@ -443,13 +443,21 @@ export type WorkflowView = 'technical' | 'insights';
 
 /** New-session defaults from GET /config/workshop-defaults (facilitator switch). */
 export interface WorkshopDefaults {
+  /** Default workshop track for non-Genie-Code coding assistants (default: 'end-to-end'). */
   defaultTrack: string;
+  /** Default workshop track when Genie Code is selected (default: 'genie-accelerator'). */
+  genieCodeDefaultTrack?: string;
+  /** Track badged as Recommended in the path selector (default: 'genie-accelerator'). */
+  recommendedTrack?: string;
+  /** Whether Genie Ontology is on by default when entering Genie Accelerator. */
   includeGenieOntology: boolean;
 }
 
 /** Used when the defaults can't be fetched: the app.yaml.template values. */
 export const FALLBACK_WORKSHOP_DEFAULTS: WorkshopDefaults = {
-  defaultTrack: 'genie-accelerator',
+  defaultTrack: 'end-to-end',
+  genieCodeDefaultTrack: 'genie-accelerator',
+  recommendedTrack: 'genie-accelerator',
   includeGenieOntology: true,
 };
 
@@ -554,6 +562,7 @@ export interface IdeaReviewMetadataResponse {
   reviewedAt?: string | null;
   reviewer?: string | null;
   note?: string | null;
+  latestNote?: string | null;
   approvedRevision?: number | null;
   history: Array<{
     action: 'submitted' | 'approved' | 'changes_requested' | 'rejected' | 'reopened';
@@ -572,6 +581,13 @@ export interface IdeaReviewItem {
   review: IdeaReviewMetadataResponse;
   idea?: Record<string, unknown>;
   updatedAt?: string | null;
+  businessContext?: {
+    spark?: unknown;
+    brief?: string | null;
+    impact?: unknown;
+    summary?: unknown;
+    valuePerYear?: number | null;
+  };
 }
 
 export interface IdeaReviewDetail extends IdeaReviewItem {
@@ -1599,17 +1615,20 @@ class ApiClient {
   }
 
   /**
-   * New-session defaults (VIBE_DEFAULT_GENIE_ONTOLOGY). Fetched once per page;
+   * New-session defaults (VIBE_DEFAULT_TRACK, VIBE_GENIE_CODE_DEFAULT_TRACK,
+   * VIBE_RECOMMENDED_TRACK, VIBE_DEFAULT_GENIE_ONTOLOGY). Fetched once per page;
    * on any failure it logs once and resolves to FALLBACK_WORKSHOP_DEFAULTS.
    */
   getWorkshopDefaults(): Promise<WorkshopDefaults> {
     this.workshopDefaults ??= this.fetch<Partial<WorkshopDefaults>>('/config/workshop-defaults')
       .then(d => ({
         defaultTrack: typeof d.defaultTrack === 'string' && d.defaultTrack ? d.defaultTrack : FALLBACK_WORKSHOP_DEFAULTS.defaultTrack,
+        genieCodeDefaultTrack: typeof d.genieCodeDefaultTrack === 'string' && d.genieCodeDefaultTrack ? d.genieCodeDefaultTrack : FALLBACK_WORKSHOP_DEFAULTS.genieCodeDefaultTrack,
+        recommendedTrack: typeof d.recommendedTrack === 'string' && d.recommendedTrack ? d.recommendedTrack : FALLBACK_WORKSHOP_DEFAULTS.recommendedTrack,
         includeGenieOntology: typeof d.includeGenieOntology === 'boolean' ? d.includeGenieOntology : FALLBACK_WORKSHOP_DEFAULTS.includeGenieOntology,
       }))
       .catch(err => {
-        console.warn('Could not load workshop defaults; new sessions use Genie Accelerator with Genie Ontology on:', err);
+        console.warn('Could not load workshop defaults; falling back to default workshop settings:', err);
         return FALLBACK_WORKSHOP_DEFAULTS;
       });
     return this.workshopDefaults;

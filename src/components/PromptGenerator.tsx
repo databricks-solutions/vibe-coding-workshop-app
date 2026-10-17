@@ -290,11 +290,18 @@ export function PromptGenerator({
     if (hasStarted) return;                                   // user already moved on
     if (selectedIndustry || selectedUsecase) return;          // something else already set
     if (mode !== 'library' || selectedPath !== 'use_case') return;
-    const sampleHasBooking = (useCases['sample'] || []).some(u => u.value === 'booking');
-    if (!sampleHasBooking) return;
+    const sampleUsecases = useCases['sample'] || [];
+    const bookingOption = sampleUsecases.find(u => u.value === 'booking') ?? sampleUsecases[0];
+    if (!bookingOption) return;
     setSelectedIndustry('sample');
-    setSelectedUsecase('booking');
-  }, [useCases, initialIndustry, initialUseCase, hasStarted, selectedIndustry, selectedUsecase, mode, selectedPath]);
+    setSelectedUsecase(bookingOption.value);
+    const template = promptTemplates['sample']?.[bookingOption.value] || '';
+    const label = bookingOption.label || bookingOption.value;
+    setDefaultUseCaseLabel(label);
+    setDefaultDescription(template);
+    setEditedUseCaseLabel(label);
+    setEditedDescription(template);
+  }, [useCases, promptTemplates, initialIndustry, initialUseCase, hasStarted, selectedIndustry, selectedUsecase, mode, selectedPath]);
 
   const handleIndustryChange = (value: string) => {
     setSelectedIndustry(value === selectedIndustry ? '' : value);

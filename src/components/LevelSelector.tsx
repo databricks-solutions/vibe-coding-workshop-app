@@ -51,7 +51,7 @@ import {
   type MedallionLayer,
   type ChainContext,
 } from '../constants/workflowSections';
-import { Check, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, Code2, Star } from 'lucide-react';
+import { Check, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, Code2, Star, ArrowLeft } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CHAPTER_BLOCKS, genieAcceleratorServices, type ChapterBlock, type ChapterBlockId, type ChipTone } from '../constants/chapterBlocks';
 import { NewBadge } from './NewBadge';
@@ -297,15 +297,25 @@ function useGenieStepCount(includeLakehouse: boolean, includeGenieOntology: bool
   return counts[key] ?? null;
 }
 
-/** The facilitator's ontology default (what selecting the card turns on). */
-function useFacilitatorOntologyDefault(): boolean {
-  const [value, setValue] = useState(FALLBACK_WORKSHOP_DEFAULTS.includeGenieOntology);
+/** The facilitator's workshop defaults (ontology switch + recommended track badge). */
+function useWorkshopDefaultsState(): { includeGenieOntology: boolean; recommendedTrack: string } {
+  const [state, setState] = useState({
+    includeGenieOntology: FALLBACK_WORKSHOP_DEFAULTS.includeGenieOntology,
+    recommendedTrack: FALLBACK_WORKSHOP_DEFAULTS.recommendedTrack ?? 'genie-accelerator',
+  });
   useEffect(() => {
     let cancelled = false;
-    apiClient.getWorkshopDefaults().then(d => { if (!cancelled) setValue(d.includeGenieOntology); });
+    apiClient.getWorkshopDefaults().then(d => {
+      if (!cancelled) {
+        setState({
+          includeGenieOntology: d.includeGenieOntology,
+          recommendedTrack: d.recommendedTrack ?? 'genie-accelerator',
+        });
+      }
+    });
     return () => { cancelled = true; };
   }, []);
-  return value;
+  return state;
 }
 
 interface GenieRecommendedCardProps {
@@ -480,7 +490,6 @@ function LevelSelectorGrid({
   includeGenieOntology = false,
   onIncludeGenieOntologyChange,
   disabledWorkshopLevels,
-  view,
 }: LevelSelectorProps) {
   const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps, chainContext);
 
@@ -674,12 +683,12 @@ function LevelSelectorGrid({
   // This stops a lit "Lakehouse" chapter button from making the track look
   // like a Lakehouse flow. Block metadata is sourced from CHAPTER_BLOCKS so
   // titles, icons, colours and service chips never drift from the flip card.
-  const isGeniePathView = selectedLevel === 'genie-accelerator';
+  const isGeniePathView = selectedLevel === 'genie-accelerator' && direction !== 'reverse';
 
-  // Recommended card (forward only). While another path is selected it shows
+  // Recommended accelerator metadata. While another path is selected it shows
   // what picking it gives: Lakehouse off, ontology at the facilitator default.
   const readOnly = useReadOnly();
-  const facilitatorOntology = useFacilitatorOntologyDefault();
+  const { includeGenieOntology: facilitatorOntology, recommendedTrack } = useWorkshopDefaultsState();
   const cardLakehouse = isGeniePathView ? includeLakehouse : false;
   const cardOntology = isGeniePathView ? includeGenieOntology : facilitatorOntology;
   const genieStepCount = useGenieStepCount(cardLakehouse, cardOntology);
@@ -692,12 +701,6 @@ function LevelSelectorGrid({
     includeLakehouse: cardLakehouse,
     includeGenieOntology: cardOntology,
   }).total;
-  // Mock B tabs (PathAndArchitecture): the Genie tab shows the recommended card
-  // and its stage strip; the Other tracks tab shows the columns. Reverse ETL has
-  // no accelerators, so it is always the Other tracks view.
-  const isForward = direction !== 'reverse';
-  const showGenieView = isForward && (view ?? (isGeniePathView ? 'genie' : 'other')) === 'genie';
-  const otherPathsExpanded = !showGenieView;
 
   const geniePathStages: ChapterBlock[] = [];
   if (isGeniePathView) {
@@ -708,26 +711,46 @@ function LevelSelectorGrid({
     }
   }
 
+  const canDeselectGenie = isGeniePathView && !readOnly && !hasStartedWorkflow && !useCaseLockedLevel;
+
   const geniePathStrip = (
     <motion.div
       key="col-genie-path"
       layout
       layoutId="col-genie-path"
-      className="flex-[3] flex flex-col"
+      className="flex-[3] flex flex-col min-w-0"
       transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}
     >
-      <div className="text-ui-xs font-bold text-primary uppercase tracking-wider mb-2 text-center">
-        Your Genie Accelerator Path
+      <div className="flex items-center justify-between gap-2 mb-2.5 px-1">
+        <div className="text-ui-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
+          <span>Your Genie Accelerator Path</span>
+        </div>
+        {canDeselectGenie && (
+          <button
+            type="button"
+            data-testid="see-other-tracks-btn"
+            onClick={() => handleLevelClick('genie-accelerator')}
+            title="Deselect Genie Accelerator and view standard workshop tracks"
+            className="group inline-flex items-center gap-2 pl-1.5 pr-3.5 py-1 rounded-full border border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/60 text-primary text-ui-xs font-semibold shadow-2xs transition-all duration-200 cursor-pointer"
+          >
+            <span className="w-5 h-5 rounded-full bg-primary/20 group-hover:bg-primary group-hover:text-primary-foreground flex items-center justify-center transition-colors">
+              <ArrowLeft className="w-3 h-3" />
+            </span>
+            <span>See other tracks</span>
+          </button>
+        )}
       </div>
       {/* Each stage is a shared ModuleBox — same card chrome, header, tinted
           container, name-button and icon-on-top chips as the persona columns,
           so the common Lakehouse / AI-and-Agents modules are identical across
           both surfaces. Genie chips are display-only (click = info popover);
           the name-button is a static label (selection already happened). */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-1">
         {geniePathStages.map(stage => {
           const services = genieAcceleratorServices(stage);
-          const cols = services.length >= 3 ? 'grid-cols-3' : 'grid-cols-2';
+          const isActivation = stage.id === 'activation';
+          const cols = isActivation ? 'grid-cols-1' : services.length >= 3 ? 'grid-cols-3' : 'grid-cols-2';
           const StageIcon = stage.icon;
           return (
             <ModuleBox
@@ -750,7 +773,7 @@ function LevelSelectorGrid({
                 </div>
               }
             >
-              <div className={`grid ${cols} gap-1`}>
+              <div className={`grid ${cols} ${isActivation ? 'gap-1.5' : 'gap-1'}`}>
                 {services.map(ss => {
                   // Lakehouse chips carry the per-layer palette (Bronze/Silver/
                   // Gold); every other stage falls back to its block accent.
@@ -758,7 +781,13 @@ function LevelSelectorGrid({
                   const ChipIcon = stage.id === 'lakehouse' ? Layers : (ss.icon ?? stage.icon);
                   return (
                     <ServicePopover key={ss.label} serviceKey={ss.serviceKey} position="top" block hideBadge>
-                      <ModuleChip label={ss.label} icon={ChipIcon} tone={tone} className="hover:scale-105" />
+                      <ModuleChip
+                        label={ss.label}
+                        icon={ChipIcon}
+                        tone={tone}
+                        layout={isActivation ? 'horizontal' : 'vertical'}
+                        className="hover:scale-[1.02]"
+                      />
                     </ServicePopover>
                   );
                 })}
@@ -811,37 +840,14 @@ function LevelSelectorGrid({
         />
       </div>
 
-      {/* Recommended Genie Accelerator card — the Genie tab only (forward
-          direction; the accelerators have no reverse counterpart). */}
-      {showGenieView && (
-        <GenieRecommendedCard
-          selected={isGeniePathView}
-          lockState={getLockState('genie-accelerator')}
-          readOnly={readOnly}
-          includeLakehouse={cardLakehouse}
-          includeGenieOntology={cardOntology}
-          stepCount={genieStepCount}
-          buildMinutes={genieBuildMinutes}
-          onSelect={() => onLevelChange('genie-accelerator')}
-          onIncludeLakehouseChange={onIncludeLakehouseChange}
-          onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
-        />
-      )}
-
-      {/* The selected Genie path's stages (click a chip for details). */}
-      {showGenieView && isGeniePathView && (
-        <LayoutGroup>
-          <div className="flex gap-3 mb-4">{geniePathStrip}</div>
-        </LayoutGroup>
-      )}
-
-      {otherPathsExpanded && (
       <div id="other-workshop-paths" data-testid="other-paths">
       {/* Persona caption row — subtly aligns each chapter column with the
           target audience. The 4th slot (over Accelerators) is intentionally
           blank so the role-agnostic specialized tracks stay visually distinct.
           In reverse direction, columns reorder (Lakehouse leads), so the
-          persona captions reorder to keep the alignment correct. */}
+          persona captions reorder to keep the alignment correct. Hidden when
+          the Genie Accelerator stage strip is active on the left. */}
+      {!isGeniePathView && (
       <div className="flex gap-3 mb-1.5 px-1">
         {(direction === 'reverse'
           ? [COLUMN_PERSONAS[1], COLUMN_PERSONAS[2], COLUMN_PERSONAS[0]]
@@ -858,11 +864,17 @@ function LevelSelectorGrid({
         ))}
         {direction !== 'reverse' && <div className="flex-1" aria-hidden="true" />}
       </div>
+      )}
 
       {/* 4-Column Box Layout */}
       <LayoutGroup>
         <div className="flex gap-3">
           {(() => {
+            // Genie Accelerator: swap the three persona chapter columns for the
+            // Genie path stage strip (Semantic Layer → Genie Agent → …). The
+            // Accelerators column on the right stays visible as the chooser.
+            if (isGeniePathView) return geniePathStrip;
+
             // Build the three persona-aligned chapter columns. Each column
             // renders the same way regardless of direction; only the levels
             // they reference and the column ordering differ.
@@ -956,11 +968,139 @@ function LevelSelectorGrid({
             reverse counterpart. Showing only 3 columns in reverse avoids
             confusing users with disabled/mismatched options. */}
         {direction !== 'reverse' && (
-        <div className={getBoxClass(isAcceleratorSelected && !isGeniePathView, false, isColumnLocked('accelerator'))}>
+        <div className={getBoxClass(isAcceleratorSelected, false, isColumnLocked('accelerator'))}>
           {columnHeader('accelerator')}
           <div className="space-y-2">
-            {/* Genie Accelerator lives in the recommended card above (with its
-                toggles), so this column lists only the other accelerators. */}
+            {/* Genie Accelerator — flagship guided path at the top of Accelerators */}
+            {(() => {
+              const lockState = getLockState('genie-accelerator');
+              const locked = lockState !== null;
+              const disabled = readOnly || locked;
+              const isSelected = selectedLevel === 'genie-accelerator';
+              const isRecommended = recommendedTrack === 'genie-accelerator';
+              const chapters = genieChapterLine(cardLakehouse, cardOntology);
+              return (
+                <div
+                  data-testid="genie-recommended-card"
+                  data-selected={isSelected ? 'true' : 'false'}
+                >
+                  <div className={locked ? 'relative group' : undefined}>
+                    <button
+                      type="button"
+                      onClick={() => handleLevelClick('genie-accelerator')}
+                      disabled={disabled}
+                      aria-pressed={isSelected}
+                      title={getToggleHint('genie-accelerator')}
+                      className={`w-full text-left px-3.5 py-2.5 rounded-xl transition-all duration-200 border ${
+                        disabled
+                          ? 'bg-secondary/40 text-muted-foreground/50 border-border/40 cursor-not-allowed'
+                          : isSelected
+                          ? 'bg-gradient-to-br from-teal-600 via-teal-600 to-emerald-600 text-white border-teal-400/60 shadow-md shadow-teal-500/20 ring-2 ring-teal-500/35'
+                          : 'bg-gradient-to-br from-teal-500/[0.12] via-emerald-500/[0.06] to-transparent hover:from-teal-500/[0.20] hover:via-emerald-500/[0.12] text-foreground border-teal-500/45 hover:border-teal-400/70 shadow-sm hover:shadow'
+                      }`}
+                    >
+                      {/* Top badge bar: New + Recommended + Check/Lock */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <NewBadge
+                          tone={isSelected ? 'inverted' : 'emerald'}
+                          animated={!isSelected}
+                        />
+                        {isRecommended && (
+                          <span
+                            data-testid="genie-recommended-badge"
+                            className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wide leading-none px-1.5 py-0.5 rounded-full font-semibold ${
+                              isSelected
+                                ? 'bg-amber-300/25 text-amber-100 border border-amber-200/40'
+                                : 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/35'
+                            }`}
+                          >
+                            <Star className="w-2.5 h-2.5 fill-current" aria-hidden="true" />
+                            <span>Recommended</span>
+                          </span>
+                        )}
+                        {locked && <Lock className="w-3 h-3 ml-auto text-muted-foreground/60" aria-hidden="true" />}
+                        {!disabled && (isSelected || isHighlighted('genie-accelerator')) && (
+                          <Check className={`w-3.5 h-3.5 ml-auto flex-shrink-0 ${isSelected ? 'text-white' : 'opacity-60'}`} />
+                        )}
+                      </div>
+
+                      {/* Title row */}
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <MessageSquareText className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-white' : 'text-teal-600 dark:text-teal-400'}`} />
+                        <span className="flex-1 text-left text-ui-sm font-semibold leading-tight">
+                          {BUTTON_LABELS['genie-accelerator']}
+                        </span>
+                      </div>
+
+                      {/* Chapter line + meta */}
+                      <div
+                        className={`mt-1 text-ui-3xs leading-snug ${isSelected ? 'text-white/85' : 'text-muted-foreground'}`}
+                        data-testid="genie-chapter-line"
+                      >
+                        {chapters.join(' → ')}
+                      </div>
+                      <div
+                        className={`mt-0.5 text-[10px] ${isSelected ? 'text-white/75' : 'text-muted-foreground/80'}`}
+                        data-testid="genie-card-meta"
+                      >
+                        {genieStepCount !== null && <span>{genieStepCount} steps · </span>}
+                        <span>est. {formatHM(genieBuildMinutes)} build time</span>
+                      </div>
+                    </button>
+                    {locked && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
+                  </div>
+
+                  {/* Genie Accelerator composition toggles */}
+                  {isSelected && (onIncludeLakehouseChange || onIncludeGenieOntologyChange) && (
+                    <div className="mt-2 ml-2 pl-2.5 border-l-2 border-teal-500/40 space-y-1.5">
+                      {/* Optional Genie Ontology (Discover domain, Pages, routing). ON by default
+                          for new sessions (facilitator switch); untick when the workspace has no
+                          Genie One Pages. */}
+                      {onIncludeGenieOntologyChange && (
+                        <label className={`flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] hover:bg-teal-500/[0.08] px-2.5 py-2 select-none transition-colors ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={includeGenieOntology}
+                            disabled={readOnly}
+                            onChange={(e) => onIncludeGenieOntologyChange(e.target.checked)}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer disabled:cursor-not-allowed"
+                          />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-ui-2xs font-semibold text-foreground leading-snug">
+                              Include Genie Ontology (Beta: needs Genie One Pages)
+                            </span>
+                            <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                              Model the domain, author Pages, and write the routing page (+25 min).
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                      {/* Optional Lakehouse (Bronze → Gold). OFF by default: the learner
+                          starts from existing / uploaded / synthetic data. */}
+                      {onIncludeLakehouseChange && (
+                        <label className={`flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] hover:bg-teal-500/[0.08] px-2.5 py-2 select-none transition-colors ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={includeLakehouse}
+                            disabled={readOnly}
+                            onChange={(e) => onIncludeLakehouseChange(e.target.checked)}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer disabled:cursor-not-allowed"
+                          />
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-ui-2xs font-semibold text-foreground leading-snug">
+                              Include Lakehouse
+                            </span>
+                            <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                              Off by default — turn on to build Bronze → Gold medallion layers first (+90 min).
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Agents Accelerator — beta; works with any sample use case */}
             {(() => {
@@ -1063,7 +1203,6 @@ function LevelSelectorGrid({
         </div>
       </LayoutGroup>
       </div>
-      )}
     </>
   );
 }

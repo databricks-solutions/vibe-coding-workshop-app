@@ -48,6 +48,8 @@ import {
 } from '../constants/workflowSections';
 import { ServicePopover } from './ServicePopover';
 import { CHAPTER_BLOCKS, genieAcceleratorServices, type ChapterBlockId } from '../constants/chapterBlocks';
+import { PATH_DESCRIPTIONS } from '../constants/pathDescriptions';
+import { Blocks, CheckCircle2 } from 'lucide-react';
 
 // Learning objectives tagged by chapter - dynamically filtered by workshop level
 interface LearningObjective {
@@ -203,46 +205,46 @@ function AgentsAcceleratorPanel({ mlflowFaded }: AgentsAcceleratorPanelProps) {
   return (
     <div className="flex flex-col gap-3">
       {/* Agents on Apps sub-container — 3 chips matching folder labels 02/03/05 */}
-      <div className="bg-slate-800 border-2 border-blue-500/60 rounded-lg p-3 shadow-lg">
-        <p className="text-ui-xs font-bold text-blue-300 mb-2 text-center">Agents on Apps</p>
+      <div className="bg-blue-500/[0.08] dark:bg-slate-800 border-2 border-blue-500/50 rounded-lg p-3 shadow-sm">
+        <p className="text-ui-xs font-bold text-blue-700 dark:text-blue-300 mb-2 text-center">Agents on Apps</p>
         <div className="grid grid-cols-3 gap-1.5">
-          <ServicePopover serviceKey="agentFramework" position="left" block>
-            <div className="bg-blue-900/30 rounded px-1.5 py-1.5 border border-blue-500/30 hover:bg-blue-900/50 hover:border-blue-400 transition-all duration-200 hover:scale-105">
-              <p className="text-ui-3xs font-semibold text-blue-200 text-center leading-tight">Agent Framework</p>
+          <ServicePopover serviceKey="agentFramework" position="left" block hideBadge>
+            <div className="bg-blue-500/15 dark:bg-blue-900/35 rounded px-1.5 py-1.5 border border-blue-500/35 hover:bg-blue-500/25 dark:hover:bg-blue-900/55 hover:border-blue-400 transition-all duration-200">
+              <p className="text-ui-3xs font-semibold text-blue-800 dark:text-blue-200 text-center leading-tight">Agent Framework</p>
             </div>
           </ServicePopover>
-          <ServicePopover serviceKey="toolsMcp" position="top" block>
-            <div className="bg-blue-900/30 rounded px-1.5 py-1.5 border border-blue-500/30 hover:bg-blue-900/50 hover:border-blue-400 transition-all duration-200 hover:scale-105">
-              <p className="text-ui-3xs font-semibold text-blue-200 text-center leading-tight">Tools &amp; MCP</p>
+          <ServicePopover serviceKey="toolsMcp" position="top" block hideBadge>
+            <div className="bg-blue-500/15 dark:bg-blue-900/35 rounded px-1.5 py-1.5 border border-blue-500/35 hover:bg-blue-500/25 dark:hover:bg-blue-900/55 hover:border-blue-400 transition-all duration-200">
+              <p className="text-ui-3xs font-semibold text-blue-800 dark:text-blue-200 text-center leading-tight">Tools &amp; MCP</p>
             </div>
           </ServicePopover>
-          <ServicePopover serviceKey="lakebaseMemory" position="right" block>
-            <div className="bg-blue-900/30 rounded px-1.5 py-1.5 border border-blue-500/30 hover:bg-blue-900/50 hover:border-blue-400 transition-all duration-200 hover:scale-105">
-              <p className="text-ui-3xs font-semibold text-blue-200 text-center leading-tight">Lakebase Memory</p>
+          <ServicePopover serviceKey="lakebaseMemory" position="right" block hideBadge>
+            <div className="bg-blue-500/15 dark:bg-blue-900/35 rounded px-1.5 py-1.5 border border-blue-500/35 hover:bg-blue-500/25 dark:hover:bg-blue-900/55 hover:border-blue-400 transition-all duration-200">
+              <p className="text-ui-3xs font-semibold text-blue-800 dark:text-blue-200 text-center leading-tight">Lakebase Memory</p>
             </div>
           </ServicePopover>
         </div>
       </div>
 
       {/* MLflow for Gen-AI sub-container — 3 chips matching folder labels 01/02-04/07 */}
-      <div className={`bg-slate-800 border-2 border-violet-500/60 rounded-lg p-3 shadow-lg ${mlflowFadedClass}`} title={mlflowFadedTitle}>
-        <p className="text-ui-xs font-bold text-violet-300 mb-2 text-center">
-          MLflow for Gen-AI{mlflowFaded && <span className="ml-1 text-ui-3xs font-normal text-violet-400/70">(Phase 2)</span>}
+      <div className={`bg-violet-500/[0.08] dark:bg-slate-800 border-2 border-violet-500/50 rounded-lg p-3 shadow-sm ${mlflowFadedClass}`} title={mlflowFadedTitle}>
+        <p className="text-ui-xs font-bold text-violet-700 dark:text-violet-300 mb-2 text-center">
+          MLflow for Gen-AI{mlflowFaded && <span className="ml-1 text-ui-3xs font-normal text-violet-600/70 dark:text-violet-400/70">(Phase 2)</span>}
         </p>
         <div className="grid grid-cols-3 gap-1.5">
-          <ServicePopover serviceKey="mlflowPromptRegistry" position="left" block>
-            <div className="bg-violet-900/30 rounded px-1.5 py-1.5 border border-violet-500/30 hover:bg-violet-900/50 hover:border-violet-400 transition-all duration-200 hover:scale-105">
-              <p className="text-ui-3xs font-semibold text-violet-200 text-center leading-tight">Prompt Registry</p>
+          <ServicePopover serviceKey="mlflowPromptRegistry" position="left" block hideBadge>
+            <div className="bg-violet-500/15 dark:bg-violet-900/35 rounded px-1.5 py-1.5 border border-violet-500/35 hover:bg-violet-500/25 dark:hover:bg-violet-900/55 hover:border-violet-400 transition-all duration-200">
+              <p className="text-ui-3xs font-semibold text-violet-800 dark:text-violet-200 text-center leading-tight">Prompt Registry</p>
             </div>
           </ServicePopover>
-          <ServicePopover serviceKey="mlflowEval" position="top" block>
-            <div className="bg-violet-900/30 rounded px-1.5 py-1.5 border border-violet-500/30 hover:bg-violet-900/50 hover:border-violet-400 transition-all duration-200 hover:scale-105">
-              <p className="text-ui-3xs font-semibold text-violet-200 text-center leading-tight">Evaluation</p>
+          <ServicePopover serviceKey="mlflowEval" position="top" block hideBadge>
+            <div className="bg-violet-500/15 dark:bg-violet-900/35 rounded px-1.5 py-1.5 border border-violet-500/35 hover:bg-violet-500/25 dark:hover:bg-violet-900/55 hover:border-violet-400 transition-all duration-200">
+              <p className="text-ui-3xs font-semibold text-violet-800 dark:text-violet-200 text-center leading-tight">Evaluation</p>
             </div>
           </ServicePopover>
-          <ServicePopover serviceKey="mlflowMonitoring" position="right" block>
-            <div className="bg-violet-900/30 rounded px-1.5 py-1.5 border border-violet-500/30 hover:bg-violet-900/50 hover:border-violet-400 transition-all duration-200 hover:scale-105">
-              <p className="text-ui-3xs font-semibold text-violet-200 text-center leading-tight">Monitoring</p>
+          <ServicePopover serviceKey="mlflowMonitoring" position="right" block hideBadge>
+            <div className="bg-violet-500/15 dark:bg-violet-900/35 rounded px-1.5 py-1.5 border border-violet-500/35 hover:bg-violet-500/25 dark:hover:bg-violet-900/55 hover:border-violet-400 transition-all duration-200">
+              <p className="text-ui-3xs font-semibold text-violet-800 dark:text-violet-200 text-center leading-tight">Monitoring</p>
             </div>
           </ServicePopover>
         </div>
@@ -295,6 +297,112 @@ function GenieAcceleratorPanel({ includeGenieOntology }: { includeGenieOntology:
           </Fragment>
         );
       })}
+    </div>
+  );
+}
+
+interface ObjectiveStage {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  accentBorder: string;
+  accentHeaderBg: string;
+  accentBadge: string;
+  accentCheck: string;
+  items: { id: string; content: React.ReactNode }[];
+}
+
+function UnifiedWhatYoullBuild({
+  workshopLevel,
+  stages,
+  bulletsRevealed,
+}: {
+  workshopLevel: WorkshopLevel;
+  stages: ObjectiveStage[];
+  bulletsRevealed: boolean;
+}) {
+  const desc = PATH_DESCRIPTIONS[workshopLevel];
+  const activeStages = stages.filter(s => s.items.length > 0);
+  if (!desc && activeStages.length === 0) return null;
+
+  const gridCols =
+    activeStages.length >= 3
+      ? 'grid-cols-1 md:grid-cols-3'
+      : activeStages.length === 2
+        ? 'grid-cols-1 md:grid-cols-2'
+        : 'grid-cols-1';
+
+  return (
+    <div className="mt-6 rounded-2xl border border-border/80 bg-card/90 p-5 shadow-sm space-y-4">
+      {/* Header row: What You'll Build + Tagline + Tech Stack Pills */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3.5 border-b border-border/60">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-primary/15 text-primary">
+              <Blocks className="w-3.5 h-3.5" />
+            </span>
+            <h4 className="text-ui-sm font-bold uppercase tracking-wider text-foreground">
+              What You&apos;ll Build
+            </h4>
+          </div>
+          {desc?.tagline && (
+            <p className="text-ui-sm text-muted-foreground mt-1">
+              {desc.tagline}
+            </p>
+          )}
+        </div>
+
+        {desc?.techStack && desc.techStack.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {desc.techStack.map(tech => (
+              <span
+                key={tech}
+                className="text-ui-3xs font-semibold px-2.5 py-1 rounded-full bg-primary/12 text-primary border border-primary/25 whitespace-nowrap"
+              >
+                {tech}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stage-aligned deliverable cards */}
+      {activeStages.length > 0 && (
+        <div className={`grid ${gridCols} gap-3.5`}>
+          {activeStages.map((stage, stageIdx) => (
+            <div
+              key={stage.id}
+              className={`rounded-xl border ${stage.accentBorder} bg-background/60 p-4 flex flex-col`}
+            >
+              <div className={`flex items-center gap-2 pb-2.5 mb-3 border-b ${stage.accentBorder}`}>
+                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-lg ${stage.accentHeaderBg}`}>
+                  {stage.icon}
+                </span>
+                <span className="text-ui-xs font-bold uppercase tracking-wider text-foreground">
+                  {stage.title}
+                </span>
+                <span className={`ml-auto text-ui-3xs font-semibold px-2 py-0.5 rounded-full ${stage.accentBadge}`}>
+                  Stage {stageIdx + 1}
+                </span>
+              </div>
+              <ul className="space-y-2 flex-1">
+                {stage.items.map((obj, idx) => (
+                  <li
+                    key={obj.id}
+                    className={`flex items-start gap-2 text-ui-xs text-muted-foreground leading-relaxed transition-all duration-300 ease-out ${
+                      bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+                    }`}
+                    style={{ transitionDelay: bulletsRevealed ? `${(stageIdx * 3 + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
+                  >
+                    <CheckCircle2 className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${stage.accentCheck}`} />
+                    <span>{obj.content}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -687,28 +795,23 @@ function SkillsAcceleratorView({
         })()}
       </div>
 
-      {/* Learning Objectives */}
-      <div className="pt-1">
-        <h4 className="text-ui-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 text-center">
-          What You'll Build
-        </h4>
-        <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
-          {SKILLS_OBJECTIVES.map((obj, idx) => (
-            <div
-              key={idx}
-              className="flex items-center gap-2 text-ui-sm text-muted-foreground transition-all duration-300"
-              style={{
-                opacity: bulletsRevealed ? 1 : 0,
-                transform: bulletsRevealed ? 'translateY(0)' : 'translateY(8px)',
-                transitionDelay: `${idx * 100}ms`,
-              }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
-              <span>{obj}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Unified Learning Objectives */}
+      <UnifiedWhatYoullBuild
+        workshopLevel="skills-accelerator"
+        bulletsRevealed={bulletsRevealed}
+        stages={[
+          {
+            id: 'skills-track',
+            title: 'Agent Skills Package & Governance',
+            icon: <ShieldCheck className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />,
+            accentBorder: 'border-violet-500/30',
+            accentHeaderBg: 'bg-violet-500/12',
+            accentBadge: 'bg-violet-500/12 text-violet-700 dark:text-violet-300',
+            accentCheck: 'text-violet-600 dark:text-violet-400',
+            items: SKILLS_OBJECTIVES.map((obj, idx) => ({ id: `sk-${idx}`, content: obj })),
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -857,8 +960,6 @@ export function ArchitectureDiagramContent({
     : LEARNING_OBJECTIVES.filter(obj =>
         obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
       );
-  const middleStaggerOffset = leftObjectives.length;
-  const rightStaggerOffset = leftObjectives.length + middleObjectives.length;
   const hasAnyObjectives = leftObjectives.length > 0 || middleObjectives.length > 0 || rightObjectives.length > 0;
 
   // Reverse (back-face) objective lists. Genie swaps in its arc-specific copy.
@@ -874,12 +975,16 @@ export function ArchitectureDiagramContent({
   return (
     <div>
       {/* Interactive hint */}
-      <div className="mb-4 mx-auto flex w-fit max-w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-ui-xs text-muted-foreground text-center shadow-sm">
+      <div className="mb-4 mx-auto flex w-fit max-w-full items-center justify-center gap-2 rounded-full border border-primary/35 bg-primary/[0.06] px-4 py-1.5 text-ui-xs text-muted-foreground text-center shadow-sm">
+        <span className="relative flex w-2 h-2">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75 animate-ping" />
+          <span className="relative inline-flex rounded-full w-2 h-2 bg-primary" />
+        </span>
         <Info className="w-3.5 h-3.5 text-primary flex-shrink-0" />
         <span>
-          <span className="font-semibold text-foreground">Interactive</span>
+          <span className="font-semibold text-foreground">Interactive Architecture</span>
           {' — '}
-          Select any service to learn more
+          Click any glowing service tile to explore details &amp; ask AI
           {effectiveDirection === 'reverse' ? ' (Reverse ETL flow)' : ''}
         </span>
       </div>
@@ -892,7 +997,7 @@ export function ArchitectureDiagramContent({
             <div className="max-w-6xl mx-auto">
           <div className="relative flex items-stretch gap-4 justify-center">
             {appLakebaseFade.shouldRender && (
-              <div className={`border border-[#FF3621]/40 rounded-xl p-4 bg-card/80 w-[13.75rem] flex-shrink-0 shadow-sm duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+              <div className={`border border-[#FF3621]/40 rounded-xl p-4 bg-card/90 w-[13.75rem] flex-shrink-0 shadow-sm duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
                 <div className="bg-[#FF3621]/10 border border-[#FF3621]/25 text-center py-2 px-3 rounded-lg mb-4">
                   <div className="flex items-center justify-center gap-2 mb-1">
                     {visibility.ch1 && <Globe className="w-4 h-4 text-[#FF3621]" />}
@@ -903,14 +1008,14 @@ export function ArchitectureDiagramContent({
                   </p>
                 </div>
                 <div className="flex flex-col items-center gap-3">
-                  <div className="w-16 h-16 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg shadow-lg flex items-center justify-center">
+                  <div className="w-16 h-16 bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg shadow-lg flex items-center justify-center">
                     <Users className="w-8 h-8 text-white" />
                   </div>
                   <p className="text-ui-base font-semibold text-foreground">User</p>
                   <ArrowDown className="w-5 h-5 text-muted-foreground" />
                   {visibility.ch1 && (
                     <ServicePopover serviceKey="databricksApp" position="right" block>
-                      <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                      <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200">
                         <div className="flex flex-col items-center gap-1.5">
                           <Globe className="w-7 h-7 text-white" />
                           <p className="text-ui-base font-bold text-white text-center">Databricks App</p>
@@ -920,13 +1025,13 @@ export function ArchitectureDiagramContent({
                   )}
                   {visibility.ch1 && visibility.ch2 && (
                     <div className="flex items-center gap-1">
-                      <ArrowDown className="w-4 h-4 text-violet-400" />
-                      <ArrowLeftRight className="w-4 h-4 text-violet-400" />
+                      <ArrowDown className="w-4 h-4 text-violet-500 dark:text-violet-400" />
+                      <ArrowLeftRight className="w-4 h-4 text-violet-500 dark:text-violet-400" />
                     </div>
                   )}
                   {visibility.ch2 && (
                     <ServicePopover serviceKey="lakebase" position="right" block>
-                      <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                      <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200">
                         <div className="flex flex-col items-center gap-1.5">
                           <HardDrive className="w-7 h-7 text-white" />
                           <p className="text-ui-base font-bold text-white">Lakebase</p>
@@ -939,16 +1044,16 @@ export function ArchitectureDiagramContent({
             )}
             {showAppLakebase && showLakehouse && (
               <div className="flex flex-col items-center justify-center">
-                <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
+                <ChevronRight className="w-12 h-12 text-violet-500 dark:text-violet-400" strokeWidth={3} />
               </div>
             )}
             {showAppLakebase && !showLakehouse && showDataIntel && (
               <div className="flex flex-col items-center justify-center">
-                <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
+                <ChevronRight className="w-12 h-12 text-violet-500 dark:text-violet-400" strokeWidth={3} />
               </div>
             )}
             {lakehouseFade.shouldRender && (
-              <div className={`border border-teal-500/40 rounded-xl p-4 bg-card/80 flex-1 shadow-sm duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+              <div className={`border border-teal-500/40 rounded-xl p-4 bg-card/90 flex-1 shadow-sm duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
                 <div className="bg-teal-500/10 border border-teal-500/25 text-center py-2 px-3 rounded-lg mb-4">
                   <div className="flex items-center justify-center gap-2 mb-1">
                     <Database className="w-4 h-4 text-teal-600 dark:text-teal-300" />
@@ -958,56 +1063,58 @@ export function ArchitectureDiagramContent({
                 <div className="flex flex-col gap-2">
                   {!isGenie && showBronze && (<>
                     <ServicePopover serviceKey="dataIngestion" position="top" block>
-                      <div className="bg-teal-900/40 rounded-lg px-3 py-2.5 border border-teal-400 hover:bg-teal-900/60 hover:border-teal-300 transition-all duration-200 hover:scale-105">
-                        <p className="text-ui-sm font-semibold text-teal-200 text-center">Data Ingestion Pipeline</p>
+                      <div className="bg-teal-500/12 dark:bg-teal-900/45 rounded-lg px-3 py-2.5 border border-teal-500/40 hover:bg-teal-500/20 dark:hover:bg-teal-900/65 hover:border-teal-400 transition-all duration-200">
+                        <p className="text-ui-sm font-semibold text-teal-800 dark:text-teal-200 text-center">Data Ingestion Pipeline</p>
                       </div>
                     </ServicePopover>
-                    <ArrowDown className="w-5 h-5 text-teal-400 mx-auto" />
+                    <ArrowDown className="w-5 h-5 text-teal-600 dark:text-teal-400 mx-auto" />
                     <ServicePopover serviceKey="bronze" position="left" block>
-                      <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                      <div className="bg-gradient-to-br from-orange-600 to-amber-700 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200">
                         <div className="flex items-center gap-2 mb-1">
-                          <Layers className="w-5 h-5 text-orange-100" />
+                          <Layers className="w-5 h-5 text-white" />
                           <p className="text-ui-base font-bold text-white">Bronze</p>
                         </div>
-                        <p className="text-ui-xs text-orange-200">Raw data</p>
+                        <p className="text-ui-xs text-white/90 font-medium">Raw data</p>
                       </div>
                     </ServicePopover>
                   </>)}
                   {!isGenie && showBronze && showSilver && (
-                    <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                    <ArrowDown className="w-4 h-4 text-muted-foreground mx-auto" />
                   )}
                   {!isGenie && showSilver && (<>
                     <ServicePopover serviceKey="sdp" position="left" block>
-                      <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5 hover:bg-teal-800/80 transition-all duration-200 hover:scale-105">
-                        <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP + Quality</p>
+                      <div className="bg-teal-500/12 dark:bg-teal-800/60 border border-teal-500/40 rounded-lg px-2.5 py-1.5 hover:bg-teal-500/20 dark:hover:bg-teal-800/80 transition-all duration-200">
+                        <p className="text-ui-xs font-semibold text-teal-800 dark:text-teal-200 text-center">SDP + Quality</p>
                       </div>
                     </ServicePopover>
-                    <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                    <ArrowDown className="w-4 h-4 text-muted-foreground mx-auto" />
                   </>)}
                   {showSilver && (
                     <ServicePopover serviceKey="silver" position="left" block>
-                      <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                      <div className="bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg p-3.5 shadow-lg hover:shadow-slate-400/30 hover:shadow-xl transition-all duration-200">
                         <div className="flex items-center gap-2 mb-1">
                           <Sparkles className="w-5 h-5 text-white" />
                           <p className="text-ui-base font-bold text-white">Silver</p>
                         </div>
-                        <p className="text-ui-xs text-slate-100">Cleaned data</p>
+                        <p className="text-ui-xs text-white/90 font-medium">Cleaned data</p>
                       </div>
                     </ServicePopover>
                   )}
                   {showGold && (<>
-                    {showSilver && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
-                    <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
-                      <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP Transform</p>
-                    </div>
-                    <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                    {showSilver && <ArrowDown className="w-4 h-4 text-muted-foreground mx-auto" />}
+                    <ServicePopover serviceKey="sdp" position="left" block>
+                      <div className="bg-teal-500/12 dark:bg-teal-800/60 border border-teal-500/40 rounded-lg px-2.5 py-1.5 hover:bg-teal-500/20 dark:hover:bg-teal-800/80 transition-all duration-200">
+                        <p className="text-ui-xs font-semibold text-teal-800 dark:text-teal-200 text-center">SDP Transform</p>
+                      </div>
+                    </ServicePopover>
+                    <ArrowDown className="w-4 h-4 text-muted-foreground mx-auto" />
                     <ServicePopover serviceKey="gold" position="left" block>
-                      <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                      <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-amber-400/30 hover:shadow-xl transition-all duration-200">
                         <div className="flex items-center gap-2 mb-1">
-                          <Zap className="w-5 h-5 text-yellow-100" />
+                          <Zap className="w-5 h-5 text-white" />
                           <p className="text-ui-base font-bold text-white">Gold</p>
                         </div>
-                        <p className="text-ui-xs text-yellow-100">Business ready</p>
+                        <p className="text-ui-xs text-white/90 font-medium">Business ready</p>
                       </div>
                     </ServicePopover>
                   </>)}
@@ -1016,11 +1123,11 @@ export function ArchitectureDiagramContent({
             )}
             {showLakehouse && showDataIntel && (
               <div className="flex flex-col items-center justify-center">
-                <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
+                <ChevronRight className="w-12 h-12 text-amber-500 dark:text-amber-400" strokeWidth={3} />
               </div>
             )}
             {dataIntelFade.shouldRender && (
-              <div className={`border border-sky-500/40 rounded-xl p-4 bg-card/80 flex-1 shadow-sm duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+              <div className={`border border-sky-500/40 rounded-xl p-4 bg-card/90 flex-1 shadow-sm duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
                 <div className="bg-sky-500/10 border border-sky-500/25 text-center py-2 px-3 rounded-lg mb-4">
                   <div className="flex items-center justify-center gap-2 mb-1">
                     {isAgentsAccelerator ? (
@@ -1036,22 +1143,22 @@ export function ArchitectureDiagramContent({
                 ) : (
                   <div className="flex flex-col gap-3">
                     {showGenieModule && (
-                      <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                        <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
+                      <div className="bg-amber-500/[0.06] dark:bg-slate-800 border-2 border-amber-500/50 rounded-lg p-3.5 shadow-sm">
+                        <p className="text-ui-base font-bold text-amber-800 dark:text-amber-300 mb-2">Genie</p>
                         <div className="space-y-1.5">
                           <ServicePopover serviceKey="tvf" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
+                            <div className="bg-amber-500/12 dark:bg-amber-900/35 rounded-lg px-2.5 py-1.5 border border-amber-500/35 hover:bg-amber-500/20 dark:hover:bg-amber-900/55 hover:border-amber-400 transition-all duration-200">
+                              <p className="text-ui-xs font-semibold text-amber-900 dark:text-amber-200">Table Value Functions</p>
                             </div>
                           </ServicePopover>
                           <ServicePopover serviceKey="metricViews" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
+                            <div className="bg-amber-500/12 dark:bg-amber-900/35 rounded-lg px-2.5 py-1.5 border border-amber-500/35 hover:bg-amber-500/20 dark:hover:bg-amber-900/55 hover:border-amber-400 transition-all duration-200">
+                              <p className="text-ui-xs font-semibold text-amber-900 dark:text-amber-200">Metric Views</p>
                             </div>
                           </ServicePopover>
                           <ServicePopover serviceKey="genieSpaces" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
+                            <div className="bg-amber-500/12 dark:bg-amber-900/35 rounded-lg px-2.5 py-1.5 border border-amber-500/35 hover:bg-amber-500/20 dark:hover:bg-amber-900/55 hover:border-amber-400 transition-all duration-200">
+                              <p className="text-ui-xs font-semibold text-amber-900 dark:text-amber-200">Genie Spaces</p>
                             </div>
                           </ServicePopover>
                         </div>
@@ -1060,14 +1167,14 @@ export function ArchitectureDiagramContent({
                     {!isGenie && (showDashboardModule || showAgentModule) && (<>
                       {showGenieModule && (
                         <div className="flex justify-center gap-2">
-                          {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
-                          {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                          {showDashboardModule && <ArrowDown className="w-4 h-4 text-emerald-500" />}
+                          {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-500" />}
                         </div>
                       )}
                       <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         {showDashboardModule && (
                           <ServicePopover serviceKey="aiBIDashboards" position="top" block>
-                            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-emerald-500/30 hover:shadow-xl transition-all duration-200">
                               <div className="flex flex-col items-center gap-1">
                                 <LayoutDashboard className="w-5 h-5 text-white" />
                                 <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
@@ -1077,7 +1184,7 @@ export function ArchitectureDiagramContent({
                         )}
                         {showAgentModule && (
                           <ServicePopover serviceKey="agents" position="top" block>
-                            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200">
                               <div className="flex flex-col items-center gap-1">
                                 <Bot className="w-5 h-5 text-white" />
                                 <p className="text-ui-sm font-bold text-white text-center">Agent</p>
@@ -1112,65 +1219,54 @@ export function ArchitectureDiagramContent({
               <p className="text-ui-xs text-muted-foreground">AI and Agents</p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              <p className="text-ui-xs text-muted-foreground">Click for details</p>
+              <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <p className="text-ui-xs text-muted-foreground">Click any glowing tile for details</p>
             </div>
           </div>
 
           {hasAnyObjectives && (
-            <div className="mt-5 flex gap-4 justify-center">
-              {appLakebaseFade.shouldRender && leftObjectives.length > 0 && (
-                <div className={`w-[13.75rem] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
-                  <div className="rounded-lg bg-card/60 border border-[#FF3621]/20 p-3">
-                    <ul className="space-y-1.5">
-                      {leftObjectives.map((obj, idx) => (
-                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
-                          style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}>
-                          <span className="text-[#FF3621]/70 mt-0.5 shrink-0">&#x2022;</span>
-                          <span>{obj.content}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {showAppLakebase && leftObjectives.length > 0 && (showLakehouse || showDataIntel) && (
-                <div className="w-12 flex-shrink-0" />
-              )}
-              {lakehouseFade.shouldRender && middleObjectives.length > 0 && (
-                <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
-                  <div className="rounded-lg bg-card/60 border border-teal-500/20 p-3">
-                    <ul className="space-y-1.5">
-                      {middleObjectives.map((obj, idx) => (
-                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
-                          style={{ transitionDelay: bulletsRevealed ? `${(middleStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}>
-                          <span className="text-teal-400/70 mt-0.5 shrink-0">&#x2022;</span>
-                          <span>{obj.content}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {showLakehouse && middleObjectives.length > 0 && showDataIntel && rightObjectives.length > 0 && (
-                <div className="w-12 flex-shrink-0" />
-              )}
-              {dataIntelFade.shouldRender && rightObjectives.length > 0 && (
-                <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
-                  <div className="rounded-lg bg-card/60 border border-blue-500/20 p-3">
-                    <ul className="space-y-1.5">
-                      {rightObjectives.map((obj, idx) => (
-                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
-                          style={{ transitionDelay: bulletsRevealed ? `${(rightStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}>
-                          <span className="text-blue-400/70 mt-0.5 shrink-0">&#x2022;</span>
-                          <span>{obj.content}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </div>
+            <UnifiedWhatYoullBuild
+              workshopLevel={workshopLevel}
+              bulletsRevealed={bulletsRevealed}
+              stages={[
+                ...(appLakebaseFade.shouldRender && leftObjectives.length > 0
+                  ? [{
+                      id: 'forward-app-db',
+                      title: visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase',
+                      icon: <Globe className="w-3.5 h-3.5 text-[#FF3621]" />,
+                      accentBorder: 'border-[#FF3621]/30',
+                      accentHeaderBg: 'bg-[#FF3621]/12',
+                      accentBadge: 'bg-[#FF3621]/12 text-[#c72d1b] dark:text-[#ff806f]',
+                      accentCheck: 'text-[#FF3621]',
+                      items: leftObjectives,
+                    }]
+                  : []),
+                ...(lakehouseFade.shouldRender && middleObjectives.length > 0
+                  ? [{
+                      id: 'forward-lakehouse',
+                      title: 'Lakehouse Foundation',
+                      icon: <Database className="w-3.5 h-3.5 text-teal-600 dark:text-teal-300" />,
+                      accentBorder: 'border-teal-500/30',
+                      accentHeaderBg: 'bg-teal-500/12',
+                      accentBadge: 'bg-teal-500/12 text-teal-700 dark:text-teal-300',
+                      accentCheck: 'text-teal-600 dark:text-teal-400',
+                      items: middleObjectives,
+                    }]
+                  : []),
+                ...(dataIntelFade.shouldRender && rightObjectives.length > 0
+                  ? [{
+                      id: 'forward-ai-agents',
+                      title: isAgentsAccelerator ? 'Mosaic AI Agent' : 'AI & Agents',
+                      icon: <Brain className="w-3.5 h-3.5 text-sky-600 dark:text-sky-300" />,
+                      accentBorder: 'border-sky-500/30',
+                      accentHeaderBg: 'bg-sky-500/12',
+                      accentBadge: 'bg-sky-500/12 text-sky-700 dark:text-sky-300',
+                      accentCheck: 'text-sky-600 dark:text-sky-400',
+                      items: rightObjectives,
+                    }]
+                  : []),
+              ]}
+            />
           )}
         </div>
           </div>
@@ -1181,7 +1277,7 @@ export function ArchitectureDiagramContent({
               <div className="relative flex items-stretch gap-4 justify-center">
                 {/* LEFT (Genie, Lakehouse off): start from existing / uploaded / synthetic data */}
                 {isGenie && !showLakehouse && (
-                  <div className="border border-teal-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm">
+                  <div className="border border-teal-500/40 rounded-xl p-4 bg-card/90 flex-1 min-w-0 shadow-sm">
                     <div className="bg-teal-500/10 border border-teal-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
                         <Database className="w-4 h-4 text-teal-600 dark:text-teal-300" />
@@ -1202,7 +1298,7 @@ export function ArchitectureDiagramContent({
 
                 {/* LEFT: Lakehouse */}
                 {lakehouseFade.shouldRender && (
-                  <div className={`border border-teal-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                  <div className={`border border-teal-500/40 rounded-xl p-4 bg-card/90 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
                     <div className="bg-teal-500/10 border border-teal-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
                         <Database className="w-4 h-4 text-teal-600 dark:text-teal-300" />
@@ -1212,36 +1308,36 @@ export function ArchitectureDiagramContent({
                     <div className="flex flex-col gap-2">
                       {showBronze && (
                         <ServicePopover serviceKey="bronze" position="left" block>
-                          <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="bg-gradient-to-br from-orange-600 to-amber-700 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200">
                             <div className="flex items-center gap-2 mb-1">
-                              <Layers className="w-5 h-5 text-orange-100" />
+                              <Layers className="w-5 h-5 text-white" />
                               <p className="text-[13px] font-bold text-white">Bronze</p>
                             </div>
-                            <p className="text-[11px] text-orange-200">Raw data</p>
+                            <p className="text-[11px] text-white/90 font-medium">Raw data</p>
                           </div>
                         </ServicePopover>
                       )}
-                      {showBronze && showSilver && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
+                      {showBronze && showSilver && <ArrowDown className="w-4 h-4 text-muted-foreground mx-auto" />}
                       {showSilver && (
                         <ServicePopover serviceKey="silver" position="left" block>
-                          <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="bg-gradient-to-br from-slate-600 to-slate-700 rounded-lg p-3.5 shadow-lg hover:shadow-slate-400/30 hover:shadow-xl transition-all duration-200">
                             <div className="flex items-center gap-2 mb-1">
                               <Sparkles className="w-5 h-5 text-white" />
                               <p className="text-[13px] font-bold text-white">Silver</p>
                             </div>
-                            <p className="text-[11px] text-slate-100">Cleaned data</p>
+                            <p className="text-[11px] text-white/90 font-medium">Cleaned data</p>
                           </div>
                         </ServicePopover>
                       )}
-                      {showSilver && showGold && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
+                      {showSilver && showGold && <ArrowDown className="w-4 h-4 text-muted-foreground mx-auto" />}
                       {showGold && (
                         <ServicePopover serviceKey="gold" position="left" block>
-                          <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-amber-400/30 hover:shadow-xl transition-all duration-200">
                             <div className="flex items-center gap-2 mb-1">
-                              <Zap className="w-5 h-5 text-yellow-100" />
+                              <Zap className="w-5 h-5 text-white" />
                               <p className="text-[13px] font-bold text-white">Gold</p>
                             </div>
-                            <p className="text-[11px] text-yellow-100">Business ready</p>
+                            <p className="text-[11px] text-white/90 font-medium">Business ready</p>
                           </div>
                         </ServicePopover>
                       )}
@@ -1258,7 +1354,7 @@ export function ArchitectureDiagramContent({
 
                 {/* MIDDLE: AI and Agents */}
                 {dataIntelFade.shouldRender && (
-                  <div className={`border border-sky-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                  <div className={`border border-sky-500/40 rounded-xl p-4 bg-card/90 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
                     <div className="bg-sky-500/10 border border-sky-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
                         <Brain className="w-4 h-4 text-sky-600 dark:text-sky-300" />
@@ -1270,22 +1366,22 @@ export function ArchitectureDiagramContent({
                     ) : (
                     <div className="flex flex-col gap-3">
                       {showGenieModule && (
-                        <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                          <p className="text-[13px] font-bold text-amber-300 mb-2">Genie</p>
+                        <div className="bg-amber-500/[0.06] dark:bg-slate-800 border-2 border-amber-500/50 rounded-lg p-3.5 shadow-sm">
+                          <p className="text-[13px] font-bold text-amber-800 dark:text-amber-300 mb-2">Genie</p>
                           <div className="space-y-1.5">
                             <ServicePopover serviceKey="tvf" position="left" block>
-                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                <p className="text-[11px] font-semibold text-amber-200">Table Value Functions</p>
+                              <div className="bg-amber-500/12 dark:bg-amber-900/35 rounded-lg px-2.5 py-1.5 border border-amber-500/35 hover:bg-amber-500/20 dark:hover:bg-amber-900/55 hover:border-amber-400 transition-all duration-200">
+                                <p className="text-[11px] font-semibold text-amber-900 dark:text-amber-200">Table Value Functions</p>
                               </div>
                             </ServicePopover>
                             <ServicePopover serviceKey="metricViews" position="left" block>
-                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                <p className="text-[11px] font-semibold text-amber-200">Metric Views</p>
+                              <div className="bg-amber-500/12 dark:bg-amber-900/35 rounded-lg px-2.5 py-1.5 border border-amber-500/35 hover:bg-amber-500/20 dark:hover:bg-amber-900/55 hover:border-amber-400 transition-all duration-200">
+                                <p className="text-[11px] font-semibold text-amber-900 dark:text-amber-200">Metric Views</p>
                               </div>
                             </ServicePopover>
                             <ServicePopover serviceKey="genieSpaces" position="left" block>
-                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                <p className="text-[11px] font-semibold text-amber-200">Genie Spaces</p>
+                              <div className="bg-amber-500/12 dark:bg-amber-900/35 rounded-lg px-2.5 py-1.5 border border-amber-500/35 hover:bg-amber-500/20 dark:hover:bg-amber-900/55 hover:border-amber-400 transition-all duration-200">
+                                <p className="text-[11px] font-semibold text-amber-900 dark:text-amber-200">Genie Spaces</p>
                               </div>
                             </ServicePopover>
                           </div>
@@ -1294,14 +1390,14 @@ export function ArchitectureDiagramContent({
                       {(showDashboardModule || showAgentModule) && (<>
                         {showGenieModule && (
                           <div className="flex justify-center gap-2">
-                            {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
-                            {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                            {showDashboardModule && <ArrowDown className="w-4 h-4 text-emerald-500" />}
+                            {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-500" />}
                           </div>
                         )}
                         <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
                           {showDashboardModule && (
                             <ServicePopover serviceKey="aiBIDashboards" position="top" block>
-                              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                              <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-emerald-500/30 hover:shadow-xl transition-all duration-200">
                                 <div className="flex flex-col items-center gap-1">
                                   <LayoutDashboard className="w-5 h-5 text-white" />
                                   <p className="text-[11px] font-bold text-white text-center">AI/BI Dashboards</p>
@@ -1311,7 +1407,7 @@ export function ArchitectureDiagramContent({
                           )}
                           {showAgentModule && (
                             <ServicePopover serviceKey="agents" position="top" block>
-                              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200">
                                 <div className="flex flex-col items-center gap-1">
                                   <Bot className="w-5 h-5 text-white" />
                                   <p className="text-[11px] font-bold text-white text-center">Agent</p>
@@ -1344,7 +1440,7 @@ export function ArchitectureDiagramContent({
 
                 {/* RIGHT: App & Database */}
                 {appLakebaseFade.shouldRender && (
-                  <div className={`border border-emerald-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                  <div className={`border border-emerald-500/40 rounded-xl p-4 bg-card/90 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
                     <div className="bg-emerald-500/10 border border-emerald-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
                         {visibility.ch2 && <HardDrive className="w-4 h-4 text-emerald-600 dark:text-emerald-300" />}
@@ -1357,25 +1453,25 @@ export function ArchitectureDiagramContent({
                     <div className="flex flex-col items-center gap-3">
                       {visibility.ch2 && (
                         <ServicePopover serviceKey="lakebase" position="left" block>
-                          <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200">
                             <div className="flex flex-col items-center gap-1.5">
                               <HardDrive className="w-7 h-7 text-white" />
                               <p className="text-ui-base font-bold text-white">Lakebase</p>
-                              <p className="text-ui-3xs text-violet-200">Synced Tables</p>
+                              <p className="text-ui-3xs text-white/90 font-medium">Synced Tables</p>
                             </div>
                           </div>
                         </ServicePopover>
                       )}
                       {visibility.ch1 && visibility.ch2 && (
-                        <ArrowDown className="w-4 h-4 text-emerald-400" />
+                        <ArrowDown className="w-4 h-4 text-emerald-500" />
                       )}
                       {visibility.ch1 && (
                         <ServicePopover serviceKey="databricksApp" position="left" block>
-                          <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200">
                             <div className="flex flex-col items-center gap-1.5">
                               <Globe className="w-7 h-7 text-white" />
                               <p className="text-ui-base font-bold text-white">Analytics App</p>
-                              <span className="inline-flex items-center gap-1 text-ui-3xs font-medium text-blue-100 bg-blue-950/25 border border-blue-200/30 rounded-full px-2 py-0.5">
+                              <span className="inline-flex items-center gap-1 text-ui-3xs font-semibold text-white bg-black/25 border border-white/30 rounded-full px-2 py-0.5">
                                 <Sparkles className="w-2.5 h-2.5" />
                                 Genie Embedded
                               </span>
@@ -1404,7 +1500,7 @@ export function ArchitectureDiagramContent({
                   <p className="text-ui-xs text-muted-foreground">AI and Agents</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <Sparkles className="w-4 h-4 text-amber-500" />
                   <p className="text-ui-xs text-muted-foreground">{isGenie ? 'Genie Agent' : 'Genie Spaces'}</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1421,84 +1517,63 @@ export function ArchitectureDiagramContent({
                 </div>
               </div>
 
-              {/* Column-aligned reverse learning objectives */}
-              <div className="mt-5 flex gap-4 justify-center">
-                {/* Left: Lakehouse objectives */}
-                {lakehouseFade.shouldRender && REVERSE_LAKEHOUSE_OBJECTIVES.length > 0 && (
-                  <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
-                    <div className="rounded-lg bg-card/60 border border-teal-500/20 p-3">
-                      <ul className="space-y-1.5">
-                        {REVERSE_LAKEHOUSE_OBJECTIVES.map((obj, idx) => (
-                          <li
-                            key={obj.id}
-                            className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${
-                              bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
-                            }`}
-                            style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}
-                          >
-                            <span className="text-teal-400/70 mt-0.5 shrink-0">&#x2022;</span>
-                            <span>{obj.content}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-
-                {/* Spacer */}
-                {showLakehouse && showDataIntel && (
-                  <div className="w-12 flex-shrink-0" />
-                )}
-
-                {/* Middle: AI and Agents objectives */}
-                {dataIntelFade.shouldRender && reverseDiObjectives.length > 0 && (
-                  <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
-                    <div className="rounded-lg bg-card/60 border border-blue-500/20 p-3">
-                      <ul className="space-y-1.5">
-                        {reverseDiObjectives.map((obj, idx) => (
-                          <li
-                            key={obj.id}
-                            className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${
-                              bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
-                            }`}
-                            style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
-                          >
-                            <span className="text-blue-400/70 mt-0.5 shrink-0">&#x2022;</span>
-                            <span>{obj.content}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-
-                {/* Spacer */}
-                {showDataIntel && showAppLakebase && (
-                  <div className="w-12 flex-shrink-0" />
-                )}
-
-                {/* Right: Activation / App & Database objectives */}
-                {appLakebaseFade.shouldRender && reverseActivationObjectives.length > 0 && (
-                  <div className={`flex-1 min-w-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
-                    <div className="rounded-lg bg-card/60 border border-emerald-500/20 p-3">
-                      <ul className="space-y-1.5">
-                        {reverseActivationObjectives.map((obj, idx) => (
-                          <li
-                            key={obj.id}
-                            className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${
-                              bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
-                            }`}
-                            style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + reverseDiObjectives.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
-                          >
-                            <span className="text-emerald-400/70 mt-0.5 shrink-0">&#x2022;</span>
-                            <span>{obj.content}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Unified Reverse / Genie What You'll Build */}
+              <UnifiedWhatYoullBuild
+                workshopLevel={workshopLevel}
+                bulletsRevealed={bulletsRevealed}
+                stages={[
+                  ...(lakehouseFade.shouldRender && REVERSE_LAKEHOUSE_OBJECTIVES.length > 0
+                    ? [{
+                        id: 'reverse-lakehouse',
+                        title: 'Lakehouse Foundation',
+                        icon: <Database className="w-3.5 h-3.5 text-teal-600 dark:text-teal-300" />,
+                        accentBorder: 'border-teal-500/30',
+                        accentHeaderBg: 'bg-teal-500/12',
+                        accentBadge: 'bg-teal-500/12 text-teal-700 dark:text-teal-300',
+                        accentCheck: 'text-teal-600 dark:text-teal-400',
+                        items: REVERSE_LAKEHOUSE_OBJECTIVES,
+                      }]
+                    : isGenie && !showLakehouse
+                      ? [{
+                          id: 'genie-datasource',
+                          title: 'Data Foundation',
+                          icon: <Database className="w-3.5 h-3.5 text-teal-600 dark:text-teal-300" />,
+                          accentBorder: 'border-teal-500/30',
+                          accentHeaderBg: 'bg-teal-500/12',
+                          accentBadge: 'bg-teal-500/12 text-teal-700 dark:text-teal-300',
+                          accentCheck: 'text-teal-600 dark:text-teal-400',
+                          items: [
+                            { id: 'gd1', content: <>Locate your <strong className="text-foreground">existing, uploaded, or synthetic</strong> Unity Catalog tables</> },
+                            { id: 'gd2', content: <>Validate grain, primary keys, and joins for <strong className="text-foreground">Metric View</strong> modeling</> },
+                          ],
+                        }]
+                      : []),
+                  ...(dataIntelFade.shouldRender && reverseDiObjectives.length > 0
+                    ? [{
+                        id: 'reverse-di',
+                        title: isGenie ? 'Semantic Layer & Genie' : 'AI & Semantic Layer',
+                        icon: <Brain className="w-3.5 h-3.5 text-sky-600 dark:text-sky-300" />,
+                        accentBorder: 'border-sky-500/30',
+                        accentHeaderBg: 'bg-sky-500/12',
+                        accentBadge: 'bg-sky-500/12 text-sky-700 dark:text-sky-300',
+                        accentCheck: 'text-sky-600 dark:text-sky-400',
+                        items: reverseDiObjectives,
+                      }]
+                    : []),
+                  ...(appLakebaseFade.shouldRender && reverseActivationObjectives.length > 0
+                    ? [{
+                        id: 'reverse-activation',
+                        title: isGenie ? 'App & Lakebase Activation' : 'Reverse ETL & App',
+                        icon: <Globe className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300" />,
+                        accentBorder: 'border-emerald-500/30',
+                        accentHeaderBg: 'bg-emerald-500/12',
+                        accentBadge: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
+                        accentCheck: 'text-emerald-600 dark:text-emerald-400',
+                        items: reverseActivationObjectives,
+                      }]
+                    : []),
+                ]}
+              />
             </div>
           </div>
         </div>
@@ -1511,9 +1586,6 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const [prevForceCollapsed, setPrevForceCollapsed] = useState(forceCollapsed);
 
-  // Staggered bullet reveal
-  const [bulletsRevealed, setBulletsRevealed] = useState(false);
-
   // When forceCollapsed transitions to true, reset override so auto-collapse kicks in
   if (forceCollapsed !== prevForceCollapsed) {
     setPrevForceCollapsed(forceCollapsed);
@@ -1522,70 +1594,6 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
 
   const autoExpanded = !forceCollapsed;
   const isExpanded = userOverride !== null ? userOverride : autoExpanded;
-
-  // Re-stagger bullets when workshop level changes: hide them during render,
-  // then the effect below reveals them two frames later (also on initial mount).
-  const [revealedForLevel, setRevealedForLevel] = useState(workshopLevel);
-  if (revealedForLevel !== workshopLevel) {
-    setRevealedForLevel(workshopLevel);
-    setBulletsRevealed(false);
-  }
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setBulletsRevealed(true);
-      });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [workshopLevel]);
-
-  // Compute visibility directly from workshopLevel (no delayed rendering)
-  const visibility = ARCH_VISIBILITY[workshopLevel];
-  const showAppLakebase = visibility.ch1 || visibility.ch2;
-  const showLakehouse = visibility.ch3;
-  const showDataIntel = visibility.ch4;
-  const isGenie = workshopLevel === 'genie-accelerator';
-  const isAgentsAccelerator = workshopLevel === 'agents-accelerator';
-  // Standalone ArchitectureDiagram has no aiAgentsModules / medallionLayers prop
-  // wiring; default to all-on so existing callers render unchanged. Agents
-  // Accelerator forces Bronze-only and a custom ch4 layout.
-  const showGenieModule = true;
-  const showAgentModule = true;
-  const showDashboardModule = true;
-  const showBronze = true;
-  const showSilver = !isAgentsAccelerator;
-  const showGold = !isAgentsAccelerator;
-
-  // Per-column fade transitions (transparent ↔ solid)
-  const appLakebaseFade = useFadeTransition(showAppLakebase);
-  const lakehouseFade = useFadeTransition(showLakehouse);
-  const dataIntelFade = useFadeTransition(showDataIntel);
-
-  // Group objectives by architecture column
-  const visibleChapters = CHAPTER_VISIBILITY[workshopLevel];
-  const leftObjectives = LEARNING_OBJECTIVES.filter(obj =>
-    obj.chapters.some(ch => (ch === 'ch1' || ch === 'ch2') && visibleChapters.has(ch))
-  );
-  const middleObjectives = isAgentsAccelerator
-    ? (visibleChapters.has('ch3') ? AGENTS_MIDDLE_OBJECTIVES : [])
-    : LEARNING_OBJECTIVES.filter(obj =>
-        obj.chapters.some(ch => ch === 'ch3' && visibleChapters.has(ch))
-      );
-  const rightObjectives = isAgentsAccelerator
-    ? (visibleChapters.has('ch4') ? AGENTS_RIGHT_OBJECTIVES : [])
-    : isGenie
-    ? (visibleChapters.has('ch4') ? GENIE_RIGHT_OBJECTIVES : [])
-    : LEARNING_OBJECTIVES.filter(obj =>
-        obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
-      );
-  const middleStaggerOffset = leftObjectives.length;
-  const rightStaggerOffset = leftObjectives.length + middleObjectives.length;
-  const hasAnyObjectives = leftObjectives.length > 0 || middleObjectives.length > 0 || rightObjectives.length > 0;
-
-  // Transition class helper
-  const fadeClass = (isVisible: boolean) =>
-    `transition-all ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`;
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
@@ -1613,377 +1621,10 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
 
       {/* Collapsible Content */}
       <div className={`transition-all duration-300 ease-in-out ${
-        isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+        isExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
       }`}>
         <div className="px-4 pb-4">
-          {/* Interactive hint */}
-          <div className="mb-3 flex items-center justify-center gap-2 text-ui-sm text-slate-400">
-            <Info className="w-3.5 h-3.5 text-blue-400" />
-            <span>Click on any service to learn more about it</span>
-          </div>
-          
-          {/* Architecture Diagram Container */}
-          <div className="w-full bg-slate-900 p-8 rounded-xl">
-            <div className="max-w-6xl mx-auto">
-              {/* Main Flow - Horizontal layout with proper sizing, centered */}
-              <div className="relative flex items-stretch gap-4 justify-center">
-                
-                {/* LEFT SECTION: App & Lakebase - Stacked vertically */}
-                {appLakebaseFade.shouldRender && (
-                  <div
-                    className={`border-2 border-[#FF3621]/60 rounded-xl p-4 bg-slate-800/50 w-[13.75rem] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}
-                  >
-                    <div className="bg-[#FF3621] text-center py-2 px-3 rounded-lg mb-4">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        {visibility.ch1 && <Globe className="w-4 h-4 text-white" />}
-                        {visibility.ch2 && <HardDrive className="w-4 h-4 text-white" />}
-                      </div>
-                      <p className="text-ui-base font-bold text-white">
-                        {visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
-                      </p>
-                    </div>
-                    
-                    <div className="flex flex-col items-center gap-3">
-                      {/* User */}
-                      <div className="w-16 h-16 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg shadow-lg flex items-center justify-center">
-                        <Users className="w-8 h-8 text-white" />
-                      </div>
-                      <p className="text-ui-base font-semibold text-slate-200">User</p>
-                      
-                      <ArrowDown className="w-5 h-5 text-slate-400" />
-                      
-                      {/* Databricks App UI */}
-                      {visibility.ch1 && (
-                        <ServicePopover serviceKey="databricksApp" position="right" block>
-                          <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                            <div className="flex flex-col items-center gap-1.5">
-                              <Globe className="w-7 h-7 text-white" />
-                              <p className="text-ui-base font-bold text-white text-center">Databricks App</p>
-                            </div>
-                          </div>
-                        </ServicePopover>
-                      )}
-                      
-                      {/* Bidirectional Arrow - only if both visible */}
-                      {visibility.ch1 && visibility.ch2 && (
-                        <div className="flex items-center gap-1">
-                          <ArrowDown className="w-4 h-4 text-violet-400" />
-                          <ArrowLeftRight className="w-4 h-4 text-violet-400" />
-                        </div>
-                      )}
-                      
-                      {/* Lakebase */}
-                      {visibility.ch2 && (
-                        <ServicePopover serviceKey="lakebase" position="right" block>
-                          <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                            <div className="flex flex-col items-center gap-1.5">
-                              <HardDrive className="w-7 h-7 text-white" />
-                              <p className="text-ui-base font-bold text-white">Lakebase</p>
-                            </div>
-                          </div>
-                        </ServicePopover>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Large Arrow from App/Lakebase to Lakehouse */}
-                {showAppLakebase && showLakehouse && (
-                  <div className="flex flex-col items-center justify-center">
-                    <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
-                  </div>
-                )}
-
-                {/* Arrow from App/Lakebase to AI and Agents (when no Lakehouse) */}
-                {showAppLakebase && !showLakehouse && showDataIntel && (
-                  <div className="flex flex-col items-center justify-center">
-                    <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
-                  </div>
-                )}
-
-                {/* MIDDLE SECTION: Lakehouse - Full height */}
-                {lakehouseFade.shouldRender && (
-                  <div
-                    className={`border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}
-                  >
-                    <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <Database className="w-4 h-4 text-white" />
-                      </div>
-                      <p className="text-ui-base font-bold text-white">Lakehouse</p>
-                    </div>
-                    
-                    <div className="flex flex-col gap-2">
-                      {/* Data Ingestion + Bronze tile -- hidden for Genie Accelerator and Bronze chip */}
-                      {!isGenie && showBronze && (<>
-                        <ServicePopover serviceKey="dataIngestion" position="top" block>
-                          <div className="bg-teal-900/40 rounded-lg px-3 py-2.5 border border-teal-400 hover:bg-teal-900/60 hover:border-teal-300 transition-all duration-200 hover:scale-105">
-                            <p className="text-ui-sm font-semibold text-teal-200 text-center">Data Ingestion Pipeline</p>
-                          </div>
-                        </ServicePopover>
-                        
-                        <ArrowDown className="w-5 h-5 text-teal-400 mx-auto" />
-                        
-                        <ServicePopover serviceKey="bronze" position="left" block>
-                          <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Layers className="w-5 h-5 text-orange-100" />
-                              <p className="text-ui-base font-bold text-white">Bronze</p>
-                            </div>
-                            <p className="text-ui-xs text-orange-200">Raw data</p>
-                          </div>
-                        </ServicePopover>
-                      </>)}
-
-                      {/* Bronze -> Silver connector arrow */}
-                      {!isGenie && showBronze && showSilver && (
-                        <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                      )}
-
-                      {/* SDP + Quality (Silver-owned, but skipped on Genie Accelerator) */}
-                      {!isGenie && showSilver && (<>
-                        <ServicePopover serviceKey="sdp" position="left" block>
-                          <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5 hover:bg-teal-800/80 transition-all duration-200 hover:scale-105">
-                            <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP + Quality</p>
-                          </div>
-                        </ServicePopover>
-                        
-                        <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                      </>)}
-                      
-                      {/* Silver tile */}
-                      {showSilver && (
-                        <ServicePopover serviceKey="silver" position="left" block>
-                          <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Sparkles className="w-5 h-5 text-white" />
-                              <p className="text-ui-base font-bold text-white">Silver</p>
-                            </div>
-                            <p className="text-ui-xs text-slate-100">Cleaned data</p>
-                          </div>
-                        </ServicePopover>
-                      )}
-                      
-                      {/* SDP Transform + Gold tile (Gold-owned) */}
-                      {showGold && (<>
-                        {showSilver && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
-
-                        <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
-                          <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP Transform</p>
-                        </div>
-                        
-                        <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                        
-                        <ServicePopover serviceKey="gold" position="left" block>
-                          <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Zap className="w-5 h-5 text-yellow-100" />
-                              <p className="text-ui-base font-bold text-white">Gold</p>
-                            </div>
-                            <p className="text-ui-xs text-yellow-100">Business ready</p>
-                          </div>
-                        </ServicePopover>
-                      </>)}
-                    </div>
-                  </div>
-                )}
-
-                {/* Large Arrow from Lakehouse to AI and Agents */}
-                {showLakehouse && showDataIntel && (
-                  <div className="flex flex-col items-center justify-center">
-                    <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
-                  </div>
-                )}
-
-                {/* RIGHT SECTION: AI and Agents (or "Agent" for the Agents Accelerator) - Full height */}
-                {dataIntelFade.shouldRender && (
-                  <div
-                    className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}
-                  >
-                    <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        {isAgentsAccelerator ? (
-                          <Bot className="w-4 h-4 text-white" />
-                        ) : (
-                          <Brain className="w-4 h-4 text-white" />
-                        )}
-                      </div>
-                      <p className="text-ui-base font-bold text-white">{isAgentsAccelerator ? 'Agent' : 'AI and Agents'}</p>
-                    </div>
-
-                    {isAgentsAccelerator ? (
-                      <AgentsAcceleratorPanel mlflowFaded={false} />
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {/* Genie module (TVF / Metric Views / Genie Spaces) */}
-                        {showGenieModule && (
-                          <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                            <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
-                            <div className="space-y-1.5">
-                              <ServicePopover serviceKey="tvf" position="left" block>
-                                <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                  <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
-                                </div>
-                              </ServicePopover>
-                              <ServicePopover serviceKey="metricViews" position="left" block>
-                                <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                  <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
-                                </div>
-                              </ServicePopover>
-                              <ServicePopover serviceKey="genieSpaces" position="left" block>
-                                <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                  <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
-                                </div>
-                              </ServicePopover>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* AI/BI Dashboards + Agent -- hidden for Genie Accelerator and gated by chips */}
-                        {!isGenie && (showDashboardModule || showAgentModule) && (<>
-                          {showGenieModule && (
-                            <div className="flex justify-center gap-2">
-                              {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
-                              {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
-                            </div>
-                          )}
-
-                          <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                            {showDashboardModule && (
-                              <ServicePopover serviceKey="aiBIDashboards" position="top" block>
-                                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                                  <div className="flex flex-col items-center gap-1">
-                                    <LayoutDashboard className="w-5 h-5 text-white" />
-                                    <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
-                                  </div>
-                                </div>
-                              </ServicePopover>
-                            )}
-
-                            {showAgentModule && (
-                              <ServicePopover serviceKey="agents" position="top" block>
-                                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                                  <div className="flex flex-col items-center gap-1">
-                                    <Bot className="w-5 h-5 text-white" />
-                                    <p className="text-ui-sm font-bold text-white text-center">Agent</p>
-                                  </div>
-                                </div>
-                              </ServicePopover>
-                            )}
-                          </div>
-                        </>)}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Legend */}
-              <div className="mt-6 flex flex-wrap justify-center gap-5 md:gap-8">
-                <div className="flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-[#FF3621]" />
-                  <p className="text-ui-xs text-slate-400">Databricks Apps</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-violet-500" />
-                  <p className="text-ui-xs text-slate-400">Lakebase</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-teal-500" />
-                  <p className="text-ui-xs text-slate-400">Lakehouse</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-blue-500" />
-                  <p className="text-ui-xs text-slate-400">AI and Agents</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                  <p className="text-ui-xs text-slate-400">Click for details</p>
-                </div>
-              </div>
-
-              {/* Column-aligned learning objectives -- text boxes below each section */}
-              {hasAnyObjectives && (
-                <div className="mt-5 flex gap-4 justify-center">
-                  {/* Left: App & Database objectives */}
-                  {appLakebaseFade.shouldRender && leftObjectives.length > 0 && (
-                    <div className={`w-[13.75rem] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
-                      <div className="rounded-lg bg-slate-800/40 border border-[#FF3621]/20 p-3">
-                        <ul className="space-y-1.5">
-                          {leftObjectives.map((obj, idx) => (
-                            <li
-                              key={obj.id}
-                              className={`flex items-start gap-1.5 text-ui-xs text-slate-300 transition-all duration-300 ease-out ${
-                                bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
-                              }`}
-                              style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}
-                            >
-                              <span className="text-[#FF3621]/70 mt-0.5 shrink-0">&#x2022;</span>
-                              <span>{obj.content}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Spacer matching arrow between left and next section */}
-                  {showAppLakebase && leftObjectives.length > 0 && (showLakehouse || showDataIntel) && (
-                    <div className="w-12 flex-shrink-0" />
-                  )}
-
-                  {/* Middle: Lakehouse objectives */}
-                  {lakehouseFade.shouldRender && middleObjectives.length > 0 && (
-                    <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
-                      <div className="rounded-lg bg-slate-800/40 border border-teal-500/20 p-3">
-                        <ul className="space-y-1.5">
-                          {middleObjectives.map((obj, idx) => (
-                            <li
-                              key={obj.id}
-                              className={`flex items-start gap-1.5 text-ui-xs text-slate-300 transition-all duration-300 ease-out ${
-                                bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
-                              }`}
-                              style={{ transitionDelay: bulletsRevealed ? `${(middleStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
-                            >
-                              <span className="text-teal-400/70 mt-0.5 shrink-0">&#x2022;</span>
-                              <span>{obj.content}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Spacer matching arrow between middle and right */}
-                  {showLakehouse && middleObjectives.length > 0 && showDataIntel && rightObjectives.length > 0 && (
-                    <div className="w-12 flex-shrink-0" />
-                  )}
-
-                  {/* Right: AI and Agents objectives */}
-                  {dataIntelFade.shouldRender && rightObjectives.length > 0 && (
-                    <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
-                      <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
-                        <ul className="space-y-1.5">
-                          {rightObjectives.map((obj, idx) => (
-                            <li
-                              key={obj.id}
-                              className={`flex items-start gap-1.5 text-ui-xs text-slate-300 transition-all duration-300 ease-out ${
-                                bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
-                              }`}
-                              style={{ transitionDelay: bulletsRevealed ? `${(rightStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
-                            >
-                              <span className="text-blue-400/70 mt-0.5 shrink-0">&#x2022;</span>
-                              <span>{obj.content}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <ArchitectureDiagramContent workshopLevel={workshopLevel} />
 
           {onStartBuild && (
             <div className="flex justify-end mt-4">

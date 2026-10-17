@@ -1,14 +1,11 @@
-// Node tests for genie-default-ontology PR 3 (web UI): new sessions start on the
-// facilitator's default track with its ontology default, persisted at creation
-// so a reload shows the same thing (R2/R3); an assistant pick doesn't move a new
-// session off it (F-Q8); a failed config fetch falls back to Genie Accelerator
-// with ontology on; and the session's stored `view` marker decides which view
-// it reopens in (D-143).
+// Node tests for workshop session defaults, per-assistant track defaults,
+// and Define Your Intent defaults:
+// - Standard coding assistants default to `end-to-end` (Complete Workshop)
+// - Genie Code defaults specifically to `genie-accelerator` (with ontology from facilitator switch)
+// - Recommended track badge defaults to `genie-accelerator` (configurable via /config/workshop-defaults)
+// - Define Your Intent always defaults to `library` mode ("Choose from Library" -> Sample / Booking App)
 //
 // Run: node --experimental-strip-types --test tests/frontend/genieDefaultSession.node.test.ts
-//
-// App.tsx is too large to load here, so its wiring is checked statically, the
-// way ConnectToGenieCodePanel.node.test.ts checks WorkflowDiagram.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,10 +18,14 @@ import { loadComponentModule } from './loadComponent.ts';
 type ClientModule = typeof import('../../src/api/client.ts');
 type ViewModule = typeof import('../../src/hooks/useWorkflowViewMode.ts');
 type RestoreModule = typeof import('../../src/constants/restoreLevel.ts');
+type AssistantsModule = typeof import('../../src/constants/codingAssistants.ts');
+type SectionsModule = typeof import('../../src/constants/workflowSections.ts');
 
 const client = await loadComponentModule<ClientModule>('src/api/client.ts');
 const view = await loadComponentModule<ViewModule>('src/hooks/useWorkflowViewMode.ts');
 const { resolveRestoredLevel } = await loadComponentModule<RestoreModule>('src/constants/restoreLevel.ts');
+const { resolveDefaultTrackForAssistant, DEFAULT_CODING_ASSISTANTS_CONFIG } = await loadComponentModule<AssistantsModule>('src/constants/codingAssistants.ts');
+const { getLevelUIOverrides, WORKSHOP_LEVELS } = await loadComponentModule<SectionsModule>('src/constants/workflowSections.ts');
 
 const APP = readFileSync(new URL('../../src/App.tsx', import.meta.url), 'utf-8');
 
@@ -81,25 +82,36 @@ test('defaults come from GET /config/workshop-defaults', async () => {
   const calls: string[] = [];
   await withFetch((async (url: string) => {
     calls.push(String(url));
-    return new Response(JSON.stringify({ defaultTrack: 'genie-accelerator', includeGenieOntology: false }), { status: 200 });
+    return new Response(JSON.stringify({
+      defaultTrack: 'end-to-end',
+      genieCodeDefaultTrack: 'genie-accelerator',
+      recommendedTrack: 'genie-accelerator',
+      includeGenieOntology: false,
+    }), { status: 200 });
   }) as typeof fetch, async (warnings) => {
     const api = new client.ApiClient();
-    assert.deepEqual(await api.getWorkshopDefaults(), { defaultTrack: 'genie-accelerator', includeGenieOntology: false });
-    assert.deepEqual(await api.getWorkshopDefaults(), { defaultTrack: 'genie-accelerator', includeGenieOntology: false });
+    const expected = {
+      defaultTrack: 'end-to-end',
+      genieCodeDefaultTrack: 'genie-accelerator',
+      recommendedTrack: 'genie-accelerator',
+      includeGenieOntology: false,
+    };
+    assert.deepEqual(await api.getWorkshopDefaults(), expected);
+    assert.deepEqual(await api.getWorkshopDefaults(), expected);
     assert.deepEqual(calls, ['/api/config/workshop-defaults'], 'fetched once per page');
     assert.equal(warnings.length, 0);
   });
 });
 
-test('a failed config fetch falls back to Genie Accelerator with ontology on, logged once', async () => {
+test('a failed config fetch falls back to FALLBACK_WORKSHOP_DEFAULTS, logged once', async () => {
   let calls = 0;
   await withFetch((async () => {
     calls++;
     return new Response('boom', { status: 500, statusText: 'Internal Server Error' });
   }) as typeof fetch, async (warnings) => {
     const api = new client.ApiClient();
-    assert.deepEqual(await api.getWorkshopDefaults(), { defaultTrack: 'genie-accelerator', includeGenieOntology: true });
-    assert.deepEqual(await api.getWorkshopDefaults(), { defaultTrack: 'genie-accelerator', includeGenieOntology: true });
+    assert.deepEqual(await api.getWorkshopDefaults(), client.FALLBACK_WORKSHOP_DEFAULTS);
+    assert.deepEqual(await api.getWorkshopDefaults(), client.FALLBACK_WORKSHOP_DEFAULTS);
     assert.equal(calls, 1);
     assert.equal(warnings.length, 1, 'one console log for the failure');
   });
@@ -113,18 +125,55 @@ test('a network error falls back the same way', async () => {
   });
 });
 
-test('the fallback is the app.yaml.template default: Genie Accelerator, ontology on', () => {
-  assert.deepEqual(client.FALLBACK_WORKSHOP_DEFAULTS, { defaultTrack: 'genie-accelerator', includeGenieOntology: true });
+test('FALLBACK_WORKSHOP_DEFAULTS: end-to-end default, genie-accelerator for Genie Code & Recommended, ontology on', () => {
+  assert.deepEqual(client.FALLBACK_WORKSHOP_DEFAULTS, {
+    defaultTrack: 'end-to-end',
+    genieCodeDefaultTrack: 'genie-accelerator',
+    recommendedTrack: 'genie-accelerator',
+    includeGenieOntology: true,
+  });
   const template = readFileSync(new URL('../../app.yaml.template', import.meta.url), 'utf-8');
   assert.match(template, /VIBE_DEFAULT_GENIE_ONTOLOGY[\s\S]{0,80}value:\s*"true"/);
 });
 
 // ---------------------------------------------------------------------------
-// New-session defaults (R2/R3)
+// Per-assistant default track resolution
+// ---------------------------------------------------------------------------
+
+test('resolveDefaultTrackForAssistant: Genie Code -> genie-accelerator, all others -> end-to-end', () => {
+  assert.equal(
+    resolveDefaultTrackForAssistant('genie-code', client.FALLBACK_WORKSHOP_DEFAULTS, DEFAULT_CODING_ASSISTANTS_CONFIG),
+    'genie-accelerator',
+  );
+  for (const other of ['cursor', 'ai-gateway', 'coda', 'copilot', 'vscode', 'omnigent', null, undefined]) {
+    assert.equal(
+      resolveDefaultTrackForAssistant(other, client.FALLBACK_WORKSHOP_DEFAULTS, DEFAULT_CODING_ASSISTANTS_CONFIG),
+      'end-to-end',
+      `assistant=${String(other)}`,
+    );
+  }
+  // Custom admin override on a specific assistant wins
+  const customConfig = [
+    { id: 'cursor' as const, recommended: true, defaultTrack: 'agents-accelerator' },
+    { id: 'genie-code' as const, recommended: true, defaultTrack: 'lakehouse-di' },
+  ];
+  assert.equal(resolveDefaultTrackForAssistant('cursor', client.FALLBACK_WORKSHOP_DEFAULTS, customConfig), 'agents-accelerator');
+  assert.equal(resolveDefaultTrackForAssistant('genie-code', client.FALLBACK_WORKSHOP_DEFAULTS, customConfig), 'lakehouse-di');
+});
+
+test('every workshop level defaults Define Your Intent to "library" mode (never "custom")', () => {
+  for (const level of Object.keys(WORKSHOP_LEVELS) as Array<keyof typeof WORKSHOP_LEVELS>) {
+    const overrides = getLevelUIOverrides(level);
+    assert.notEqual(overrides.defaultUseCaseMode, 'custom', `${level} must not default Define Your Intent to custom mode`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// New-session defaults
 // ---------------------------------------------------------------------------
 
 test('a new session persists track, ontology, the full flags and view "technical" at creation', () => {
-  const req = client.newSessionMetadata('s-1', client.FALLBACK_WORKSHOP_DEFAULTS, ALL_ON_FLAGS);
+  const req = client.newSessionMetadata('s-1', { defaultTrack: 'genie-accelerator', includeGenieOntology: true }, ALL_ON_FLAGS);
   assert.deepEqual(req, {
     session_id: 's-1',
     workshop_level: 'genie-accelerator',
@@ -132,9 +181,7 @@ test('a new session persists track, ontology, the full flags and view "technical
     flags: ALL_ON_FLAGS,
     view: 'technical',
   });
-  // Not an explicit level pick: path-lock semantics are unchanged.
   assert.ok(!('level_explicitly_selected' in req));
-  // Only view / include_genie_ontology / flags; the server mirrors the camelCase key.
   assert.ok(!('includeGenieOntology' in req));
 });
 
@@ -144,18 +191,14 @@ test('the facilitator switch "false" gives a new session ontology off', () => {
   assert.equal(req.flags?.includeGenieOntology, false);
 });
 
-test('reload: what a new session persisted hydrates back to Genie Accelerator with ontology on', () => {
-  // App.tsx persists the request newSessionMetadata builds, with the engine flags.
+test('reload: what a new session persisted hydrates back accurately', () => {
   const apply = appBlock('applyNewSessionDefaults');
   assert.match(apply, /apiClient\.updateSessionMetadata\(newSessionMetadata\(/);
-  assert.match(apply, /engineFlagsFrom\(new Set\(ALL_AI_MODULES\), new Set\(ALL_MEDALLION_LAYERS\), false, ontology\)/,
-    'the creation write carries the complete engine flags (GET /outline reads only flags)');
+  assert.match(apply, /engineFlagsFrom\(new Set\(ALL_AI_MODULES\), new Set\(ALL_MEDALLION_LAYERS\), false, ontology\)/);
   assert.doesNotMatch(apply, /level_explicitly_selected/);
-  const req = client.newSessionMetadata('s-3', client.FALLBACK_WORKSHOP_DEFAULTS, ALL_ON_FLAGS);
+  const req = client.newSessionMetadata('s-3', { defaultTrack: 'genie-accelerator', includeGenieOntology: true }, ALL_ON_FLAGS);
   assert.ok(req.flags, 'flags are persisted at creation');
 
-  // The stored row as the backend returns it on reload (update-metadata patches
-  // these keys into session_parameters; the server mirrors the ontology value).
   const reloaded = {
     workshop_level: req.workshop_level,
     session_parameters: {
@@ -166,17 +209,15 @@ test('reload: what a new session persisted hydrates back to Genie Accelerator wi
     } as Record<string, unknown>,
   };
   assert.equal(resolveRestoredLevel(reloaded, null), 'genie-accelerator');
-  assert.equal(!!reloaded.session_parameters.include_genie_ontology, true, 'the UI hydrates the toggle from the snake key');
-  assert.equal((reloaded.session_parameters.flags as Record<string, boolean>).includeGenieOntology, true, 'the engine outline reads flags');
+  assert.equal(!!reloaded.session_parameters.include_genie_ontology, true);
+  assert.equal((reloaded.session_parameters.flags as Record<string, boolean>).includeGenieOntology, true);
   assert.equal(view.isInsightsSession(reloaded.session_parameters.view as string, null), false);
 });
 
-test('createNewSession applies the defaults instead of the old end-to-end reset', () => {
+test('createNewSession applies the defaults', () => {
   const create = appBlock('createNewSession');
   assert.match(create, /apiClient\.getWorkshopDefaults\(\)/);
   assert.match(create, /applyNewSessionDefaults\(response\.session_id, defaults, view\)/);
-  assert.doesNotMatch(create, /setWorkshopLevel\('end-to-end'\)/);
-  assert.doesNotMatch(create, /setIncludeGenieOntology\(false\)/);
 });
 
 test('a first-time default session (nothing stored) takes the defaults; one with stored state does not', () => {
@@ -190,18 +231,13 @@ test('a first-time default session (nothing stored) takes the defaults; one with
   assert.match(appBlock('getOrCreateDefaultSession'), /if \(isPristineSession\(response\)\) \{\s*applyNewSessionDefaults\(/);
 });
 
-test('a failed default-session fetch lands on Genie Accelerator with ontology and lakehouse off, and writes nothing', () => {
+test('a failed default-session fetch lands on end-to-end with ontology and lakehouse off, and writes nothing', () => {
   const failed = bracedBody(appBlock('getOrCreateDefaultSession'), '} catch (err) {');
-  // D-165: the level the fallback defaults give, ontology off (not the fallback's
-  // ontology: a later progress save stores only the level, which reloads off).
   assert.match(failed, /applyNewSessionState\(newSessionLevel\(FALLBACK_WORKSHOP_DEFAULTS\), false\);/);
-  assert.equal(client.FALLBACK_WORKSHOP_DEFAULTS.defaultTrack, 'genie-accelerator');
-  assert.match(appBlock('newSessionLevel'), /defaults\.defaultTrack in WORKSHOP_LEVELS \? defaults\.defaultTrack as WorkshopLevel : 'genie-accelerator'/);
-  assert.doesNotMatch(failed, /setWorkshopLevel|setIncludeGenieOntology|includeGenieOntology/, 'only the shared helper sets the level and ontology');
-  // The backend is unreachable and the local id is unsaved by design: no write, no outline fetch.
+  assert.equal(client.FALLBACK_WORKSHOP_DEFAULTS.defaultTrack, 'end-to-end');
+  assert.doesNotMatch(failed, /setWorkshopLevel|setIncludeGenieOntology|includeGenieOntology/);
   assert.doesNotMatch(failed, /apiClient\.|updateSessionMetadata|fetchOutline|applyNewSessionDefaults/);
 
-  // The helper is state only, and the success path sets its state through it too.
   const state = bracedBody(appBlock('applyNewSessionState'), '(level: WorkshopLevel, ontology: boolean) => {');
   assert.equal(state.trim().split(/\s*\n\s*/).join(' '),
     'setWorkshopLevel(level); setIncludeLakehouse(false); setIncludeGenieOntology(ontology);');
@@ -209,8 +245,6 @@ test('a failed default-session fetch lands on Genie Accelerator with ontology an
 });
 
 test('a resumed session without stored ontology still hydrates off (absent = off)', () => {
-  // loadSession hydrates through the shared session-sync reader, whose
-  // chipsFromParams treats an absent ontology as off (sessionSync.node.test.ts).
   const block = appBlock('loadSession');
   assert.match(block, /hydrateFromResponse\(response, id\)/);
   assert.doesNotMatch(block, /applyNewSessionDefaults/);
@@ -225,26 +259,6 @@ test('switching into Genie Accelerator resets ontology to the facilitator defaul
   assert.doesNotMatch(block, /setIncludeGenieOntology\(false\)/);
 });
 
-// ---------------------------------------------------------------------------
-// Assistant-pick guard (F-Q8)
-// ---------------------------------------------------------------------------
-
-/** Evaluates App.tsx's own shouldApplyAssistantDefault expression. */
-function assistantGuard(): (explicit: boolean, level: string, assistantDefault: string | undefined) => boolean {
-  const block = appBlock('handleCodingAssistantChange');
-  const m = block.match(/const shouldApplyAssistantDefault =([\s\S]*?);/);
-  assert.ok(m, 'handleCodingAssistantChange computes shouldApplyAssistantDefault');
-  return new Function('levelExplicitlySelected', 'workshopLevel', 'assistantDefault', `return (${m[1]});`) as never;
-}
-
-test('picking an assistant on a new Genie Accelerator session keeps it there', () => {
-  const guard = assistantGuard();
-  assert.equal(guard(false, 'genie-accelerator', undefined), false, 'Cursor (no assistant default)');
-  assert.equal(guard(false, 'genie-accelerator', 'genie-accelerator'), false, 'Genie Code');
-  // Any future assistant default can't move the new-session default either.
-  assert.equal(guard(false, 'genie-accelerator', 'lakehouse'), false);
-});
-
 test('only shouldApplyAssistantDefault lets an assistant pick move the level', () => {
   const block = appBlock('handleCodingAssistantChange');
   const guarded = bracedBody(block, 'if (shouldApplyAssistantDefault) {');
@@ -252,13 +266,6 @@ test('only shouldApplyAssistantDefault lets an assistant pick move the level', (
   assert.match(guarded, /workshop_level: nextLevel,/);
   const unguarded = block.replace(guarded, '');
   assert.doesNotMatch(unguarded, /setWorkshopLevel|workshop_level/, 'no level change outside the guard');
-});
-
-test('the assistant fallback still applies to a legacy end-to-end session never explicitly placed', () => {
-  const guard = assistantGuard();
-  assert.equal(guard(false, 'end-to-end', 'genie-accelerator'), true);
-  assert.equal(guard(true, 'end-to-end', 'genie-accelerator'), false, 'an explicit pick wins');
-  assert.equal(guard(false, 'end-to-end', undefined), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -272,7 +279,6 @@ test('marker "insights" reopens in Insights', () => {
 test('technical-reopen: a genie-code Genie Accelerator session stored as "technical" reopens in Technical', () => {
   const sessionParams = { view: 'technical', coding_assistant: 'genie-code', workshop_level: 'genie-accelerator' };
   assert.equal(view.isInsightsSession(sessionParams.view, null), false);
-  // Both resume paths read the marker, not the level and assistant.
   const calls = APP.match(/adoptSessionView\([^;]*\);/g) ?? [];
   assert.equal(calls.length, 2, 'two resume paths adopt the session view');
   for (const call of calls) assert.equal(call, 'adoptSessionView(isInsightsSession(sessionParams.view));');
@@ -319,8 +325,6 @@ test('a view switch persists the marker', () => {
   }
   assert.deepEqual(persisted, ['insights', 'technical']);
 
-  // App wires the learner's switches (header toggle, Insights' "switch to
-  // Technical") to switchViewMode, which stores the marker on the session.
   assert.match(APP, /<ViewModeToggle mode=\{viewMode\} onChange=\{switchViewMode\} \/>/);
   assert.match(APP, /onSwitchToTechnical=\{\(\) => switchViewMode\('technical'\)\}/);
   const persist = appBlock('persistView');

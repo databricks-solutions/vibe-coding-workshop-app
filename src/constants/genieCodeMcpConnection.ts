@@ -7,8 +7,52 @@
  * the same step text (markdown emphasis/backticks stripped).
  */
 
+import { useEffect, useState } from 'react';
 import type { WorkshopLevel } from './workflowSections';
 import { TRACK_DISPLAY_NAMES } from './trackNames';
+
+export type GenieCodeMode = 'mcp' | 'copy-paste';
+
+const MODE_STORAGE_KEY = 'vibe.genieCode.mode';
+const MODE_EVENT_NAME = 'vibe:genie-code-mode-change';
+
+export function useGenieCodeMode(): [GenieCodeMode, (next: GenieCodeMode) => void] {
+  const [mode, setModeState] = useState<GenieCodeMode>(() => {
+    if (typeof window === 'undefined') return 'mcp';
+    try {
+      const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
+      return saved === 'copy-paste' ? 'copy-paste' : 'mcp';
+    } catch {
+      return 'mcp';
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onSync = (e: Event) => {
+      const detail = (e as CustomEvent<GenieCodeMode>).detail;
+      if (detail === 'mcp' || detail === 'copy-paste') {
+        setModeState(detail);
+      }
+    };
+    window.addEventListener(MODE_EVENT_NAME, onSync);
+    return () => window.removeEventListener(MODE_EVENT_NAME, onSync);
+  }, []);
+
+  const setMode = (next: GenieCodeMode) => {
+    setModeState(next);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(MODE_STORAGE_KEY, next);
+      } catch {
+        /* ignore */
+      }
+      window.dispatchEvent(new CustomEvent<GenieCodeMode>(MODE_EVENT_NAME, { detail: next }));
+    }
+  };
+
+  return [mode, setMode];
+}
 
 /** The three connection steps from D10 §2 (learner path). */
 export const GENIE_CODE_MCP_CONNECTION_STEPS = [

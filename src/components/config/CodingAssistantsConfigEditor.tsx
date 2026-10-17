@@ -16,13 +16,25 @@
  */
 
 import { useMemo } from 'react';
-import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Sparkles, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Sparkles, AlertCircle, Map } from 'lucide-react';
 import {
   ASSISTANT_CATALOG,
+  DEFAULT_LEVEL_BY_ASSISTANT,
   parseCodingAssistantsConfig,
   type AssistantId,
   type CodingAssistantConfigEntry,
 } from '../../constants/codingAssistants';
+
+const DEFAULT_PATH_OPTIONS: { value: string; label: string }[] = [
+  { value: 'end-to-end', label: 'Complete Workshop (All Chapters)' },
+  { value: 'genie-accelerator', label: 'Genie Accelerator' },
+  { value: 'agents-accelerator', label: 'Agents Accelerator' },
+  { value: 'data-engineering-accelerator', label: 'Data Engineering Accelerator' },
+  { value: 'lakehouse-di', label: 'Lakehouse + AI & Agents' },
+  { value: 'lakehouse', label: 'Lakehouse' },
+  { value: 'app-database', label: 'Apps + Lakebase' },
+  { value: 'app-only', label: 'Databricks Apps' },
+];
 
 interface CodingAssistantsConfigEditorProps {
   value: string;
@@ -65,7 +77,8 @@ export function CodingAssistantsConfigEditor({ value, onChange }: CodingAssistan
 
   const show = (id: AssistantId) => {
     if (available.some(a => a.id === id)) return;
-    emit([...available, { id, recommended: false }]);
+    const fallbackTrack = DEFAULT_LEVEL_BY_ASSISTANT[id] ?? 'end-to-end';
+    emit([...available, { id, recommended: false, defaultTrack: fallbackTrack }]);
   };
 
   const toggleRecommended = (index: number) => {
@@ -74,6 +87,16 @@ export function CodingAssistantsConfigEditor({ value, onChange }: CodingAssistan
     );
     emit(next);
   };
+
+  const changeDefaultTrack = (index: number, defaultTrack: string) => {
+    const next = available.map((entry, i) =>
+      i === index ? { ...entry, defaultTrack } : entry,
+    );
+    emit(next);
+  };
+
+  const effectiveDefaultTrack = (entry: CodingAssistantConfigEntry): string =>
+    entry.defaultTrack || DEFAULT_LEVEL_BY_ASSISTANT[entry.id] || 'end-to-end';
 
   const nameFor = (id: string) => ASSISTANT_CATALOG.find(a => a.id === id)?.name ?? id;
 
@@ -94,10 +117,11 @@ export function CodingAssistantsConfigEditor({ value, onChange }: CodingAssistan
           ) : (
             <ul className="space-y-1.5">
               {available.map((entry, index) => {
+                const currentTrack = effectiveDefaultTrack(entry);
                 return (
                   <li
                     key={entry.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-background border border-border"
+                    className="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-md bg-background border border-border"
                   >
                     <label className="flex items-center gap-1.5 cursor-pointer select-none">
                       <input
@@ -109,7 +133,7 @@ export function CodingAssistantsConfigEditor({ value, onChange }: CodingAssistan
                       />
                       <span className="text-xs text-muted-foreground">Rec</span>
                     </label>
-                    <span className="flex-1 text-sm text-foreground truncate">{nameFor(entry.id)}</span>
+                    <span className="flex-1 min-w-[7rem] text-sm text-foreground truncate">{nameFor(entry.id)}</span>
                     {entry.recommended && (
                       <span
                         className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/15 to-amber-400/10 text-amber-200 border border-amber-400/30"
@@ -119,6 +143,21 @@ export function CodingAssistantsConfigEditor({ value, onChange }: CodingAssistan
                         Recommended
                       </span>
                     )}
+                    <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground" title={`Default workshop path when ${nameFor(entry.id)} is selected`}>
+                      <Map className="w-3 h-3 text-primary/70 shrink-0" />
+                      <select
+                        value={currentTrack}
+                        onChange={(e) => changeDefaultTrack(index, e.target.value)}
+                        aria-label={`Default path for ${nameFor(entry.id)}`}
+                        className="bg-secondary/60 border border-border rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none focus:border-primary"
+                      >
+                        {DEFAULT_PATH_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <button
                       type="button"
                       onClick={() => moveUp(index)}
@@ -185,7 +224,9 @@ export function CodingAssistantsConfigEditor({ value, onChange }: CodingAssistan
 
       <p className="text-[11px] text-muted-foreground">
         Tip: use the arrows to move assistants between boxes and reorder inside Available. Check the Rec box on any row
-        to flag it as recommended — you can flag as many as you like, and the order you set here is the order users see.
+        to flag it as recommended, and use the Default Path selector on each row to choose which workshop path is
+        automatically selected when a participant picks that coding assistant (Genie Code defaults to Genie Accelerator;
+        others default to Complete Workshop).
       </p>
     </div>
   );
