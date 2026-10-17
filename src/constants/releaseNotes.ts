@@ -47,6 +47,101 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.1',
+    date: '2026-10-17',
+    title: 'A cleaner workshop journey, richer guidance and portfolio review',
+    items: [
+      {
+        title: 'One workshop path picker',
+        description:
+          'Workshop Path & Architecture is one unified experience again. Standard tracks stay in their familiar columns, while the Genie Accelerator leads the Accelerators column with New and Recommended badges. Selecting it turns the left side into a clear Semantic Layer, AI and Agents, Ontology and Activation journey, with one prominent way to see the other tracks.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'The right default path for each coding assistant',
+        description:
+          'Genie Code now defaults specifically to the Genie Accelerator. Cursor, CoDA, VS Code, AI Gateway, GitHub Copilot and Omnigent default to the Complete Workshop as before. Facilitators can choose a different default path for every coding assistant in Workshop Parameters and can separately configure which track carries the Recommended badge.',
+        category: 'improved',
+        audience: 'installer',
+        icon: 'wrench',
+      },
+      {
+        title: 'Genie Code modes are simpler',
+        description:
+          'Interactive Mode shows the recommended three-step MCP connection and keeps progress synchronized with the app. Copy & Paste Prompts Mode now stays out of the way: select it, continue through the app and copy the prompt shown at each workshop step—without duplicate setup instructions or an unrelated MCP panel.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'terminal',
+      },
+      {
+        title: 'Define Your Intent starts in the right place',
+        description:
+          'Every track now opens on Build a Use Case, Choose from Library, with Sample and Booking App ready by default. Advancing from the coding assistant or prerequisites lands at the top of Define Your Intent instead of jumping down to the selected use case.',
+        category: 'fix',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'Reverse ETL always opens with a complete path',
+        description:
+          'Switching to Reverse ETL now selects the complete reverse flow—Lakehouse, AI and Agents, Synced Lakebase and Analytics App—instead of leaving every option unselected. Switching back restores the active coding assistant’s default forward track.',
+        category: 'fix',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'Every service info button is useful and current',
+        description:
+          'The interactive architecture now has dedicated, 2026-ready guidance for Databricks Apps, Lakebase, Medallion layers, Spark Declarative Pipelines, TVFs, Metric Views and synonyms, Genie Spaces and Agents, Discover Domains, Pages and Routing, Synced Tables, AI/BI Dashboards, Mosaic AI Agents, MCP and MLflow 3. Each popover includes official documentation, benefits, considerations and service-specific questions.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'search',
+      },
+      {
+        title: 'Interactive service tiles are easier to discover',
+        description:
+          'Each service info badge is now a bright teal-cyan indicator with a continuous concentric water-ripple animation. Activation presents Synced Tables, App and Lakebase as three full-width rows, avoiding cramped labels and making every service easier to scan and open.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'palette',
+      },
+      {
+        title: 'Architecture previews explain the outcome',
+        description:
+          'Architecture previews now use a consistent light/dark visual system and structured What You’ll Build stage cards. The cards align each deliverable to the workshop stage and show the technologies involved, replacing scattered learning bullets.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'A complete Ideate review workspace',
+        description:
+          'The Library review workspace now reconciles submitted ideas with catalog use cases, keeps approval status consistent, and supports pending, approved, changes-requested and rejected queues. Reviewers get portfolio summaries, richer owner and revision context, inline decisions and direct links from Library cards.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'shield',
+      },
+      {
+        title: 'Portfolio value and feasibility are easier to compare',
+        description:
+          'The value-vs-feasibility map now plots the full review portfolio with readable use case labels, collision avoidance, review-status colors, confidence and quadrant context. Priority scoring can use catalog links, value profiles, ROI, rollout scale and structured briefs when direct sizing inputs are incomplete.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Direct links to both workshop repositories',
+        description:
+          'The Resources section now links separately to the App Repo and the Skills Repo, so facilitators and contributors can reach the right source without guessing which repository they need.',
+        category: 'improved',
+        audience: 'installer',
+        icon: 'wrench',
+      },
+    ],
+  },
+  {
     version: '2.8.0',
     date: '2026-10-15',
     title: 'Run the workshop from Genie Code',
