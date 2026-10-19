@@ -164,6 +164,29 @@ def _list_tables_sync(catalog: str, schema: str, columns: bool = True) -> List[D
     return out
 
 
+_HIDDEN_CATALOGS = {"system", "__databricks_internal", "hive_metastore"}
+_HIDDEN_SCHEMAS = {"information_schema"}
+
+
+def _named(items: Any, hidden: set) -> List[Dict[str, str]]:
+    """Visible {name, comment} rows, sorted by name; hidden and internal names dropped."""
+    out = []
+    for it in items:
+        name = getattr(it, "name", None) or ""
+        if not name or name.lower() in hidden or name.startswith("__"):
+            continue
+        out.append({"name": name, "comment": _short(getattr(it, "comment", None) or "", 160)})
+    return sorted(out, key=lambda r: r["name"].lower())
+
+
+def _list_catalogs_sync() -> List[Dict[str, str]]:
+    return _named(_client().catalogs.list(max_results=1000), _HIDDEN_CATALOGS)
+
+
+def _list_schemas_sync(catalog: str) -> List[Dict[str, str]]:
+    return _named(_client().schemas.list(catalog_name=catalog, max_results=1000), _HIDDEN_SCHEMAS)
+
+
 async def _source_summary(src: Dict[str, str]) -> Dict[str, Any]:
     key = f"ds-list:{src['catalog']}.{src['schema']}"
     hit = _cache_get(key, LIST_TTL_S)
@@ -690,6 +713,31 @@ async def list_sources():
     approved = await asyncio.to_thread(_approved_sync)
     summaries = await asyncio.gather(*[_source_summary(s) for s in approved])
     return {"sources": list(summaries)}
+
+
+@router.get("/data-sources/catalogs", summary="Catalogs the app can see, for the source picker")
+async def list_catalogs():
+    hit = _cache_get("ds-catalogs", LIST_TTL_S)
+    if hit is None:
+        try:
+            hit = _cache_put("ds-catalogs", await asyncio.to_thread(_list_catalogs_sync))
+        except Exception as e:
+            raise HTTPException(status_code=403, detail=f"The app cannot list catalogs: {_short(str(e), 160)}")
+    return {"catalogs": hit}
+
+
+@router.get("/data-sources/schemas", summary="Schemas in one catalog, for the source picker")
+async def list_schemas(catalog: str):
+    if not _IDENT.match(catalog or ""):
+        raise HTTPException(status_code=400, detail=f"Not a catalog name: {(catalog or '')[:80]}")
+    key = f"ds-schemas:{catalog}"
+    hit = _cache_get(key, LIST_TTL_S)
+    if hit is None:
+        try:
+            hit = _cache_put(key, await asyncio.to_thread(_list_schemas_sync, catalog))
+        except Exception as e:
+            raise HTTPException(status_code=403, detail=f"The app cannot read catalog {catalog}: {_short(str(e), 160)}")
+    return {"schemas": hit}
 
 
 @router.get("/data-sources/check", summary="Can the app read a catalog.schema")

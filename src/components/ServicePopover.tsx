@@ -775,6 +775,18 @@ export function ServicePopover({
   }, []);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // The full-chat modal handles its own Escape; leave the popover open beneath it.
+      if (document.querySelector('[data-service-chat-modal]')) return;
+      setIsOpen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isOpen) {
       const handleClickOutside = (e: MouseEvent) => {
         const target = e.target as HTMLElement;

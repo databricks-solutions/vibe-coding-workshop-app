@@ -12,6 +12,7 @@ import {
 } from '../sources/sourcesApi';
 import type { ReactNode } from 'react';
 import { FadeIn, GhostButton, Headline, PrimaryButton } from '../../journeykit';
+import { CatalogSchemaPicker } from '../sources/CatalogSchemaPicker';
 
 type Option = { id: DataSource; icon: typeof Database | null; title: string; body: string; tag?: string; footnote?: string; slug?: string };
 
@@ -136,6 +137,8 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
   const hints = picked.filter(p => !isSourceId(p));
   const added = useCheckedSources(addedIds);
   const [draft, setDraft] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [typing, setTyping] = useState(false);
   const matches = approved.filter(s => s.readable).map(s => ({ source: s, tables: matchTables(s, hint.text ?? '') }));
   const addedMatches = added.map(s => ({ source: s, tables: s.readable ? matchTables(s, hint.text ?? '') : [] }));
   const bestMatch = [...matches, ...addedMatches].sort((a, b) => b.tables.length - a.tables.length)[0];
@@ -259,53 +262,78 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
                   {selected && opt.id === 'existing' && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                       <div className="px-5 pb-5 pl-[4.75rem]">
-                        {matches.length > 0 && (
-                          <div className="mb-4 space-y-2">
-                            <p className="flex items-center gap-1.5 text-ui-sm text-muted-foreground">
-                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Approved sources
-                              <span className="opacity-70">· pick one or more to explore its tables</span>
-                            </p>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              {matches.map(({ source: s, tables }) => (
-                                <SourceChip key={s.id} source={s} tables={tables} on={picked.includes(s.id)} onToggle={() => toggleSource(s.id)} />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {addedMatches.length > 0 && (
-                          <div className="mb-4 space-y-2">
-                            <p className="text-ui-sm text-muted-foreground">Your sources <span className="opacity-70">· scanned for this idea, not on the approved list</span></p>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              {addedMatches.map(({ source: s, tables }) => (
-                                <SourceChip
-                                  key={s.id}
-                                  source={s}
-                                  tables={tables}
-                                  on
-                                  added
-                                  onToggle={() => toggleSource(s.id)}
-                                  onRemove={() => onLocationChange(removeFromLocation(location, s.id))}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <label htmlFor="data-add-source" className="block text-ui-sm text-muted-foreground mb-1.5">
-                          {matches.length ? 'Add another catalog.schema' : 'Know where it is?'} <span className="opacity-70">(optional)</span>
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            id="data-add-source"
-                            value={draft}
-                            onChange={e => setDraft(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addDraft(); } }}
-                            placeholder="e.g. main.sales or just a table name"
-                            className="flex-1 min-w-0 h-10 px-3 rounded-xl bg-secondary/50 border border-transparent text-ui-md outline-none focus:border-primary/40 focus:bg-card transition-colors"
-                          />
-                          <GhostButton onClick={addDraft} disabled={!draft.trim()} className="h-10 border border-border">
-                            <Plus className="w-4 h-4" /> {isSourceId(draft) ? 'Add and scan' : 'Add'}
-                          </GhostButton>
+                        <p className="flex items-center gap-1.5 text-ui-sm text-muted-foreground mb-2">
+                          {matches.length > 0 ? (
+                            <><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Sources <span className="opacity-70">· pick one or more to explore their tables</span></>
+                          ) : (
+                            <>Know where it is? <span className="opacity-70">· optional, add a catalog and schema to scan</span></>
+                          )}
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {matches.map(({ source: s, tables }) => (
+                            <SourceChip key={s.id} source={s} tables={tables} on={picked.includes(s.id)} onToggle={() => toggleSource(s.id)} />
+                          ))}
+                          {addedMatches.map(({ source: s, tables }) => (
+                            <SourceChip
+                              key={s.id}
+                              source={s}
+                              tables={tables}
+                              on
+                              added
+                              onToggle={() => toggleSource(s.id)}
+                              onRemove={() => onLocationChange(removeFromLocation(location, s.id))}
+                            />
+                          ))}
+                          {!adding && (
+                            <button
+                              type="button"
+                              onClick={() => setAdding(true)}
+                              className="group flex items-center gap-3 min-h-[76px] rounded-xl border border-dashed border-border bg-card/40 px-3 py-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/[0.03]"
+                            >
+                              <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-secondary text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
+                                <Plus className="w-4 h-4" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-ui-sm font-semibold text-foreground">Add another source</span>
+                                <span className="block text-ui-xs text-muted-foreground mt-0.5">Pick a catalog and schema from your workspace</span>
+                              </span>
+                            </button>
+                          )}
                         </div>
+                        {adding && (
+                          <div className="mt-2 rounded-xl border border-primary/30 bg-card px-3.5 py-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-ui-sm font-semibold text-foreground">Add another source</p>
+                              <button type="button" onClick={() => { setAdding(false); setTyping(false); }} aria-label="Close" className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <CatalogSchemaPicker
+                              existing={picked.filter(isSourceId)}
+                              onAdd={id => { onLocationChange(addToLocation(location, id)); setAdding(false); setTyping(false); }}
+                            />
+                            {typing ? (
+                              <div className="flex gap-2 mt-3 pt-3 border-t border-border/60">
+                                <input
+                                  autoFocus
+                                  aria-label="Table name"
+                                  value={draft}
+                                  onChange={e => setDraft(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addDraft(); } }}
+                                  placeholder="e.g. orders or main.sales.orders"
+                                  className="flex-1 min-w-0 h-9 px-3 rounded-lg bg-secondary/50 border border-transparent text-ui-sm outline-none focus:border-primary/40 focus:bg-card transition-colors"
+                                />
+                                <GhostButton onClick={addDraft} disabled={!draft.trim()} className="h-9 border border-border">
+                                  <Plus className="w-4 h-4" /> Add
+                                </GhostButton>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => setTyping(true)} className="mt-2 text-ui-xs font-medium text-primary hover:underline">
+                                Know a table name instead? Type it
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {hints.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {hints.map(h => (
@@ -321,7 +349,7 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
                         <p className="text-ui-xs text-muted-foreground mt-1.5">
                           {explorable
                             ? 'Next, you will see how these tables connect and answer your questions.'
-                            : 'Not sure? Leave it blank and Genie Code will look for it. Add a catalog.schema to scan it and explore its tables first.'}
+                            : 'Not sure? Leave it blank and Genie Code will look for it. Pick a catalog and schema to scan its tables first.'}
                         </p>
                       </div>
                     </motion.div>

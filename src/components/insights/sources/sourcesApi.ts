@@ -26,7 +26,14 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface UcName {
+  name: string;
+  comment: string;
+}
+
 let listPromise: Promise<ApprovedSource[]> | null = null;
+let catalogsPromise: Promise<UcName[]> | null = null;
+const schemaPromises = new Map<string, Promise<UcName[]>>();
 const checkPromises = new Map<string, Promise<ApprovedSource>>();
 const digestPromises = new Map<string, Promise<BlueprintDigest>>();
 const fitPromises = new Map<string, Promise<BlueprintFit>>();
@@ -64,6 +71,24 @@ export const sourcesApi = {
         .catch(err => { listPromise = null; throw err; });
     }
     return listPromise;
+  },
+  catalogs(): Promise<UcName[]> {
+    if (!catalogsPromise) {
+      catalogsPromise = getJson<{ catalogs: UcName[] }>(`${BASE}/catalogs`)
+        .then(r => r.catalogs ?? [])
+        .catch(err => { catalogsPromise = null; throw err; });
+    }
+    return catalogsPromise;
+  },
+  schemas(catalog: string): Promise<UcName[]> {
+    let p = schemaPromises.get(catalog);
+    if (!p) {
+      p = getJson<{ schemas: UcName[] }>(`${BASE}/schemas?catalog=${encodeURIComponent(catalog)}`)
+        .then(r => r.schemas ?? [])
+        .catch(err => { schemaPromises.delete(catalog); throw err; });
+      schemaPromises.set(catalog, p);
+    }
+    return p;
   },
   check(source: string): Promise<ApprovedSource> {
     let p = checkPromises.get(source);
@@ -105,8 +130,39 @@ export const sourcesApi = {
     return p;
   },
   /** Forget the cached list, e.g. after an admin edits it. */
-  reset() { listPromise = null; checkPromises.clear(); },
+  reset() { listPromise = null; catalogsPromise = null; schemaPromises.clear(); checkPromises.clear(); },
 };
+
+export interface UcNameList {
+  items: UcName[];
+  loading: boolean;
+  error: string | null;
+  retry: () => void;
+}
+
+/** Loads a Unity Catalog name list when `enabled`; `key` changes reload it. */
+function useUcNames(key: string, enabled: boolean, load: () => Promise<UcName[]>): UcNameList {
+  const [attempt, setAttempt] = useState(0);
+  const tag = `${key}:${attempt}`;
+  const [result, setResult] = useState<{ tag: string; items: UcName[]; error: string | null } | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    load()
+      .then(items => alive && setResult({ tag, items, error: null }))
+      .catch(err => alive && setResult({ tag, items: [], error: String(err?.message || err) }));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `tag` captures key and retries; `load` is rebuilt each render
+  }, [enabled, tag]);
+  const retry = () => { sourcesApi.reset(); setAttempt(a => a + 1); };
+  if (!enabled) return { items: [], loading: false, error: null, retry };
+  if (result?.tag === tag) return { items: result.items, loading: false, error: result.error, retry };
+  return { items: [], loading: true, error: null, retry };
+}
+
+export const useCatalogs = (enabled: boolean) => useUcNames('catalogs', enabled, () => sourcesApi.catalogs());
+
+export const useSchemas = (catalog: string) => useUcNames(`schemas:${catalog}`, !!catalog, () => sourcesApi.schemas(catalog));
 
 export type CheckedSource = ApprovedSource & { loading: boolean };
 

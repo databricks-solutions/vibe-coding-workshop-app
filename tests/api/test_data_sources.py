@@ -136,6 +136,33 @@ def test_build_digest_keeps_area_names_unique_across_schemas():
     assert {a["division"] for a in d["areas"]} == {"a.s1", "b.s2"}
 
 
+class _Named:
+    def __init__(self, name, comment=""):
+        self.name, self.comment = name, comment
+
+
+def test_named_hides_internal_entries_and_sorts():
+    rows = ds._named([_Named("sales"), _Named("system"), _Named("__databricks_internal"), _Named("Main", "Core"), _Named("")],
+                     ds._HIDDEN_CATALOGS)
+    assert rows == [{"name": "Main", "comment": "Core"}, {"name": "sales", "comment": ""}]
+    assert ds._named([_Named("information_schema"), _Named("bronze")], ds._HIDDEN_SCHEMAS) == [{"name": "bronze", "comment": ""}]
+
+
+def test_list_schemas_rejects_bad_names_and_reports_access_errors(monkeypatch):
+    import asyncio
+    with pytest.raises(HTTPException) as bad:
+        asyncio.run(ds.list_schemas("bad name"))
+    assert bad.value.status_code == 400
+
+    def deny(_catalog):
+        raise PermissionError("no USE CATALOG")
+    monkeypatch.setattr(ds, "_list_schemas_sync", deny)
+    monkeypatch.setattr(ds, "_cache_get", lambda *_: None)
+    with pytest.raises(HTTPException) as denied:
+        asyncio.run(ds.list_schemas("locked"))
+    assert denied.value.status_code == 403
+
+
 def test_attach_question_tables_validates_ids():
     digest = {"tables": [{"id": "bookings.bookings"}]}
     fit = {"questions": [{"index": 0, "kpi": None}]}

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowUpRight, Check, ChevronDown, Database, Loader2, Plus, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, ChevronDown, Database, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { FadeIn, GhostButton } from '../../journeykit';
 import { ErrorState, ExplorerHeader, LoadingState, ModelExplorer, type ExplorerCopy, type ExplorerPick } from '../blueprint/ModelExplorer';
 import type { BlueprintDigest, SourceChoice } from '../blueprint/types';
-import { isSourceId, sourceKey, sourcesApi, useApprovedSources, useCheckedSources, useSourceDigest, type ApprovedSource } from './sourcesApi';
+import { sourceKey, sourcesApi, useApprovedSources, useCheckedSources, useSourceDigest, type ApprovedSource } from './sourcesApi';
+import { CatalogSchemaPicker } from './CatalogSchemaPicker';
 
 interface SourceScreenProps {
   questions: string[];
@@ -35,8 +36,6 @@ function SourcePicker({ approved, value, onChange }: { approved: ApprovedSource[
     window.addEventListener('keydown', onKey);
     return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
   }, [open]);
-  const [draft, setDraft] = useState('');
-  const [draftError, setDraftError] = useState('');
   const typed = value.filter(v => !approved.some(a => a.id === v));
   const checked = useCheckedSources(typed);
   const labelOf = (id: string) => approved.find(a => a.id === id)?.label ?? id;
@@ -92,32 +91,14 @@ function SourcePicker({ approved, value, onChange }: { approved: ApprovedSource[
                 ))}
               </>
             )}
-            <form
-              onSubmit={e => {
-                e.preventDefault();
-                const id = draft.trim();
-                if (!isSourceId(id)) { setDraftError('Use catalog.schema, for example main.sales.'); return; }
-                if (!value.some(v => v.toLowerCase() === id.toLowerCase())) onChange([...value, id]);
-                setDraft('');
-                setDraftError('');
-              }}
-              className="mt-3 pt-3 border-t border-border/60 px-1"
-            >
-              <label htmlFor="source-picker-add" className="block px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">Add a catalog.schema</label>
-              <div className="flex gap-2">
-                <input
-                  id="source-picker-add"
-                  value={draft}
-                  onChange={e => { setDraft(e.target.value); setDraftError(''); }}
-                  placeholder="e.g. main.sales"
-                  className="flex-1 min-w-0 h-9 px-3 rounded-lg bg-secondary/50 border border-transparent font-mono text-ui-sm outline-none focus:border-primary/40 focus:bg-card transition-colors"
-                />
-                <button type="submit" disabled={!draft.trim()} className="inline-flex items-center gap-1 h-9 px-3 rounded-lg border border-border text-ui-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-40">
-                  <Plus className="w-3.5 h-3.5" /> Add and scan
-                </button>
-              </div>
-              {draftError && <p className="px-1 pt-1.5 text-ui-xs text-amber-600 dark:text-amber-400">{draftError}</p>}
-            </form>
+            <div className="mt-3 pt-3 border-t border-border/60 px-1">
+              <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">Add another source</p>
+              <CatalogSchemaPicker
+                compact
+                existing={value}
+                onAdd={id => { if (!value.some(v => v.toLowerCase() === id.toLowerCase())) onChange([...value, id]); }}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -155,7 +136,7 @@ const sourceCopy = (d: BlueprintDigest): ExplorerCopy => ({
   trustNote: 'Live from Unity Catalog. Real tables and rows.',
   finishLabel: 'Use these tables',
   lowMatchTips: [
-    'Add another catalog.schema with the picker above. The data may live in a different schema.',
+    'Add another catalog and schema with the picker above. The data may live in a different schema.',
     'Check whether an industry data model fits better: go back and pick "Start from an industry data model".',
     "Start from synthetic data or a schema definition file if the real tables don't exist yet.",
   ],

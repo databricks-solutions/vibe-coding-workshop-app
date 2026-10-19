@@ -577,7 +577,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
             : DATA_LABELS[dataSource && dataSource !== 'blueprint' ? dataSource : 'existing']}
         blueprint={usingBlueprint ? blueprint : null}
         useCase={useCase}
-        onBack={() => setStage(usingBlueprint ? 'blueprint' : exploringTables ? 'source' : 'data')}
+        onBack={() => setStage(usingBlueprint ? 'blueprint' : 'data')}
         onStart={start}
         readOnly={readOnly}
         moments={momentsFor(chosenAddOns)}
