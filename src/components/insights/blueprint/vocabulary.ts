@@ -36,6 +36,9 @@ const STOP = [
   'year', 'today', 'yesterday', 'run', 'out', 'longest', 'highest', 'lowest', 'best', 'worst', 'often', 'likely', 'rising',
   'falling', 'growing', 'declining', 'increasing', 'decreasing', 'biggest', 'smallest', 'more', 'less', 'least', 'can', 'should',
   'right', 'now', 'currently', 'could', 'would', 'will', 'had',
+  'if', 'so', 'then', 'else', 'but', 'as', 'us', 'they', 'them', 'there', 'here', 'also', 'just', 'only',
+  'very', 'too', 'such', 'while', 'whether', 'before', 'after', 'during', 'within', 'without', 'via', 'etc', 'need',
+  'needs', 'want', 'wants', 'know', 'see', 'make', 'use', 'using', 'used', 'act', 'acts',
 ];
 
 const GENERIC = [

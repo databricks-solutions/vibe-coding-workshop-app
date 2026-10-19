@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowUpRight, Check, ChevronDown, Database, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
-import { FadeIn, GhostButton } from '../../journeykit';
+import { ArrowLeft, ArrowUpRight, BadgeCheck, Check, ChevronDown, Database, Info, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { FadeIn, GhostButton, SecondaryButton } from '../../journeykit';
 import { ErrorState, ExplorerHeader, LoadingState, ModelExplorer, type ExplorerCopy, type ExplorerPick } from '../blueprint/ModelExplorer';
 import type { BlueprintDigest, SourceChoice } from '../blueprint/types';
 import { sourceKey, sourcesApi, useApprovedSources, useCheckedSources, useSourceDigest, type ApprovedSource } from './sourcesApi';
 import { CatalogSchemaPicker } from './CatalogSchemaPicker';
+import { certifiedHint, scopeLabel, type CertifiedHint } from './certifiedScope';
 
 interface SourceScreenProps {
   questions: string[];
@@ -14,6 +15,9 @@ interface SourceScreenProps {
   /** catalog.schema ids picked on the data step. */
   sources: string[];
   initialChoice: SourceChoice | null;
+  /** Scan only tables tagged certified in Unity Catalog. */
+  certifiedOnly: boolean;
+  onCertifiedOnlyChange: (v: boolean) => void;
   progress?: ReactNode;
   onSourcesChange: (sources: string[]) => void;
   onBack: () => void;
@@ -122,9 +126,31 @@ function CatalogPill({ digest }: { digest: BlueprintDigest }) {
   );
 }
 
+function CertifiedNotice({ hint, onInclude, onBack }: { hint: CertifiedHint; onInclude: () => void; onBack?: () => void }) {
+  const left = hint.uncertifiedSources.length ? ` ${hint.uncertifiedSources.join(', ')} ${hint.uncertifiedSources.length === 1 ? 'has' : 'have'} no certified tables.` : '';
+  return (
+    <FadeIn delay={0.08} className="flex items-start gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/[0.05] px-4 py-3">
+      <Info className="w-4 h-4 mt-0.5 shrink-0 text-sky-500" />
+      <div className="flex-1 min-w-0 text-ui-sm leading-relaxed">
+        <p className="font-semibold text-foreground">
+          {hint.empty ? 'No certified tables in these sources' : `This scan only looked at certified tables (${hint.scanned.toLocaleString()} of ${hint.total.toLocaleString()})`}
+        </p>
+        <p className="text-muted-foreground">
+          {hint.skipped.toLocaleString()} uncertified table{hint.skipped === 1 ? ' was' : 's were'} left out and might hold what {hint.empty ? 'your questions need' : 'is missing'}.{left}{' '}
+          Include them to check, or untick "Certified assets only" on the Data step.
+        </p>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <SecondaryButton onClick={onInclude}><ShieldAlert className="w-4 h-4" /> Include uncertified tables</SecondaryButton>
+          {onBack && <GhostButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> Back to the Data step</GhostButton>}
+        </div>
+      </div>
+    </FadeIn>
+  );
+}
+
 const sourceCopy = (d: BlueprintDigest): ExplorerCopy => ({
   noun: `your tables in ${d.label}`,
-  fallback: 'The deeper match was unavailable, so this is a keyword match on your tables. You can adjust any area or KPI.',
+  fallback: 'This is a table-level match on names, descriptions and columns. You can adjust any area or KPI.',
   answersIntro: `How the tables in ${d.label} would answer each of your questions, using KPIs that exist or that Genie Code would create.`,
   uncovered: (n, total) => ({
     title: `${n} of your ${total} questions aren't covered by these tables`,
@@ -136,6 +162,9 @@ const sourceCopy = (d: BlueprintDigest): ExplorerCopy => ({
   trustNote: 'Live from Unity Catalog. Real tables and rows.',
   finishLabel: 'Use these tables',
   lowMatchTips: [
+    ...(d.scope?.certifiedOnly && d.scope.total > d.scope.scanned
+      ? [`Include uncertified tables. This scan only looked at the ${d.scope.scanned.toLocaleString()} certified ones of ${d.scope.total.toLocaleString()}.`]
+      : []),
     'Add another catalog and schema with the picker above. The data may live in a different schema.',
     'Check whether an industry data model fits better: go back and pick "Start from an industry data model".',
     "Start from synthetic data or a schema definition file if the real tables don't exist yet.",
@@ -148,15 +177,16 @@ function proposedLine(d: BlueprintDigest, kpiId: string): string | null {
   if (!k?.proposed) return null;
   const table = d.tables.find(t => t.id === k.table);
   const measures = k.measures.map(m => `${m.expr ?? m.name} AS ${m.name}`).join(', ');
-  const slices = k.slices.map(s => s.column ?? s.name).join(', ');
+  const slices = k.slices.map(s => (s.column && s.column.toLowerCase() !== s.name.toLowerCase() ? `${s.column} AS ${s.name}` : s.column ?? s.name)).join(', ');
   return `${k.id} on ${table?.fqn ?? k.table}: ${measures}${slices ? `; by ${slices}` : ''}`;
 }
 
-export function SourceScreen({ questions, context, sources, initialChoice, progress, onSourcesChange, onBack, onNext }: SourceScreenProps) {
+export function SourceScreen({ questions, context, sources, initialChoice, certifiedOnly, onCertifiedOnlyChange, progress, onSourcesChange, onBack, onNext }: SourceScreenProps) {
   const { sources: approved } = useApprovedSources();
   const key = sourceKey(sources);
   const [attempt, setAttempt] = useState(0);
-  const digest = useSourceDigest(key, attempt);
+  const digest = useSourceDigest(key, attempt, certifiedOnly);
+  const includeUncertified = () => { onCertifiedOnlyChange(false); setAttempt(0); };
   const d = digest.data;
   const initial = initialChoice && d && sourceKey(initialChoice.sources) === key ? { areas: initialChoice.areas, kpis: initialChoice.kpis } : null;
 
@@ -189,18 +219,30 @@ export function SourceScreen({ questions, context, sources, initialChoice, progr
     body = (
       <LoadingState
         title="Reading your tables from Unity Catalog"
-        body="Scanning tables, columns and how they join, then grouping them into business areas. The first look at a schema takes about 30 seconds."
+        body={certifiedOnly
+          ? 'Scanning the certified tables, their columns and how they join, then grouping them into business areas. The first look at a schema takes about 30 seconds.'
+          : 'Scanning tables, columns and how they join, then grouping them into business areas. The first look at a schema takes about 30 seconds.'}
       />
     );
+  } else if (!d.tables.length) {
+    const hint = certifiedHint(d.scope, null);
+    body = hint
+      ? <CertifiedNotice hint={hint} onInclude={includeUncertified} onBack={onBack} />
+      : <ErrorState message="No tables found in these sources." onRetry={() => { sourcesApi.reset(); setAttempt(a => a + 1); }} onBack={onBack} />;
   } else {
     body = (
       <ModelExplorer
+        key={certifiedOnly ? 'certified' : 'all'}
         digest={d}
         questions={questions}
         context={context}
         initial={initial}
-        fitFetcher={sourcesApi.fit}
+        fitFetcher={sourcesApi.fit(certifiedOnly)}
         copy={sourceCopy(d)}
+        notice={m => {
+          const hint = certifiedHint(d.scope, m);
+          return hint && <CertifiedNotice hint={hint} onInclude={includeUncertified} />;
+        }}
         onBack={onBack}
         footerStatus={(
           <span className="inline-flex items-center gap-1.5 text-ui-xs text-emerald-500 font-medium">
@@ -229,11 +271,26 @@ export function SourceScreen({ questions, context, sources, initialChoice, progr
         eyebrow="Your governed data"
         title="Explore your tables"
         picker={<SourcePicker approved={approved} value={sources} onChange={s => { onSourcesChange(s); setAttempt(0); }} />}
-        why={d && (certified ? (
-          <span className="inline-flex items-center gap-1.5 text-ui-sm text-emerald-600 dark:text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> Certified source</span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground"><ShieldAlert className="w-3.5 h-3.5 text-amber-500" /> Not on the approved list</span>
-        ))}
+        why={d && (
+          <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+            {certified ? (
+              <span className="inline-flex items-center gap-1.5 text-ui-sm text-emerald-600 dark:text-emerald-400"><ShieldCheck className="w-3.5 h-3.5" /> Approved source</span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground"><ShieldAlert className="w-3.5 h-3.5 text-amber-500" /> Not on the approved list</span>
+            )}
+            {d.scope && (
+              <button
+                onClick={() => { onCertifiedOnlyChange(!certifiedOnly); setAttempt(0); }}
+                title={certifiedOnly ? 'Only tables tagged certified in Unity Catalog are scanned. Click to include uncertified tables.' : 'Every table is scanned. Click to scan certified tables only.'}
+                className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-ui-xs font-medium transition-colors ${
+                  certifiedOnly ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-700 dark:text-emerald-300 hover:border-emerald-500/60' : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <BadgeCheck className="w-3.5 h-3.5" /> {scopeLabel(d.scope)}
+              </button>
+            )}
+          </span>
+        )}
         description={d ? d.description : 'The governed tables you already have, read live from Unity Catalog: business areas, connections, and how they answer your questions.'}
         pill={d && <CatalogPill digest={d} />}
       />

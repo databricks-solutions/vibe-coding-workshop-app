@@ -122,3 +122,54 @@ test('source helpers', () => {
   assert.deepEqual(matchTables(s, 'What was booking revenue by payment method?').sort(), ['bookings', 'payments']);
   assert.deepEqual(matchTables(s, ''), []);
 });
+
+type ScopeModule = typeof import('../../src/components/insights/sources/certifiedScope.ts');
+const { certifiedHint, scopeLabel } = await load<ScopeModule>('src/components/insights/sources/certifiedScope.ts');
+
+const briefOf = (includeUncertified?: boolean) => composeBrief({
+  name: 'Delay risk', industryLabel: 'Airlines', questions: ['Delays by hub?'],
+  dataSource: 'existing', dataLocation: 'cat.airlines', source: { ...source, sources: ['cat.airlines'] }, includeUncertified,
+});
+
+test('existing data defaults to certified assets only, and the choice round-trips', () => {
+  assert.match(briefOf(), /^Table scope: certified assets only \(tables tagged system\.certification_status = certified\)\.$/m);
+  assert.equal(parseBrief(briefOf()).includeUncertified, false);
+  assert.match(briefOf(true), /^Table scope: all tables, including uncertified ones\.$/m);
+  assert.equal(parseBrief(briefOf(true)).includeUncertified, true);
+  // Briefs written before the setting existed read as certified only.
+  assert.equal(parseBrief(briefOf().replace(/^Table scope:.*$/m, '')).includeUncertified, false);
+  const sample = composeBrief({ name: 'x', industryLabel: '', questions: ['q?'], dataSource: 'sample', dataLocation: '' });
+  assert.doesNotMatch(sample, /Table scope:/);
+});
+
+test('the data step word match can stick to certified tables', () => {
+  const s = {
+    id: 'c.s', catalog: 'c', schema: 's', label: 's', note: '', readable: true, tableCount: 2, metricViews: 0, error: '',
+    tables: [{ name: 'flight_delays', comment: '', certified: false }, { name: 'flights', comment: '', certified: true }],
+  };
+  assert.deepEqual(matchTables(s, 'flight delays').sort(), ['flight_delays', 'flights']);
+  assert.deepEqual(matchTables(s, 'flight delays', 4, true), ['flights']);
+});
+
+const scope = (scanned: number, total: number, certifiedOnly = true) => ({
+  certifiedOnly, scanned, certified: scanned, total,
+  perSource: [{ id: 'cat.airlines', certified: scanned, total }, { id: 'cat.raw', certified: 0, total: total ? 3 : 0 }],
+});
+
+test('the certified-only hint shows when the scan left tables out and the match is thin', () => {
+  const settled = { answered: 3, total: 5, level: 'low' as const, refining: false };
+  const hint = certifiedHint(scope(205, 208), settled);
+  assert.equal(hint?.skipped, 3);
+  assert.deepEqual(hint?.uncertifiedSources, ['cat.raw']);
+  assert.equal(certifiedHint(scope(205, 208), { ...settled, refining: true }), null, 'waits for the match to settle');
+  assert.equal(certifiedHint(scope(205, 208), { answered: 5, total: 5, level: 'ok', refining: false }), null, 'nothing missing');
+  assert.equal(certifiedHint(scope(208, 208), settled), null, 'nothing was skipped');
+  assert.equal(certifiedHint(scope(200, 208, false), settled), null, 'all tables were scanned');
+  assert.equal(certifiedHint(scope(0, 12), null)?.empty, true, 'nothing certified at all');
+});
+
+test('the scope label says what was scanned', () => {
+  assert.equal(scopeLabel(scope(205, 208)), 'Certified tables only · 205 of 208');
+  assert.equal(scopeLabel(scope(205, 208, false)), 'All tables · 208, 205 certified');
+  assert.equal(scopeLabel(undefined), '');
+});

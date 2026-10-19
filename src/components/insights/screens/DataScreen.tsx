@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, Database, FileUp, FlaskConical, Info, Loader2, Plus, ShieldCheck, Sparkles, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, Check, Database, FileUp, FlaskConical, Info, Loader2, Plus, ShieldCheck, Sparkles, TriangleAlert, X } from 'lucide-react';
 import type { DataSource } from '../brief';
 import { useBlueprintCatalog, useInstalledModels } from '../blueprint/blueprintApi';
 import type { ModelHint } from '../blueprint/industryMap';
@@ -38,7 +38,12 @@ interface DataScreenProps {
   hint: ModelHint;
   value: DataSource | null;
   location: string;
+  /** Scan only tables tagged certified in Unity Catalog. On by default. */
+  certifiedOnly: boolean;
+  onCertifiedOnlyChange: (v: boolean) => void;
   progress?: ReactNode;
+  /** Shown beside Back, e.g. a way back to an existing build. */
+  tools?: ReactNode;
   onChange: (v: DataSource) => void;
   onLocationChange: (v: string) => void;
   onBack: () => void;
@@ -76,16 +81,19 @@ function useBlueprintOption(hint: ModelHint): Option | null {
   };
 }
 
-function SourceChip({ source: s, tables, on, added, onToggle, onRemove }: {
+function SourceChip({ source: s, tables, on, added, certifiedOnly, onToggle, onRemove }: {
   source: ApprovedSource | CheckedSource;
   tables: string[];
   on: boolean;
   added?: boolean;
+  certifiedOnly: boolean;
   onToggle: () => void;
   onRemove?: () => void;
 }) {
   const loading = 'loading' in s && s.loading;
   const failed = !loading && !s.readable;
+  const certified = s.certifiedCount ?? 0;
+  const noneCertified = certifiedOnly && !loading && !failed && s.tableCount > 0 && certified === 0;
   return (
     <div className={`relative rounded-xl border transition-colors ${on ? 'border-primary/60 bg-primary/[0.06]' : 'border-border bg-card hover:border-foreground/25'}`}>
       <button onClick={onToggle} aria-pressed={on} title={s.note || s.id} className="w-full text-left px-3 py-2.5">
@@ -100,12 +108,23 @@ function SourceChip({ source: s, tables, on, added, onToggle, onRemove }: {
           </span>
         </span>
         {!added && <span className="block font-mono text-ui-xs text-muted-foreground mt-0.5 pl-6">{s.id}</span>}
+        {!loading && !failed && s.tableCount > 0 && (
+          <span className={`flex items-center gap-1 text-ui-xs mt-1 pl-6 ${certified ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+            <BadgeCheck className="w-3 h-3 shrink-0" />
+            {certified === s.tableCount ? `All ${certified} certified` : `${certified} of ${s.tableCount} certified`}
+          </span>
+        )}
         {loading ? (
           <span className="block text-ui-xs text-muted-foreground mt-1 pl-6">Scanning its tables…</span>
         ) : failed ? (
           <span className="flex items-start gap-1 text-ui-xs text-amber-600 dark:text-amber-400 mt-1 pl-6">
             <TriangleAlert className="w-3 h-3 mt-0.5 shrink-0" />
             <span>The app can't read this schema. Check the name, or grant the app's service principal USE CATALOG, USE SCHEMA and SELECT.</span>
+          </span>
+        ) : noneCertified ? (
+          <span className="flex items-start gap-1 text-ui-xs text-amber-600 dark:text-amber-400 mt-1 pl-6">
+            <TriangleAlert className="w-3 h-3 mt-0.5 shrink-0" />
+            <span>No certified tables here. Untick "Certified assets only" to scan it.</span>
           </span>
         ) : tables.length > 0 ? (
           <span className="block text-ui-xs text-primary/90 mt-1 pl-6">Matches your questions: {tables.join(', ')}</span>
@@ -122,7 +141,7 @@ function SourceChip({ source: s, tables, on, added, onToggle, onRemove }: {
   );
 }
 
-export function DataScreen({ hint, value, location, progress, onChange, onLocationChange, onBack, onNext, onOpenInstalled }: DataScreenProps) {
+export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOnlyChange, progress, tools, onChange, onLocationChange, onBack, onNext, onOpenInstalled }: DataScreenProps) {
   const blueprintOption = useBlueprintOption(hint);
   const { data: catalog, loading: catalogLoading } = useBlueprintCatalog();
   // Only the model that fits this idea; other installed models are a distraction here.
@@ -131,7 +150,7 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
     .map(m => ({ ...m, label: catalog?.industries.find(i => i.slug === m.slug)?.label ?? m.slug }));
   const options = blueprintOption ? [OPTIONS[0], blueprintOption, ...OPTIONS.slice(1)] : OPTIONS;
   const matchInstalled = installed.length > 0;
-  const { sources: approved } = useApprovedSources();
+  const { sources: approved, loading: approvedLoading } = useApprovedSources();
   const picked = locationEntries(location);
   const addedIds = picked.filter(p => isSourceId(p) && !approved.some(a => a.id.toLowerCase() === p.toLowerCase()));
   const hints = picked.filter(p => !isSourceId(p));
@@ -139,8 +158,11 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
   const [draft, setDraft] = useState('');
   const [adding, setAdding] = useState(false);
   const [typing, setTyping] = useState(false);
-  const matches = approved.filter(s => s.readable).map(s => ({ source: s, tables: matchTables(s, hint.text ?? '') }));
-  const addedMatches = added.map(s => ({ source: s, tables: s.readable ? matchTables(s, hint.text ?? '') : [] }));
+  const matches = approved.filter(s => s.readable).map(s => ({ source: s, tables: matchTables(s, hint.text ?? '', 4, certifiedOnly) }));
+  const addedMatches = added.map(s => ({ source: s, tables: s.readable ? matchTables(s, hint.text ?? '', 4, certifiedOnly) : [] }));
+  const pickedSummaries = [...approved, ...added].filter(s => picked.includes(s.id) && s.readable);
+  const pickedTotal = pickedSummaries.reduce((n, s) => n + s.tableCount, 0);
+  const pickedCertified = pickedSummaries.reduce((n, s) => n + (s.certifiedCount ?? 0), 0);
   const bestMatch = [...matches, ...addedMatches].sort((a, b) => b.tables.length - a.tables.length)[0];
   const strongApproved = !!bestMatch && bestMatch.tables.length >= 3;
   const recommended: { id: DataSource; why: string } = strongApproved
@@ -180,7 +202,10 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
     <div className="max-w-4xl mx-auto px-1 py-6 sm:py-10 space-y-8">
       <FadeIn className="flex items-center justify-between gap-4">
         {progress}
-        <GhostButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> Back</GhostButton>
+        <span className="flex items-center gap-2">
+          {tools}
+          <GhostButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> Back</GhostButton>
+        </span>
       </FadeIn>
 
       <FadeIn delay={0.05}>
@@ -263,15 +288,28 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                       <div className="px-5 pb-5 pl-[4.75rem]">
                         <p className="flex items-center gap-1.5 text-ui-sm text-muted-foreground mb-2">
-                          {matches.length > 0 ? (
+                          {approvedLoading ? (
+                            <><Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Loading your sources <span className="opacity-70">· reading tables and certification from Unity Catalog</span></>
+                          ) : matches.length > 0 ? (
                             <><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Sources <span className="opacity-70">· pick one or more to explore their tables</span></>
                           ) : (
                             <>Know where it is? <span className="opacity-70">· optional, add a catalog and schema to scan</span></>
                           )}
                         </p>
                         <div className="grid gap-2 sm:grid-cols-2">
+                          {approvedLoading && [0, 1, 2, 3].map(i => (
+                            <div key={i} aria-hidden className="min-h-[96px] rounded-xl border border-border bg-card px-3 py-2.5 space-y-2 animate-pulse">
+                              <div className="flex items-center gap-2">
+                                <span className="w-4 h-4 rounded border border-border" />
+                                <span className="h-3.5 w-28 rounded bg-secondary" />
+                                <span className="ml-auto h-3 w-14 rounded bg-secondary" />
+                              </div>
+                              <span className="block h-3 w-44 rounded bg-secondary/80 ml-6" />
+                              <span className="block h-3 w-24 rounded bg-secondary/60 ml-6" />
+                            </div>
+                          ))}
                           {matches.map(({ source: s, tables }) => (
-                            <SourceChip key={s.id} source={s} tables={tables} on={picked.includes(s.id)} onToggle={() => toggleSource(s.id)} />
+                            <SourceChip key={s.id} source={s} tables={tables} on={picked.includes(s.id)} certifiedOnly={certifiedOnly} onToggle={() => toggleSource(s.id)} />
                           ))}
                           {addedMatches.map(({ source: s, tables }) => (
                             <SourceChip
@@ -280,6 +318,7 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
                               tables={tables}
                               on
                               added
+                              certifiedOnly={certifiedOnly}
                               onToggle={() => toggleSource(s.id)}
                               onRemove={() => onLocationChange(removeFromLocation(location, s.id))}
                             />
@@ -346,6 +385,25 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
                             ))}
                           </div>
                         )}
+                        <label className="mt-3 flex items-start gap-2.5 rounded-xl border border-border bg-card/60 px-3 py-2.5 cursor-pointer hover:border-foreground/25 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={certifiedOnly}
+                            onChange={e => onCertifiedOnlyChange(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-border accent-[hsl(var(--primary))] shrink-0"
+                          />
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5 text-ui-sm font-semibold text-foreground">
+                              <BadgeCheck className="w-3.5 h-3.5 text-emerald-500" /> Certified assets only
+                            </span>
+                            <span className="block text-ui-xs text-muted-foreground mt-0.5">
+                              {certifiedOnly
+                                ? 'Scans only tables tagged certified in Unity Catalog (system.certification_status). Untick to include uncertified tables.'
+                                : 'Scans every table, certified or not. Tick to stick to tables tagged certified in Unity Catalog.'}
+                              {pickedTotal > 0 && ` ${pickedCertified.toLocaleString()} of ${pickedTotal.toLocaleString()} tables in your picks are certified.`}
+                            </span>
+                          </span>
+                        </label>
                         <p className="text-ui-xs text-muted-foreground mt-1.5">
                           {explorable
                             ? 'Next, you will see how these tables connect and answer your questions.'

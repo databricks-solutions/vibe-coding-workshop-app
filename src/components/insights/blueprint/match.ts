@@ -1,5 +1,6 @@
 import type { BlueprintDigest, BlueprintKpi } from './types';
 import { DEFAULT_VOCABULARY, stem, type MatchVocabulary } from './vocabulary';
+import { withinLeadingSchema } from './leadingSchema';
 
 export type Confidence = 'strong' | 'partial' | 'none';
 
@@ -294,8 +295,9 @@ export function createMatcher(vocab: MatchVocabulary = DEFAULT_VOCABULARY) {
       .sort((a, b) => b.score - a.score);
     if (!scored.length) return suggestAreas(recipes, digest, 2).map(name => ({ name, role: 'core', words: [] }));
 
-    const cut = scored[0].score * 0.45;
-    const kept = scored.filter((s, i) => i < 2 || s.score >= cut).slice(0, max);
+    const pool = withinLeadingSchema(scored, digest);
+    const cut = pool[0].score * 0.45;
+    const kept = pool.filter((s, i) => i < 2 || s.score >= cut).slice(0, max);
     const picks: AreaPick[] = kept.map((s, i) => ({
       name: s.name,
       role: i === 0 || s.score >= scored[0].score * 0.6 ? 'core' : 'supporting',
@@ -310,7 +312,6 @@ export function createMatcher(vocab: MatchVocabulary = DEFAULT_VOCABULARY) {
 
   return { matchQuestion, rankAreas };
 }
-
 export interface AreaPick {
   name: string;
   role: 'core' | 'supporting';

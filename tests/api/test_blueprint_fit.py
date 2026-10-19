@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.backend.api import blueprint_fit as fit
+from src.backend.api import table_matcher as tm
 
 DIGEST = {
     "label": "Airlines",
@@ -133,13 +134,15 @@ def test_fit_retries_once_then_caches(monkeypatch):
     calls = []
 
     async def fake_ask(system_prompt, prompt, max_tokens):
+        if system_prompt == tm.NEEDS_PROMPT:
+            return {"text": '{"needs": [{"need": "On-time departures per station", "terms": ["flight leg", "on-time"]}]}', "model": "m"}
         calls.append(prompt)
         return {"text": next(replies), "model": "m"}
 
     async def fake_digest(slug, flavour="mvm"):
         return DIGEST
 
-    monkeypatch.setattr(fit, "_ask", fake_ask)
+    monkeypatch.setattr(tm, "_ask", fake_ask)
     monkeypatch.setattr(fit, "load_digest", fake_digest)
     monkeypatch.setattr(fit, "_guard", lambda: None)
     body = fit.FitRequest(context="Plan ground crews per bank", questions=["OTP by station?"])
@@ -151,6 +154,54 @@ def test_fit_retries_once_then_caches(monkeypatch):
     nudged = fit.FitRequest(context=body.context, questions=body.questions, suggested=["crew", "nope"])
     asyncio.run(fit.blueprint_fit("airlines", nudged))
     assert len(calls) == 3 and "SUGGESTED AREAS:\ncrew\n" in calls[2]
+
+
+def test_fit_jobs_start_and_poll_through_the_routes(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.backend.api import data_sources as ds
+    from src.backend.api import insights_cache
+
+    async def fake_ask(system_prompt, prompt, max_tokens):
+        if system_prompt == tm.NEEDS_PROMPT:
+            return {"text": '{"needs": [{"need": "On-time departures per station", "terms": ["flight leg", "on-time"]}]}', "model": "m"}
+        return {"text": '{"areas": [{"name": "flight", "role": "core"}, {"name": "airport", "role": "supporting"}], "fit": "strong"}', "model": "m"}
+
+    async def fake_digest(slug, flavour="mvm"):
+        return DIGEST
+
+    seen = []
+
+    async def fake_source_digest(value, certified_only=False):
+        seen.append(value)
+        return {**DIGEST, "slug": "uc:cat.airlines", "fingerprint": "fp-route"}
+
+    monkeypatch.setattr(tm, "_ask", fake_ask)
+    monkeypatch.setattr(tm, "_jobs", type(tm._jobs)())
+    monkeypatch.setattr(insights_cache, "_DB", {"state": "off"})
+    monkeypatch.setattr(fit, "load_digest", fake_digest)
+    monkeypatch.setattr(fit, "_guard", lambda: None)
+    monkeypatch.setattr(ds, "load_source_digest", fake_source_digest)
+    app = FastAPI()
+    app.include_router(fit.router, prefix="/api")
+    app.include_router(ds.router, prefix="/api")
+    client = TestClient(app)
+    body = {"context": "Next-hour departure delay risk", "questions": ["OTP by station?"]}
+
+    for start, poll in (("/api/blueprints/airlines/fit/start", "/api/blueprints/airlines/fit/{}"),
+                        ("/api/data-sources/fit/start", "/api/data-sources/fit/{}")):
+        payload = {**body, "sources": ["uc:cat.airlines"]} if "data-sources" in start else body
+        r = client.post(start, json=payload)
+        assert r.status_code == 200, r.text
+        view = r.json()
+        assert view["job"] and view["status"] in ("running", "done")
+        for _ in range(100):
+            if view["status"] != "running":
+                break
+            view = client.get(poll.format(view["job"])).json()
+        assert view["status"] == "done" and view["fit"]["areas"]
+    assert seen == ["uc:cat.airlines"]
+    assert client.get("/api/data-sources/fit/unknown").status_code == 404
 
 
 def test_fit_needs_some_text(monkeypatch):

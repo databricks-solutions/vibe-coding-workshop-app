@@ -5,6 +5,7 @@ import { caseFigures } from '../engine/ideaContext';
 import { money } from '../engine/businessCase';
 import { needsBuildUpdate, reviewIdea, updateBuildHref } from '../engine/handoff';
 import type { Idea } from '../engine/types';
+import { reviewsInInsights } from '../../insights/reviewTarget';
 
 /** Thin bar over the workflow that ties the project back to its idea, with a way to park the build. */
 export function BuildLinkBar({ idea, readOnly }: { idea: Idea; readOnly?: boolean }) {
@@ -20,8 +21,12 @@ export function BuildLinkBar({ idea, readOnly }: { idea: Idea; readOnly?: boolea
     navigate('/ideate');
   };
   const resume = () => updateIdea(idea.id, { buildStatus: 'building', status: 'committed' });
-  // Insights ideas are shaped inside the project, so the project shows them; Ideate ideas open in Ideate.
-  const backToIdea = () => (insights ? reviewIdea({ ideaId: idea.id, to: 'idea' }) : navigate(`/ideate/${idea.id}`));
+  // With no open Insights project to take it, an Ideate idea opens in Ideate.
+  const builtInInsights = reviewsInInsights(idea);
+  const backToIdea = () => {
+    if (builtInInsights && reviewIdea({ ideaId: idea.id, to: 'idea' })) return;
+    if (!insights) navigate(`/ideate/${idea.id}`);
+  };
   const update = () => (insights ? reviewIdea({ ideaId: idea.id, to: 'update' }) : navigate(updateBuildHref(idea)));
 
   return (
@@ -37,7 +42,7 @@ export function BuildLinkBar({ idea, readOnly }: { idea: Idea; readOnly?: boolea
           <History className="w-3.5 h-3.5" /> Update build
         </button>
       )}
-      <button onClick={backToIdea} title="See how the idea came about, and change any answer" className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-ui-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
+      <button onClick={backToIdea} title={builtInInsights && idea.lockedAt ? 'Go back to where you chose the data for this idea' : 'See how the idea came about, and change any answer'} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-ui-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to the idea
       </button>
       {!readOnly && (parked ? (

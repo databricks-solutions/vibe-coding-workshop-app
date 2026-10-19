@@ -47,6 +47,37 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.2',
+    date: '2026-10-19',
+    title: 'Certified assets by default and sharper table matching',
+    items: [
+      {
+        title: 'Certified assets only, on by default',
+        description:
+          'When you start from data already in Databricks, the Data step now scans only tables tagged certified in Unity Catalog (system.certification_status). Each source shows how many of its tables are certified. If the scan leaves tables out and a question goes unanswered, the Tables screen says so and offers to include uncertified tables in one click.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'shield',
+      },
+      {
+        title: 'Better matches on your own tables',
+        description:
+          'Matching an idea to your Unity Catalog tables works again, and a quick table-level match shows within seconds while the AI refines it. A schema copied from an industry data model is recognised, and gets that model\'s business areas, joins and KPIs back.',
+        category: 'fix',
+        audience: 'attendee',
+        icon: 'database',
+      },
+      {
+        title: 'Back to the idea returns to the Data step',
+        description:
+          'From Explore your tables, the model explorer or the build, "Back to the idea" now opens the Data step with your choice kept, including for ideas first shaped in Ideate.',
+        category: 'fix',
+        audience: 'attendee',
+        icon: 'route',
+      },
+    ],
+  },
+  {
     version: '2.8.1',
     date: '2026-10-17',
     title: 'A cleaner workshop journey, richer guidance and portfolio review',

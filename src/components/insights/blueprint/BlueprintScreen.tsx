@@ -140,7 +140,7 @@ function InstallChip({ status, caps, onStart, starting }: { status: InstallStatu
 
 const modelCopy = (label: string, catalog: string): ExplorerCopy => ({
   noun: `the ${label} model`,
-  fallback: "The deeper match was unavailable, so this is the model's reliable keyword match. You can adjust any area or KPI.",
+  fallback: "This is a table-level match on the model's names, descriptions and columns. You can adjust any area or KPI.",
   answersIntro: `How the ${label} model would answer each of your questions, using KPIs it already defines.`,
   uncovered: (n, total) => ({
     title: `${n} of your ${total} questions aren't in the ${label} model`,

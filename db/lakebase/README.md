@@ -30,7 +30,8 @@ db/lakebase/
 │   ├── 14_seed_rows_applied.sql
 │   ├── 15_seed_bulk_pending.sql
 │   ├── 16_widen_workshop_level.sql
-│   └── 17_add_user_trigger_prompt.sql
+│   ├── 17_add_user_trigger_prompt.sql
+│   └── 18_insights_cache.sql
 └── dml_seed/              # Initial seed data (DML)
     ├── 01_seed_usecase_descriptions.sql
     ├── 02_seed_section_input_prompts.sql

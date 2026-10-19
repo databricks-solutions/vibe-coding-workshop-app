@@ -73,6 +73,8 @@ export interface BlueprintTable {
   standard?: string;
   /** Unity Catalog name, set for approved data sources. */
   fqn?: string;
+  /** Tagged system.certification_status = certified in Unity Catalog. */
+  certified?: boolean;
 }
 
 export interface BlueprintKpi {
@@ -86,6 +88,18 @@ export interface BlueprintKpi {
   sourceUrl: string;
   /** Suggested by the AI from real columns; Genie Code creates it as a metric view. */
   proposed?: boolean;
+  /** Slug of the industry model this KPI set comes from, on tables copied from that model. */
+  model?: string;
+}
+
+/** A schema recognised as a copy of a gallery industry model. */
+export interface DigestModel {
+  source: string;
+  slug: string;
+  label: string;
+  version: string;
+  matched: number;
+  total: number;
 }
 
 export interface StarterQuestion {
@@ -122,6 +136,18 @@ export interface BlueprintDigest {
   kpis: BlueprintKpi[];
   links: { a: string; b: string; n: number }[];
   starterQuestions: StarterQuestion[];
+  /** Approved-source schemas that are copies of an industry model. */
+  models?: DigestModel[];
+  /** What an approved-source scan covered; tables only, metric views are not counted. */
+  scope?: DigestScope;
+}
+
+export interface DigestScope {
+  certifiedOnly: boolean;
+  scanned: number;
+  certified: number;
+  total: number;
+  perSource: { id: string; certified: number; total: number }[];
 }
 
 export type InstallState = 'not_installed' | 'installing' | 'installed' | 'failed' | 'unknown' | 'exists' | 'needs_genie_code' | 'busy';
@@ -183,6 +209,19 @@ export interface BlueprintFit {
   questions: { index: number; kpi: string | null; tables?: string[]; how?: string }[];
   fit: 'strong' | 'partial' | 'weak';
   summary: string;
+  /** `tables` when the AI review was unavailable and the fit comes from matching table names, descriptions and columns. */
+  mode?: 'ai' | 'tables';
+  /** Why a `tables` fit has no AI review: still running, ran out of time, AI unavailable, or an unusable reply. */
+  reason?: 'pending' | 'timeout' | 'unavailable' | 'invalid';
+}
+
+/** A match running on the server, from POST .../fit/start and GET .../fit/{job}. */
+export interface FitJob {
+  job: string;
+  status: 'running' | 'done' | 'failed';
+  /** The interim local fit while running, the final one when done; null for the first moment. */
+  fit: BlueprintFit | null;
+  error: string;
 }
 
 export interface BlueprintChoice {

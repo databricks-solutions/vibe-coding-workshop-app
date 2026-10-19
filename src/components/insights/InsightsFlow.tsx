@@ -18,6 +18,7 @@ import { openPathComparison } from './pathEvents';
 import { assessPriority } from './priorityAssessment';
 import { ADD_ON_LABEL, addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, requiredAddOns, tagsFor, useTagAvailability, type AddOn } from './recipes';
 import { insightsPhases, type InsightsStage } from './progress';
+import { reviewTarget } from './reviewTarget';
 import { insightsIndustryFor } from './usecases/useCaseApi';
 import { DataScreen } from './screens/DataScreen';
 import { IdeaLockedScreen } from './screens/IdeaLockedScreen';
@@ -151,6 +152,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const [startIndustry, setStartIndustry] = useState('');
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [dataLocation, setDataLocation] = useState('');
+  const [includeUncertified, setIncludeUncertified] = useState(false);
   const [blueprint, setBlueprint] = useState<BlueprintChoice | null>(null);
   const [source, setSource] = useState<SourceChoice | null>(null);
   const [preferredSlug, setPreferredSlug] = useState<string | null>(null);
@@ -185,6 +187,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
       setDataLocation(parsed.dataLocation);
       setBlueprint(parsed.blueprint);
       setSource(parsed.source);
+      setIncludeUncertified(parsed.includeUncertified);
       setName(fitName(linked?.title ?? (parsed.questions.length ? (customUseCaseLabel || selectedUseCaseLabel) : '')));
       setStartIndustry(INDUSTRY_IDEAS.find(i => i.label === selectedIndustryLabel)?.id ?? insightsIndustryFor(selectedIndustry));
     }
@@ -213,10 +216,11 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     const onReview = (e: Event) => {
       const detail = (e as CustomEvent<ReviewIdeaDetail>).detail;
       if (!detail || !idea || detail.ideaId !== idea.id) return;
+      e.preventDefault();
       setReviewing(true);
       setKeepCurrent(false);
       setLockSeen(idea.lockedAt);
-      setStage(detail.to === 'update' && idea.lockedAt ? 'locked' : 'idea');
+      setStage(reviewTarget(detail.to, idea.lockedAt));
     };
     window.addEventListener(REVIEW_IDEA_EVENT, onReview);
     return () => window.removeEventListener(REVIEW_IDEA_EVENT, onReview);
@@ -248,6 +252,12 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     industryId,
     industry: idea?.spark?.industry || idea?.sourceUseCase?.industryLabel,
     text: [ideaText, ...questions].filter(Boolean).join('\n'),
+  };
+  // A different table scope is a different scan, so an earlier exploration no longer applies.
+  const setCertifiedOnly = (on: boolean) => {
+    if (on === !includeUncertified) return;
+    setIncludeUncertified(!on);
+    setSource(null);
   };
   const usingBlueprint = dataSource === 'blueprint';
   const pickedSources = dataSource === 'existing' ? sourcesIn(dataLocation) : [];
@@ -335,6 +345,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         useCase,
         idea: ideaBriefOf(idea),
         addOns: chosenAddOns,
+        includeUncertified,
       }),
     });
     markBuilt(idea, 'Set up the build');
@@ -369,6 +380,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         useCase,
         idea: ideaBriefOf(idea),
         addOns: effectiveBuiltAddOns,
+        includeUncertified: parsed.includeUncertified,
       }),
       resetPrompts: true,
     });
@@ -493,6 +505,9 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         progress={progress}
         onChange={setDataSource}
         onLocationChange={setDataLocation}
+        certifiedOnly={!includeUncertified}
+        onCertifiedOnlyChange={setCertifiedOnly}
+        tools={ready ? backToBuildButton : undefined}
         onBack={() => setStage('locked')}
         onOpenInstalled={slug => {
           setDataSource('blueprint');
@@ -524,6 +539,8 @@ function InsightsFlowInner(props: InsightsFlowProps) {
             context={ideaText}
             sources={pickedSources}
             initialChoice={source}
+            certifiedOnly={!includeUncertified}
+            onCertifiedOnlyChange={setCertifiedOnly}
             progress={progress}
             onSourcesChange={s => setDataLocation(s.join(', '))}
             onBack={() => setStage('data')}

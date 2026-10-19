@@ -32,10 +32,14 @@ export const openBuildHref = (idea: Idea) =>
 /** Rewrites the linked project from the idea's latest answers. */
 export const updateBuildHref = (idea: Idea) => `/?updateBuild=${encodeURIComponent(idea.id)}`;
 
-/** Asks the open Insights project to show its idea again (`idea`) or the update screen (`update`). */
+/**
+ * Asks the open Insights project to show its idea again (`idea`) or the update screen (`update`).
+ * Returns true when an open project handled it (the listener calls preventDefault).
+ */
 export const REVIEW_IDEA_EVENT = 'v2v:review-idea';
 export type ReviewIdeaDetail = { ideaId: string; to: 'idea' | 'update' };
-export const reviewIdea = (detail: ReviewIdeaDetail) => window.dispatchEvent(new CustomEvent<ReviewIdeaDetail>(REVIEW_IDEA_EVENT, { detail }));
+export const reviewIdea = (detail: ReviewIdeaDetail) =>
+  !window.dispatchEvent(new CustomEvent<ReviewIdeaDetail>(REVIEW_IDEA_EVENT, { detail, cancelable: true }));
 
 /** The idea is linked to a project that builds it. */
 export const isBuilding = (idea: Idea) => !!idea.sessionId && (!!idea.buildTarget || idea.mode === 'insights');

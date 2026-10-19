@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ArrowLeft, ArrowRight, Check, CircleDashed, Gauge, Loader2, Map as MapIcon, MessageCircleQuestion, Network, OctagonAlert, RefreshCw, ShieldCheck, Sparkles, Table2, TriangleAlert,
+  ArrowLeft, ArrowRight, BadgeCheck, Check, CircleDashed, Gauge, Loader2, Map as MapIcon, MessageCircleQuestion, Network, OctagonAlert, RefreshCw, RotateCcw, ShieldCheck, Sparkles, Table2, TriangleAlert,
 } from 'lucide-react';
 import { FadeIn, GhostButton, PrimaryButton, SecondaryButton } from '../../journeykit';
 import { AnswerRecipe } from './AnswerRecipe';
@@ -18,6 +18,13 @@ import type { BlueprintDigest, BlueprintFit } from './types';
 
 const FOCUS_SOFT_CAP = 30;
 
+const FALLBACK_WHY: Record<NonNullable<BlueprintFit['reason']>, string> = {
+  pending: '',
+  timeout: 'The AI review took too long. ',
+  unavailable: 'The AI review was unavailable. ',
+  invalid: 'The AI review gave an answer that could not be used. ',
+};
+
 type Lens = 'answers' | 'map' | 'diagram' | 'metrics' | 'tables';
 
 const LENSES: { id: Lens; label: string; icon: typeof MapIcon }[] = [
@@ -32,6 +39,7 @@ const LENSES: { id: Lens; label: string; icon: typeof MapIcon }[] = [
 export interface ExplorerCopy {
   /** e.g. "the Retail model" or "Wanderbricks". */
   noun: string;
+  /** Shown after the reason when the fit has no AI review, e.g. "This is a table-level match on …". */
   fallback: string;
   answersIntro: string;
   uncovered: (uncovered: number, total: number) => { title: string; body: string };
@@ -58,6 +66,15 @@ export interface ExplorerPick {
   lowMatch: boolean;
 }
 
+export interface MatchSummary {
+  answered: number;
+  total: number;
+  level: ReturnType<typeof matchLevel>;
+  fit: BlueprintFit['fit'] | null;
+  /** The AI review is still running. */
+  refining: boolean;
+}
+
 interface ModelExplorerProps {
   digest: BlueprintDigest;
   questions: string[];
@@ -70,6 +87,8 @@ interface ModelExplorerProps {
   /** Left of the finish button: install progress, or where the tables live. */
   footerStatus: ReactNode;
   sourceFooter?: ReactNode;
+  /** Shown under the match banners once matching settles, e.g. what the scan left out. */
+  notice?: (m: MatchSummary) => ReactNode;
   onFinish: (pick: ExplorerPick) => void;
   /** Back to the data step, offered when the match is very low. */
   onBack: () => void;
@@ -79,7 +98,7 @@ export function LoadingState({ title, body }: { title: string; body: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
       <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 18, ease: 'linear' }}>
-        <MiniConstellation nodes={11} size={72} />
+        <MiniConstellation nodes={11} size={144} />
       </motion.div>
       <p className="text-ui-md text-foreground font-medium">{title}</p>
       <p className="text-ui-sm text-muted-foreground max-w-sm">{body}</p>
@@ -96,9 +115,9 @@ function MatchingState({ noun, questions }: { noun: string; questions: number })
         transition={{ repeat: Infinity, duration: 18, ease: 'linear' }}
         className="relative"
       >
-        <MiniConstellation nodes={13} size={88} />
+        <MiniConstellation nodes={13} size={168} />
         <span className="absolute inset-0 flex items-center justify-center">
-          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+          <Loader2 className="w-9 h-9 text-primary animate-spin" />
         </span>
       </motion.div>
       <div className="space-y-2">
@@ -166,7 +185,10 @@ function TrustStrip({ digest, note }: { digest: BlueprintDigest; note: string })
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 border-t border-border/70 bg-secondary/20 text-ui-xs text-muted-foreground">
         {trust.certified && (
-          <span className="inline-flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Certified source</span>
+          <span className="inline-flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Approved source</span>
+        )}
+        {digest.scope?.certifiedOnly && (
+          <span className="inline-flex items-center gap-1"><BadgeCheck className="w-3.5 h-3.5 text-emerald-500" /> Certified tables only</span>
         )}
         {typeof trust.qualityScore === 'number' && (
           <span className="inline-flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Model quality {Math.round(trust.qualityScore)}/100</span>
@@ -191,7 +213,7 @@ const notesFromFit = (fit: BlueprintFit): Record<string, AreaNote> =>
   Object.fromEntries(fit.areas.map(a => [a.name, { role: a.role, why: a.why, join: a.join }]));
 
 /** The match, map, diagram, KPIs and tables of one digest, with the sticky footer. */
-export function ModelExplorer({ digest: d, questions, context, initial, fitFetcher, copy, footerStatus, sourceFooter, onFinish, onBack }: ModelExplorerProps) {
+export function ModelExplorer({ digest: d, questions, context, initial, fitFetcher, copy, footerStatus, sourceFooter, notice, onFinish, onBack }: ModelExplorerProps) {
   const [lens, setLens] = useState<Lens>('map');
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
@@ -310,21 +332,26 @@ export function ModelExplorer({ digest: d, questions, context, initial, fitFetch
   return (
     <>
       <div className="space-y-6">
-        {fit.failed && !initial && (
+        {(fit.failed || (fitData?.mode === 'tables' && !fit.refining)) && !initial && (
           <FadeIn className="flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] px-4 py-3">
             <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
-            <p className="text-ui-sm text-muted-foreground">{copy.fallback}</p>
+            <p className="flex-1 text-ui-sm text-muted-foreground">
+              {fit.failed ? `Could not match your idea to ${copy.noun}${fit.error ? `: ${fit.error}` : '.'} This is a quick match on your words only.` : `${FALLBACK_WHY[fitData?.reason ?? 'unavailable'] ?? ''}${copy.fallback}`}
+            </p>
+            <button onClick={fit.retry} className="shrink-0 inline-flex items-center gap-1.5 text-ui-xs font-medium text-primary hover:underline">
+              <RotateCcw className="w-3.5 h-3.5" /> Try again
+            </button>
           </FadeIn>
         )}
         <FadeIn delay={0.05}>
           <FitPanel
             digest={d}
             fit={fitData}
-            loading={fit.loading}
+            loading={fit.refining}
             focus={focus}
             notes={notes}
             offered={fitOffered}
-            refining={fit.loading && !fitApplied && !edited}
+            refining={fit.refining && !edited}
             change={change}
             inSource={copy.inSource}
             gapNote={copy.gapNote}
@@ -366,6 +393,7 @@ export function ModelExplorer({ digest: d, questions, context, initial, fitFetch
             </div>
           </FadeIn>
         )}
+        {notice?.({ answered, total: recipes.length, level, fit: fitData?.fit ?? null, refining: fit.refining })}
 
         <FadeIn delay={0.1}>
           <div role="tablist" className="flex gap-1 p-1 rounded-2xl bg-secondary/50 overflow-x-auto">
@@ -548,7 +576,7 @@ function FitPanel({ digest, fit, loading, focus, notes, offered, refining, chang
         {loading && (
           <span className="inline-flex items-center gap-1.5 text-ui-xs text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-            {refining ? 'First guess from your words. Reading the tables to refine it…' : 'Reading your use case to match it…'}
+            {refining ? 'Quick match on table names and columns. The AI is reading the tables to refine it…' : 'Reading your use case to match it…'}
           </span>
         )}
         {offered && (

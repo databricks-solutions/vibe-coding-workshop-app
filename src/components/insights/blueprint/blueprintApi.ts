@@ -1,22 +1,38 @@
 import { useEffect, useState } from 'react';
-import type { BlueprintCatalog, BlueprintDigest, BlueprintFit, Capabilities, InstallStatus, InstalledModel } from './types';
+import type { BlueprintCatalog, BlueprintDigest, BlueprintFit, Capabilities, FitJob, InstallStatus, InstalledModel } from './types';
 
 const BASE = '/api/blueprints';
 
-async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { credentials: 'same-origin', ...init });
+/** An error from the app's API, with its HTTP status (0 when the request never got a reply). */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, { credentials: 'same-origin', ...init });
+  } catch (err) {
+    throw new ApiError(String((err as Error)?.message || err), 0);
+  }
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.json())?.detail ?? ''; } catch { /* not json */ }
-    throw new Error(detail || `Request failed (${res.status})`);
+    throw new ApiError(detail || `Request failed (${res.status})`, res.status);
   }
   return res.json() as Promise<T>;
 }
 
+const postJson = <T>(url: string, body: unknown) =>
+  getJson<T>(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
 let catalogPromise: Promise<BlueprintCatalog> | null = null;
 let installedPromise: Promise<InstalledModel[]> | null = null;
 const digestPromises = new Map<string, Promise<BlueprintDigest>>();
-const fitPromises = new Map<string, Promise<BlueprintFit>>();
 type ModelPickReply = { slug: string; label: string; why: string };
 const pickPromises = new Map<string, Promise<ModelPickReply>>();
 
@@ -52,22 +68,11 @@ export const blueprintApi = {
     }
     return installedPromise;
   },
-  fit(slug: string, context: string, questions: string[], suggested: string[] = []): Promise<BlueprintFit> {
-    const key = JSON.stringify([slug, context, questions, suggested]);
-    let p = fitPromises.get(key);
-    if (!p) {
-      p = getJson<BlueprintFit>(`${BASE}/${encodeURIComponent(slug)}/fit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context, questions, suggested }),
-      }).catch(err => {
-        fitPromises.delete(key);
-        throw err;
-      });
-      fitPromises.set(key, p);
-    }
-    return p;
-  },
+  fit: {
+    start: (slug, context, questions, suggested, retry = false) =>
+      postJson<FitJob>(`${BASE}/${encodeURIComponent(slug)}/fit/start`, { context, questions, suggested, retry }),
+    poll: (slug, job) => getJson<FitJob>(`${BASE}/${encodeURIComponent(slug)}/fit/${encodeURIComponent(job)}`),
+  } satisfies FitFetcher,
   pick(context: string): Promise<ModelPickReply> {
     let p = pickPromises.get(context);
     if (!p) {
@@ -133,30 +138,82 @@ export function useBlueprintDigest(slug: string | null, attempt = 0): Loadable<B
   return { data: null, error: null, loading: true };
 }
 
-export type FitFetcher = (id: string, context: string, questions: string[], suggested: string[]) => Promise<BlueprintFit>;
-export type FitState = { data: BlueprintFit | null; loading: boolean; failed: boolean };
+/** Starts a match on the server and reports on it; `id` is the digest slug. */
+export interface FitFetcher {
+  start(id: string, context: string, questions: string[], suggested: string[], retry?: boolean): Promise<FitJob>;
+  poll(id: string, job: string): Promise<FitJob>;
+}
 
-/** The AI's match of the idea to a loaded model; `data` stays null while it thinks or when it fails. */
+/**
+ * `data` is the interim local match while `refining`, then the final one. `loading` means nothing to show yet.
+ * `failed` means the app could not be reached or the match could not be built at all; `retry` starts it again.
+ */
+export type FitState = { data: BlueprintFit | null; loading: boolean; refining: boolean; failed: boolean; error: string; retry: () => void };
+
+const POLL_MS = 2000;
+/** Past the server's own deadline, so a lost job ends with what it has instead of spinning forever. */
+const GIVE_UP_MS = 4 * 60 * 1000;
+const MAX_RESTARTS = 2;
+
+type FitResult = { tag: string; data: BlueprintFit | null; running: boolean; failed: boolean; error: string };
+
 export function useFitWith(fetcher: FitFetcher, id: string | null, context: string, questions: string[], suggested: string[] = []): FitState {
   const enabled = !!id && (!!context.trim() || questions.length > 0);
   const key = enabled ? JSON.stringify([id, context, questions, suggested]) : '';
-  const [result, setResult] = useState<{ key: string; data: BlueprintFit | null; failed: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const tag = `${key}#${attempt}`;
+  const [result, setResult] = useState<FitResult | null>(null);
   useEffect(() => {
     if (!key) return;
     const [s, c, q, sg] = JSON.parse(key) as [string, string, string[], string[]];
     let alive = true;
-    fetcher(s, c, q, sg)
-      .then(data => alive && setResult({ key, data, failed: false }))
-      .catch(() => alive && setResult({ key, data: null, failed: true }));
-    return () => { alive = false; };
-  }, [key, fetcher]);
-  if (!enabled) return { data: null, loading: false, failed: false };
-  if (result?.key === key) return { data: result.data, loading: false, failed: result.failed };
-  return { data: null, loading: true, failed: false };
-}
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let restarts = 0;
+    const startedAt = Date.now();
+    let last: BlueprintFit | null = null;
+    let lastJson = '';
 
-export function useBlueprintFit(slug: string | null, context: string, questions: string[], suggested: string[] = []): FitState {
-  return useFitWith(blueprintApi.fit, slug, context, questions, suggested);
+    const settle = (job: FitJob) => {
+      if (!alive) return;
+      // Keep the same object while the fit is unchanged, so polling doesn't look like a new result.
+      const json = job.fit ? JSON.stringify(job.fit) : '';
+      if (json && json !== lastJson) {
+        last = job.fit;
+        lastJson = json;
+      }
+      const running = job.status === 'running' && Date.now() - startedAt < GIVE_UP_MS;
+      setResult({ tag, data: last, running, failed: job.status === 'failed' && !last, error: job.error });
+      if (running) timer = setTimeout(() => void poll(job.job), POLL_MS);
+    };
+    const fail = (err: unknown) => {
+      if (!alive) return;
+      setResult({ tag, data: last, running: false, failed: !last, error: String((err as Error)?.message || err) });
+    };
+    const start = (retry: boolean) => fetcher.start(s, c, q, sg, retry).then(settle, fail);
+    const poll = (job: string) => fetcher.poll(s, job).then(settle, err => {
+      // The job is gone (a restart or another replica); start it again rather than giving up.
+      if (err instanceof ApiError && err.status === 404 && restarts < MAX_RESTARTS) {
+        restarts += 1;
+        void start(false);
+      } else if (err instanceof ApiError && err.status === 0 && Date.now() - startedAt < GIVE_UP_MS) {
+        timer = setTimeout(() => void poll(job), POLL_MS * 2);
+      } else {
+        fail(err);
+      }
+    });
+
+    void start(attempt > 0);
+    return () => { alive = false; if (timer) clearTimeout(timer); };
+  }, [key, tag, attempt, fetcher]);
+
+  const retry = () => setAttempt(a => a + 1);
+  if (!enabled) return { data: null, loading: false, refining: false, failed: false, error: '', retry };
+  if (result?.tag === tag) {
+    return { data: result.data, loading: result.running && !result.data, refining: result.running, failed: result.failed, error: result.error, retry };
+  }
+  // A retry keeps showing what the last attempt found while it runs.
+  const kept = result && result.tag.startsWith(`${key}#`) ? result.data : null;
+  return { data: kept, loading: !kept, refining: true, failed: false, error: '', retry };
 }
 
 /** Polls install status; fast while installing, slow otherwise. */

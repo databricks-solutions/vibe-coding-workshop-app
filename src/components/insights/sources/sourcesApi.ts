@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { BlueprintDigest, BlueprintFit } from '../blueprint/types';
+import { getJson as apiJson, type FitFetcher } from '../blueprint/blueprintApi';
+import type { BlueprintDigest, FitJob } from '../blueprint/types';
 
 const BASE = '/api/data-sources';
+const UC_SLUG_PREFIX = 'uc:';
+
+/** The catalog.schema ids behind a digest slug ("uc:a.b,c.d") or a comma-joined source key. */
+export const sourcesOfId = (id: string) =>
+  (id.startsWith(UC_SLUG_PREFIX) ? id.slice(UC_SLUG_PREFIX.length) : id).split(',').map(s => s.trim()).filter(Boolean);
 
 export interface ApprovedSource {
   id: string;
@@ -11,8 +17,10 @@ export interface ApprovedSource {
   note: string;
   readable: boolean;
   tableCount: number;
+  /** Tables tagged system.certification_status = certified. */
+  certifiedCount?: number;
   metricViews: number;
-  tables: { name: string; comment: string }[];
+  tables: { name: string; comment: string; certified?: boolean }[];
   error: string;
 }
 
@@ -36,7 +44,6 @@ let catalogsPromise: Promise<UcName[]> | null = null;
 const schemaPromises = new Map<string, Promise<UcName[]>>();
 const checkPromises = new Map<string, Promise<ApprovedSource>>();
 const digestPromises = new Map<string, Promise<BlueprintDigest>>();
-const fitPromises = new Map<string, Promise<BlueprintFit>>();
 
 /** Sources are passed around as one comma-joined, sorted id so caches agree. */
 export const sourceKey = (ids: string[]) => Array.from(new Set(ids.map(s => s.trim()).filter(Boolean))).sort().join(',');
@@ -101,37 +108,37 @@ export const sourcesApi = {
     }
     return p;
   },
-  digest(key: string): Promise<BlueprintDigest> {
-    let p = digestPromises.get(key);
+  digest(key: string, certifiedOnly = false): Promise<BlueprintDigest> {
+    const cacheKey = `${key}|${certifiedOnly ? 'certified' : 'all'}`;
+    let p = digestPromises.get(cacheKey);
     if (!p) {
-      p = getJson<BlueprintDigest>(`${BASE}/digest?sources=${encodeURIComponent(key)}`).catch(err => {
-        digestPromises.delete(key);
+      p = getJson<BlueprintDigest>(`${BASE}/digest?sources=${encodeURIComponent(key)}${certifiedOnly ? '&certified=true' : ''}`).catch(err => {
+        digestPromises.delete(cacheKey);
         throw err;
       });
-      digestPromises.set(key, p);
+      digestPromises.set(cacheKey, p);
     }
     return p;
   },
-  /** `id` is the source key; matches the FitFetcher shape. */
-  fit(id: string, context: string, questions: string[], suggested: string[]): Promise<BlueprintFit> {
-    const key = JSON.stringify([id, context, questions, suggested]);
-    let p = fitPromises.get(key);
-    if (!p) {
-      p = getJson<BlueprintFit>(`${BASE}/fit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sources: id.split(','), context, questions, suggested }),
-      }).catch(err => {
-        fitPromises.delete(key);
-        throw err;
-      });
-      fitPromises.set(key, p);
-    }
-    return p;
+  /** The match for one table scope; `id` is the digest slug ("uc:cat.schema,cat.schema") or a source key. */
+  fit(certifiedOnly: boolean): FitFetcher {
+    return certifiedOnly ? certifiedFit : allTablesFit;
   },
   /** Forget the cached list, e.g. after an admin edits it. */
   reset() { listPromise = null; catalogsPromise = null; schemaPromises.clear(); checkPromises.clear(); },
 };
+
+const fitFetcher = (certifiedOnly: boolean): FitFetcher => ({
+  start: (id, context, questions, suggested, retry = false) => apiJson<FitJob>(`${BASE}/fit/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sources: sourcesOfId(id), context, questions, suggested, retry, certifiedOnly }),
+  }),
+  poll: (_id, job) => apiJson<FitJob>(`${BASE}/fit/${encodeURIComponent(job)}`),
+});
+// One stable fetcher per scope, so the fit hook does not restart on every render.
+const certifiedFit = fitFetcher(true);
+const allTablesFit = fitFetcher(false);
 
 export interface UcNameList {
   items: UcName[];
@@ -200,17 +207,17 @@ export function useApprovedSources(): { sources: ApprovedSource[]; loading: bool
   return state;
 }
 
-export function useSourceDigest(key: string, attempt = 0): { data: BlueprintDigest | null; error: string | null; loading: boolean } {
-  const tag = key ? `${key}:${attempt}` : '';
+export function useSourceDigest(key: string, attempt = 0, certifiedOnly = false): { data: BlueprintDigest | null; error: string | null; loading: boolean } {
+  const tag = key ? `${key}:${certifiedOnly ? 'certified' : 'all'}:${attempt}` : '';
   const [result, setResult] = useState<{ tag: string; data: BlueprintDigest | null; error: string | null } | null>(null);
   useEffect(() => {
     if (!key) return;
     let alive = true;
-    sourcesApi.digest(key)
+    sourcesApi.digest(key, certifiedOnly)
       .then(data => alive && setResult({ tag, data, error: null }))
       .catch(err => alive && setResult({ tag, data: null, error: String(err?.message || err) }));
     return () => { alive = false; };
-  }, [key, tag]);
+  }, [key, tag, certifiedOnly]);
   if (!key) return { data: null, error: null, loading: false };
   if (result?.tag === tag) return { data: result.data, error: result.error, loading: false };
   return { data: null, error: null, loading: true };
@@ -229,10 +236,11 @@ function stems(text: string): Set<string> {
 }
 
 /** Tables in a source whose name or description share words with the idea; best first. No AI. */
-export function matchTables(source: ApprovedSource, text: string, max = 4): string[] {
+export function matchTables(source: ApprovedSource, text: string, max = 4, certifiedOnly = false): string[] {
   const want = stems(text);
   if (!want.size) return [];
   return source.tables
+    .filter(t => !certifiedOnly || t.certified)
     .map(t => {
       const nameHits = [...stems(t.name)].filter(w => want.has(w)).length;
       const aboutHits = [...stems(t.comment)].filter(w => want.has(w)).length;

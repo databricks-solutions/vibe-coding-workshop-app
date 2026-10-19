@@ -17,6 +17,8 @@ export interface InsightsBrief {
   idea?: IdeaBrief | null;
   /** What the build adds beyond the Genie space and dashboard. Empty keeps the brief exactly as before. */
   addOns?: AddOn[];
+  /** Scan uncertified tables too. Off by default: existing data means certified assets only. */
+  includeUncertified?: boolean;
 }
 
 /** The shaped idea, written as one labelled line per field above the questions. */
@@ -37,6 +39,9 @@ const BLUEPRINT_HEADER = 'Blueprint:';
 const SOURCE_HEADER = 'Governed source:';
 const PROPOSED_HEADER = 'Proposed KPI:';
 const MATCH_WARNING_HEADER = 'Match warning:';
+const TABLE_SCOPE_HEADER = 'Table scope:';
+const CERTIFIED_SCOPE = 'certified assets only (tables tagged system.certification_status = certified)';
+const ALL_TABLES_SCOPE = 'all tables, including uncertified ones';
 const USE_CASE_HEADER = 'Approved use case:';
 const IDEA_HEADER = 'Idea:';
 const BUILDS_HEADER = 'Builds:';
@@ -156,6 +161,7 @@ export function composeBrief(b: InsightsBrief): string {
     ...b.questions.map(q => `- ${q}`),
     '',
     `${DATA_HEADER} ${DATA_PHRASES[source]}${dataDetail}.`,
+    ...(source === 'existing' ? [`${TABLE_SCOPE_HEADER} ${b.includeUncertified ? ALL_TABLES_SCOPE : CERTIFIED_SCOPE}.`] : []),
     ...(bp ? [...blueprintLines(bp), ...matchWarningLine(bp)] : []),
     ...(governed ? [...sourceLines(governed), ...matchWarningLine(governed)] : []),
     ...(b.useCase ? [approvedUseCaseLine(b.useCase)] : []),
@@ -259,6 +265,7 @@ export interface ParsedBrief {
   /** Headline of the idea the brief was set up from, if it came from one. */
   ideaHeadline: string;
   addOns: AddOn[];
+  includeUncertified: boolean;
 }
 
 export function parseBrief(description: string): ParsedBrief {
@@ -267,7 +274,7 @@ export function parseBrief(description: string): ParsedBrief {
   let dataLocation = '';
   let blueprint: BlueprintChoice | null = null;
   let source: SourceChoice | null = null;
-  if (!description) return { questions, dataSource, dataLocation, blueprint, source, useCase: null, ideaHeadline: '', addOns: [] };
+  if (!description) return { questions, dataSource, dataLocation, blueprint, source, useCase: null, ideaHeadline: '', addOns: [], includeUncertified: false };
 
   const lines = description.split('\n');
   const start = lines.findIndex(l => l.trim() === QUESTIONS_HEADER);
@@ -316,5 +323,6 @@ export function parseBrief(description: string): ParsedBrief {
     useCase: ucLine ? parseUseCase(ucLine) : null,
     ideaHeadline: ideaLine ? ideaLine.slice(IDEA_HEADER.length).trim() : '',
     addOns: parseAddOns(lines.find(l => l.startsWith(RECIPE_HEADER))),
+    includeUncertified: !!lines.find(l => l.startsWith(TABLE_SCOPE_HEADER))?.includes(ALL_TABLES_SCOPE),
   };
 }

@@ -27,6 +27,8 @@ import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
+from src.backend.api import insights_cache
+
 router = APIRouter()
 
 REPO = "databricks-industry-solutions/lakehouse-industry-data-models"
@@ -64,23 +66,15 @@ def _install_enabled() -> bool:
 # small TTL cache + HTTP
 # --------------------------------------------------------------------------------------
 
-_CACHE: Dict[str, Tuple[float, Any]] = {}
+_CACHE = insights_cache.namespace("general", max_mb=128, ttl_s=24 * 3600)
 
 
 def _cache_get(key: str, ttl: float) -> Any:
-    hit = _CACHE.get(key)
-    if hit and time.time() - hit[0] < ttl:
-        return hit[1]
-    return None
+    return _CACHE.get(key, ttl)
 
 
 def _cache_put(key: str, value: Any) -> Any:
-    _CACHE[key] = (time.time(), value)
-    if len(_CACHE) > 64:
-        oldest = sorted(_CACHE.items(), key=lambda kv: kv[1][0])[:16]
-        for k, _ in oldest:
-            _CACHE.pop(k, None)
-    return value
+    return _CACHE.put(key, value)
 
 
 _HEADERS = {"User-Agent": "v2v-insights-blueprints", "Accept": "application/vnd.github+json"}
@@ -417,7 +411,7 @@ def _build_digest(slug: str, version: str, flavour: str, sha: str, data: Dict[st
                         reason = ""
                         if "Business justification:" in desc and parts[1] in desc.split("Business justification:")[0]:
                             reason = _first_sentence(desc.split("Business justification:", 1)[1], 180)
-                        links.append({"to": target, "via": label, "reason": reason})
+                        links.append({"to": target, "via": label, "reason": reason, "column": cname})
                         if parts[0] != dname:
                             key = tuple(sorted((dname, parts[0])))
                             link_counts[key] = link_counts.get(key, 0) + 1
@@ -469,6 +463,7 @@ def _build_digest(slug: str, version: str, flavour: str, sha: str, data: Dict[st
                 "label": _humanize(me["name"]),
                 "comment": _trim(me.get("comment", ""), 150),
                 "agg": _agg_kind(me.get("expr", "")),
+                "expr": str(me.get("expr") or "")[:400],
             })
         slices = []
         for d in (y.get("dimensions") or [])[:12]:
@@ -479,6 +474,7 @@ def _build_digest(slug: str, version: str, flavour: str, sha: str, data: Dict[st
                 "label": _humanize(d["name"]),
                 "comment": _trim(d.get("comment", ""), 120),
                 "kind": _slice_kind(d["name"], d.get("expr", ""), d.get("comment", "")),
+                "column": str(d.get("expr") or "")[:200],
             })
         if not measures:
             continue
@@ -1054,7 +1050,7 @@ async def load_digest(slug: str, flavour: str = "mvm") -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="flavour must be mvm or ecm")
     ind, sha = await _resolve(slug)
     version = ind["version"]
-    key = f"digest:{slug}:{version}:{flavour}:{sha}"
+    key = f"digest2:{slug}:{version}:{flavour}:{sha}"
     digest = _cache_get(key, 12 * 3600)
     if digest is None:
         try:

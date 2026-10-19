@@ -72,6 +72,7 @@ class FitRequest(BaseModel):
     flavour: str = "mvm"
     # The browser's quick word-based pick; the AI explains any of these it leaves out.
     suggested: List[str] = []
+    retry: bool = False
 
 
 class PickRequest(BaseModel):
@@ -335,8 +336,7 @@ async def _ask(system_prompt: str, prompt: str, max_tokens: int) -> Dict[str, An
     return {"text": text, "model": result.get("model") or ""}
 
 
-@router.post("/blueprints/{slug}/fit", summary="Match an idea to a model's areas and tables")
-async def blueprint_fit(slug: str, body: FitRequest):
+async def _fit_args(slug: str, body: FitRequest):
     _guard()
     digest = await load_digest(slug, body.flavour)
     context = _text(body.context, MAX_CONTEXT_CHARS)
@@ -346,30 +346,29 @@ async def blueprint_fit(slug: str, body: FitRequest):
     area_names = {a["name"] for a in digest.get("areas") or []}
     suggested = sorted({s for s in body.suggested if s in area_names})
     sha = (digest.get("source") or {}).get("commitSha", "")
-    key = cache_key("fit2", slug, digest.get("version", ""), sha, body.flavour, context, ",".join(suggested), *questions)
-    hit = _cache_get(key, CACHE_TTL_S)
-    if hit is not None:
-        return hit
+    return digest, f"idm:{slug}:{digest.get('version', '')}:{sha}:{body.flavour}", context, questions, suggested
 
-    prompt = "\n\n".join([
-        f"USE CASE:\n{context or '(only the questions below)'}",
-        "QUESTIONS:\n" + ("\n".join(f"{i}. {q}" for i, q in enumerate(questions)) or "(none)"),
-        "SUGGESTED AREAS:\n" + (", ".join(suggested) or "(none)"),
-        "MODEL:\n" + json.dumps(catalog_of(digest), separators=(",", ":")),
-    ])
-    note = ""
-    for attempt in range(2):
-        try:
-            reply = await _ask(FIT_PROMPT, prompt + note, 8000)
-        except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="Matching took too long.")
-        fit = normalize_fit(_parse(reply["text"]), digest, len(questions))
-        if fit:
-            out = {**fit, "slug": slug, "model": reply["model"]}
-            return _cache_put(key, out)
-        logger.warning(f"[BlueprintFit] unusable reply for {slug} on attempt {attempt + 1}")
-        note = "\n\nYour previous reply was not valid JSON or used ids that are not in MODEL. Return ONLY the JSON object, using ids exactly as listed."
-    raise HTTPException(status_code=502, detail="Could not match the use case to this model.")
+
+@router.post("/blueprints/{slug}/fit", summary="Match an idea to a model's areas and tables (waits for the result)")
+async def blueprint_fit(slug: str, body: FitRequest):
+    from src.backend.api.table_matcher import match
+    digest, key, context, questions, suggested = await _fit_args(slug, body)
+    out = await match(digest, key, context, questions, suggested)
+    return {**out, "slug": slug}
+
+
+@router.post("/blueprints/{slug}/fit/start", summary="Start matching an idea to a model; poll for the result")
+async def blueprint_fit_start(slug: str, body: FitRequest):
+    from src.backend.api.table_matcher import start_match
+    digest, key, context, questions, suggested = await _fit_args(slug, body)
+    return await start_match(digest, key, context, questions, suggested, retry=body.retry)
+
+
+@router.get("/blueprints/{slug}/fit/{job}", summary="Progress of a match started with /blueprints/{slug}/fit/start")
+async def blueprint_fit_poll(slug: str, job: str):
+    _guard()
+    from src.backend.api.table_matcher import poll_match
+    return poll_match(job)
 
 
 @router.post("/blueprints/pick", summary="The gallery model that best fits an idea")

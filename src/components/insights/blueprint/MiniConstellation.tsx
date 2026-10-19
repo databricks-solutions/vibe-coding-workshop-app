@@ -5,6 +5,8 @@ export function MiniConstellation({ nodes = 9, active = false, size = 44 }: { no
   const n = Math.max(5, Math.min(12, nodes));
   const c = size / 2;
   const r = size * 0.36;
+  // Dots and threads grow with the large loading sizes; icon sizes keep the original weights.
+  const scale = Math.max(1, size / 80);
   const pts = Array.from({ length: n }, (_, i) => {
     const a = (i / n) * Math.PI * 2 - Math.PI / 2;
     const wobble = i % 2 === 0 ? 1 : 0.78;
@@ -22,14 +24,14 @@ export function MiniConstellation({ nodes = 9, active = false, size = 44 }: { no
           key={i}
           x1={pts[a].x} y1={pts[a].y} x2={pts[b].x} y2={pts[b].y}
           className={active ? 'stroke-primary-foreground/50' : 'stroke-primary/35'}
-          strokeWidth={0.8}
+          strokeWidth={0.8 * scale}
           initial={{ pathLength: 0 }}
           animate={{ pathLength: 1 }}
           transition={{ duration: 0.8, delay: i * 0.03 }}
         />
       ))}
       {pts.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={i % 3 === 0 ? 2.6 : 1.8} className={active ? 'fill-primary-foreground' : 'fill-primary'} />
+        <circle key={i} cx={p.x} cy={p.y} r={(i % 3 === 0 ? 2.6 : 1.8) * scale} className={active ? 'fill-primary-foreground' : 'fill-primary'} />
       ))}
     </svg>
   );
