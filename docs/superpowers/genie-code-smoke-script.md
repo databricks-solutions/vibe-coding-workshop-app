@@ -15,15 +15,12 @@ Facts this script relies on, all at APP `99660a9` (the deployed SHA, FORGE/state
    - It is documented in docs/specs/mcp_design/mcp-workshop-facilitator-guide.md:38.
 3. Add the app as a Custom MCP server. The steps below are quoted from the facilitator guide §2 (:36-41):
 
-   > 1. Open **Genie Code** in your workspace and switch to **Agent mode**.
-   > 2. Open the MCP / custom-tools settings and **Add a custom MCP server**.
-   > 3. Enter the app's MCP URL: `https://<app-url>/mcp` (the app URL + `/mcp`).
-   > 4. Save. Genie Code performs the handshake; the `vibe_*` tools and the workshop prompts become available.
-   > 5. If it doesn't appear, see Troubleshooting (§7) — the usual cause is the 307 or an `mcp-` name.
+   > 1. **Copy your MCP URL** — This link connects Genie Code to this workshop app.
+   > 2. **Open Genie Code in Agent mode** — In your Databricks workspace, open Genie Code and switch the mode to Agent.
+   > 3. **Add the URL as a custom MCP server** — Open MCP settings, choose "Add custom MCP server", paste the URL from Step 1, then Save.
+   > 4. **Start the workshop** — Paste this message into the Genie Code chat and press Enter: "Start a workshop track: <track name> (session <id>)".
 
-   And the start sentence (:43-44):
-
-   > Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any other track say "Start a workshop track" with the track id shown in the app.
+   If the server doesn't appear after Save, see Troubleshooting (§7) — the usual cause is the 307 or an `mcp-` name.
 
 4. Check that the connection is up before starting:
    - Genie Code lists 7 tools: `vibe_complete_step`, `vibe_explain_step`, `vibe_get_step`, `vibe_next_step`, `vibe_set_parameters`, `vibe_start_track`, `vibe_submit_answer`.

@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardCopy,
+  Clock,
   Plug,
   Sparkles,
   Star,
@@ -47,8 +48,8 @@ export function GenieCodeStartLine({
       <p className="text-ui-base text-muted-foreground flex items-start gap-2 flex-1 min-w-0">
         <ChevronRight className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" aria-hidden />
         <span className="min-w-0 flex-1">
-          {lead}{' '}
-          <span data-testid="start-line" className="font-semibold text-foreground break-all">
+          {lead && <>{lead}{' '}</>}
+          <span data-testid="start-line" className="font-semibold text-foreground break-words">
             &lsquo;{line}&rsquo;
           </span>
         </span>
@@ -68,9 +69,9 @@ export function GenieCodeStartLine({
  * detail panel of Choose Your Coding Assistant.
  *
  * Presents both ways to run the workshop with Genie Code:
- *   1. Interactive Mode (MCP Server) — Recommended; shows the 3 connection steps
- *   2. Copy & Paste Prompts Mode — standard step-by-step flow; shows no extra setup
- *      instructions here since the user simply clicks Continue and follows the app.
+ *   1. Copy & Paste Prompts Mode — default; no extra setup here, the user clicks
+ *      Continue and copies the prompt shown at each workshop step.
+ *   2. Interactive Mode (MCP Server) — Recommended, Beta; shows the 4 setup steps.
  */
 export function ConnectToGenieCodePanel({
   workshopLevel,
@@ -79,6 +80,7 @@ export function ConnectToGenieCodePanel({
   const mcpUrl = useMcpUrl();
   const { copied, handleCopy } = useCopyToClipboard();
   const [mode, setMode] = useGenieCodeMode();
+  const lastStep = GENIE_CODE_MCP_CONNECTION_STEPS.length - 1;
 
   return (
     <section
@@ -107,7 +109,7 @@ export function ConnectToGenieCodePanel({
                 </span>
               </div>
               <p className="text-muted-foreground text-ui-sm mt-0.5">
-                Choose how you want to run your workshop in Genie Code — hands-free via our live MCP server, or by copy-pasting prompts step by step.
+                Choose how you want to run your workshop in Genie Code: copy and paste each prompt step by step, or try the hands-free MCP server (Beta).
               </p>
             </div>
           </div>
@@ -115,44 +117,7 @@ export function ConnectToGenieCodePanel({
 
         {/* Two-Mode Interactive Selector Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3" role="radiogroup" aria-label="Genie Code operating mode">
-          {/* Option 1: Interactive MCP Mode (Recommended) */}
-          <button
-            type="button"
-            role="radio"
-            aria-checked={mode === 'mcp'}
-            onClick={() => setMode('mcp')}
-            className={`text-left rounded-xl p-4 border-2 transition-all relative overflow-hidden ${
-              mode === 'mcp'
-                ? 'border-primary bg-primary/[0.06] ring-2 ring-primary/20 shadow-sm'
-                : 'border-border/80 bg-background/50 hover:border-primary/40 hover:bg-secondary/30'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-primary/15 text-primary inline-flex items-center justify-center">
-                  <Zap className="w-4 h-4" />
-                </span>
-                <span className="text-ui-base font-bold text-foreground">
-                  Interactive Mode (MCP Server)
-                </span>
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 px-2 py-0.5 text-ui-3xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                <Star className="w-2.5 h-2.5 fill-current" /> Recommended
-              </span>
-            </div>
-            <p className="text-ui-xs text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">Zero copy-pasting.</strong> Connect Genie Code once to this app&apos;s MCP URL. Genie Code automatically walks you through every step in chat and syncs progress back here.
-            </p>
-            <div className="mt-2.5 flex items-center gap-3 text-ui-2xs font-medium text-primary">
-              <span className="inline-flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> ~30 sec one-time link
-              </span>
-              <span>·</span>
-              <span>Server-driven autopilot</span>
-            </div>
-          </button>
-
-          {/* Option 2: Copy & Paste Prompts Mode */}
+          {/* Option 1: Copy & Paste Prompts Mode (Default) */}
           <button
             type="button"
             role="radio"
@@ -174,7 +139,7 @@ export function ConnectToGenieCodePanel({
                 </span>
               </div>
               <span className="rounded-full bg-secondary border border-border px-2 py-0.5 text-ui-3xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Default flow
+                Default
               </span>
             </div>
             <p className="text-ui-xs text-muted-foreground leading-relaxed">
@@ -188,66 +153,116 @@ export function ConnectToGenieCodePanel({
               <span>Click Continue to proceed</span>
             </div>
           </button>
+
+          {/* Option 2: Interactive MCP Mode (Recommended, Beta) */}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={mode === 'mcp'}
+            onClick={() => setMode('mcp')}
+            className={`text-left rounded-xl p-4 border-2 transition-all relative overflow-hidden ${
+              mode === 'mcp'
+                ? 'border-primary bg-primary/[0.06] ring-2 ring-primary/20 shadow-sm'
+                : 'border-border/80 bg-background/50 hover:border-primary/40 hover:bg-secondary/30'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-primary/15 text-primary inline-flex items-center justify-center">
+                  <Zap className="w-4 h-4" />
+                </span>
+                <span className="text-ui-base font-bold text-foreground">
+                  Interactive Mode (MCP Server)
+                </span>
+              </div>
+              <span
+                data-testid="interactive-mode-badge"
+                className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 px-2 py-0.5 text-ui-3xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 shrink-0"
+              >
+                <Star className="w-2.5 h-2.5 fill-current" /> Recommended
+                <span aria-hidden>·</span> Beta
+              </span>
+            </div>
+            <p className="text-ui-xs text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">Zero copy-pasting.</strong> Connect Genie Code once to this app&apos;s MCP URL. Genie Code automatically walks you through every step in chat and syncs progress back here.
+            </p>
+            <div className="mt-2.5 flex items-center gap-3 text-ui-2xs font-medium text-primary">
+              <span className="inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> ~30 sec one-time link
+              </span>
+              <span>·</span>
+              <span>Genie Code guides every step</span>
+            </div>
+          </button>
         </div>
 
-        {/* Interactive MCP Setup Steps — shown ONLY when Interactive Mode (MCP Server) is selected */}
+        {/* Interactive MCP setup — shown ONLY when Interactive Mode (MCP Server) is selected */}
         {mode === 'mcp' && (
-          <div className="rounded-xl border border-primary/30 bg-background/60 p-4 space-y-4">
-            <div>
-              <p className="text-ui-xs font-bold uppercase tracking-wider text-primary">
-                Quick 3-Step Interactive MCP Setup
-              </p>
-              <p className="text-ui-xs text-muted-foreground mt-0.5">
-                Paste this app&apos;s MCP URL into Genie Code — the one manual step. Everything after is server-driven.
-              </p>
+          <div className="rounded-xl border border-primary/30 bg-background/60 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <h3 className="text-ui-base font-semibold text-foreground">
+                Set up Interactive Mode in {GENIE_CODE_MCP_CONNECTION_STEPS.length} steps
+              </h3>
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary border border-border px-2 py-0.5 text-ui-3xs font-medium text-muted-foreground">
+                <Clock className="w-3 h-3" /> about 1 minute
+              </span>
             </div>
 
-            {/* Step A: Copy MCP URL */}
-            <div className="rounded-xl border border-border bg-card px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2.5 shadow-2xs">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span className="px-2 py-0.5 rounded bg-primary/15 text-primary text-ui-3xs font-bold uppercase tracking-wider shrink-0">
-                  MCP URL
-                </span>
-                <code
-                  data-testid="mcp-url"
-                  className="flex-1 min-w-0 text-ui-sm font-mono text-foreground break-all"
-                >
-                  {mcpUrl}
-                </code>
-              </div>
-              <CopyButton
-                copied={copied}
-                onClick={() => void handleCopy(mcpUrl)}
-                size="sm"
-                className="flex-shrink-0 self-start sm:self-auto bg-secondary hover:bg-secondary/80 text-foreground font-medium"
-              />
-            </div>
-
-            {/* Step B: The 3 Connection Steps (exact D10 §2 strings preserved) */}
-            <ol className="grid grid-cols-1 md:grid-cols-3 gap-2.5 list-none m-0 p-0">
+            <ol className="list-none m-0 p-0" aria-label="Interactive Mode setup steps">
               {GENIE_CODE_MCP_CONNECTION_STEPS.map((step, index) => (
                 <li
-                  key={step}
-                  className="rounded-xl border border-border/80 bg-card/80 p-3 flex items-start gap-2.5 text-ui-sm text-muted-foreground"
+                  key={step.title}
+                  data-testid={`mcp-step-${index + 1}`}
+                  className="relative flex gap-3.5 pb-5 last:pb-0"
                 >
+                  {index < lastStep && (
+                    <span
+                      className="absolute left-[15px] top-9 bottom-1 w-px bg-primary/25"
+                      aria-hidden
+                    />
+                  )}
                   <span
-                    className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/15 text-primary text-ui-xs font-bold flex items-center justify-center mt-0.5"
+                    className="relative z-10 flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground text-ui-sm font-bold flex items-center justify-center shadow-sm"
                     aria-hidden
                   >
                     {index + 1}
                   </span>
-                  <span className="text-foreground leading-snug text-ui-xs font-medium">{step}</span>
+                  <div className="min-w-0 flex-1 pt-0.5 space-y-1">
+                    <p className="text-ui-3xs font-bold uppercase tracking-wider text-primary">
+                      Step {index + 1}
+                    </p>
+                    <p className="text-ui-sm font-semibold text-foreground leading-snug">{step.title}</p>
+                    <p className="text-ui-xs text-muted-foreground leading-relaxed">{step.detail}</p>
+
+                    {index === 0 && (
+                      <div className="mt-2 rounded-lg border border-border bg-card px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                        <code
+                          data-testid="mcp-url"
+                          className="flex-1 min-w-0 text-ui-sm font-mono text-foreground break-all"
+                        >
+                          {mcpUrl}
+                        </code>
+                        <CopyButton
+                          copied={copied}
+                          onClick={() => void handleCopy(mcpUrl)}
+                          size="sm"
+                          className="flex-shrink-0 self-start sm:self-auto bg-secondary hover:bg-secondary/80 text-foreground font-medium"
+                        />
+                      </div>
+                    )}
+
+                    {index === lastStep && (
+                      <div className="mt-2 space-y-1.5">
+                        <GenieCodeStartLine workshopLevel={workshopLevel} sessionId={sessionId} lead="" />
+                        <p className="text-ui-xs text-muted-foreground">
+                          Genie Code now guides you, and your progress shows up on this page automatically.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </li>
               ))}
             </ol>
-
-            {/* Step C: Say the 1-line starter prompt */}
-            <div className="pt-1 space-y-1.5">
-              <GenieCodeStartLine workshopLevel={workshopLevel} sessionId={sessionId} />
-              <p className="text-ui-xs text-muted-foreground pl-2">
-                It continues this session in Genie Code. You pick or change the track in Workshop Path, and progress syncs automatically between Genie Code and this page.
-              </p>
-            </div>
           </div>
         )}
       </div>

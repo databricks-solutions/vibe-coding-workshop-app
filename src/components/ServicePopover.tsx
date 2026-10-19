@@ -7,10 +7,10 @@
  * - Chapter Completion modal (clickable service names in learning content)
  * 
  * Includes:
- * - ServicePopover: Click-to-open popover with service info, benefits/considerations toggle + embedded chat
+ * - ServicePopover: Click-to-open popover with "what it is", "use it when", benefits/watch-outs toggle + embedded chat
  * - ServiceChat: Embedded quick-question chat in popovers
  * - ServiceChatModal: Full-screen chat modal
- * - serviceData (ServicePopover.utils.ts): Databricks service definitions (22 services)
+ * - serviceData (ServicePopover.utils.ts): Databricks service definitions (25 services)
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -79,6 +79,28 @@ const markdownComponentsSmall = {
   code: ({children}: {children?: React.ReactNode}) => <code className="bg-secondary px-1 rounded text-ui-3xs">{children}</code>,
 };
 
+/** Renders `code` and **bold** spans in short strings so markdown markers never show literally. */
+function InlineText({ text }: { text: string }) {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+  return (
+    <>
+      {parts.map((part, idx) => {
+        if (part.startsWith('`') && part.endsWith('`')) {
+          return (
+            <code key={idx} className="bg-secondary px-1 py-px rounded text-[0.9em] font-mono">
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={idx} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
+        }
+        return <span key={idx}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 // =============================================================================
 // HELPER: Build system prompt for service chat
 // =============================================================================
@@ -88,14 +110,16 @@ function buildSystemPrompt(
   conversationHistory: string,
   wordLimit: string
 ) {
-  const benefitsList = service.benefits.map(b => `  - ${b}`).join('\n');
-  const limitationsList = service.limitations.map(l => `  - ${l}`).join('\n');
+  const benefitsList = service.benefits.map(b => `  - ${b.title}: ${b.detail}`).join('\n');
+  const limitationsList = service.limitations.map(l => `  - ${l.title}: ${l.detail}`).join('\n');
 
   return `You are a Databricks expert assistant. Your knowledge is strictly grounded in official 2026 Databricks products, services, and documentation.
 
 SERVICE CONTEXT:
 - Service: ${service.name}${service.badge ? ` (${service.badge})` : ''}
-- Description: ${service.description}
+- In plain words: ${service.summary}
+- Use it when: ${service.useWhen}
+- Technical description: ${service.description}
 - Official Documentation: ${service.docUrl}
 - Key Benefits & Capabilities:
 ${benefitsList}
@@ -301,7 +325,7 @@ function ServiceChatModal({
                 </span>
               )}
             </div>
-            <p className="text-xs text-white/85 mt-1 line-clamp-2">{service.description}</p>
+            <p className="text-xs text-white/85 mt-1 line-clamp-2"><InlineText text={service.summary} /></p>
           </div>
           <button 
             onClick={onClose}
@@ -654,7 +678,7 @@ export function ServicePopover({
   const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const service = serviceData[serviceKey];
   const POPOVER_WIDTH = 360;
-  const POPOVER_HEIGHT = 510;
+  const POPOVER_HEIGHT = 690;
   const OFFSET = 12;
   const TRANSITION_MS = 200;
   
@@ -776,7 +800,7 @@ export function ServicePopover({
       className={`transition-all ease-out ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="bg-popover text-popover-foreground border border-border rounded-2xl shadow-2xl overflow-hidden ring-1 ring-primary/20">
+      <div className="bg-popover text-popover-foreground border border-border rounded-2xl shadow-2xl overflow-x-hidden overflow-y-auto max-h-[calc(100vh-20px)] ring-1 ring-primary/20">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-primary px-4 py-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -799,16 +823,25 @@ export function ServicePopover({
           </button>
         </div>
         
-        {/* Description */}
-        <div className="px-4 py-2.5 border-b border-border bg-card/60">
-          <p className="text-ui-xs text-foreground/90 leading-relaxed">
-            {service.description}
-          </p>
+        {/* What it is / Use it when */}
+        <div className="px-4 py-3 border-b border-border bg-card/60 space-y-2.5">
+          <div>
+            <p className="text-ui-3xs font-bold uppercase tracking-wider text-muted-foreground mb-0.5">What it is</p>
+            <p className="text-ui-xs text-foreground leading-relaxed">
+              <InlineText text={service.summary} />
+            </p>
+          </div>
+          <div className="rounded-lg bg-primary/[0.07] border border-primary/15 px-2.5 py-1.5">
+            <p className="text-ui-3xs font-bold uppercase tracking-wider text-primary mb-0.5">Use it when</p>
+            <p className="text-ui-xs text-foreground/90 leading-relaxed">
+              <InlineText text={service.useWhen} />
+            </p>
+          </div>
         </div>
         
-        {/* Segmented Benefits / Considerations Section */}
-        <div className="px-4 py-2.5 border-b border-border">
-          <div className="flex items-center gap-1 mb-2 p-0.5 rounded-lg bg-secondary/50 border border-border/60">
+        {/* Segmented Benefits / Watch-outs Section */}
+        <div className="px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-1 mb-3 p-0.5 rounded-lg bg-secondary/50 border border-border/60">
             <button
               type="button"
               onClick={() => setActiveTab('benefits')}
@@ -819,7 +852,7 @@ export function ServicePopover({
               }`}
             >
               <CheckCircle2 className="w-3 h-3 shrink-0" />
-              <span>Key Benefits</span>
+              <span>Benefits ({service.benefits.length})</span>
             </button>
             <button
               type="button"
@@ -831,29 +864,29 @@ export function ServicePopover({
               }`}
             >
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              <span>Considerations</span>
+              <span>Watch-outs ({service.limitations.length})</span>
             </button>
           </div>
 
-          {activeTab === 'benefits' ? (
-            <ul className="space-y-1">
-              {service.benefits.slice(0, 5).map((benefit, idx) => (
-                <li key={idx} className="text-ui-2xs text-foreground/85 flex items-start gap-1.5 leading-snug">
-                  <span className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0">•</span>
-                  <span>{benefit}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <ul className="space-y-1">
-              {service.limitations.map((limitation, idx) => (
-                <li key={idx} className="text-ui-2xs text-foreground/85 flex items-start gap-1.5 leading-snug">
-                  <span className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0">•</span>
-                  <span>{limitation}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="space-y-2.5">
+            {(activeTab === 'benefits' ? service.benefits : service.limitations).map((point) => (
+              <li key={point.title} className="flex items-start gap-2.5">
+                {activeTab === 'benefits' ? (
+                  <CheckCircle2 className="w-4 h-4 mt-px shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 mt-px shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                )}
+                <div className="min-w-0">
+                  <p className="text-ui-xs font-semibold text-foreground leading-snug">
+                    <InlineText text={point.title} />
+                  </p>
+                  <p className="text-ui-2xs text-muted-foreground leading-relaxed mt-0.5">
+                    <InlineText text={point.detail} />
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
         
         {/* Documentation Link */}

@@ -18,12 +18,12 @@ const MODE_EVENT_NAME = 'vibe:genie-code-mode-change';
 
 export function useGenieCodeMode(): [GenieCodeMode, (next: GenieCodeMode) => void] {
   const [mode, setModeState] = useState<GenieCodeMode>(() => {
-    if (typeof window === 'undefined') return 'mcp';
+    if (typeof window === 'undefined') return 'copy-paste';
     try {
       const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
-      return saved === 'copy-paste' ? 'copy-paste' : 'mcp';
+      return saved === 'mcp' ? 'mcp' : 'copy-paste';
     } catch {
-      return 'mcp';
+      return 'copy-paste';
     }
   });
 
@@ -54,12 +54,30 @@ export function useGenieCodeMode(): [GenieCodeMode, (next: GenieCodeMode) => voi
   return [mode, setMode];
 }
 
-/** The three connection steps from D10 §2 (learner path). */
-export const GENIE_CODE_MCP_CONNECTION_STEPS = [
-  'Open Genie Code in your workspace and switch to Agent mode.',
-  'Open the MCP / custom-tools settings and Add a custom MCP server.',
-  "Enter the app's MCP URL: https://<app-url>/mcp (the app URL + /mcp).",
-] as const;
+export interface GenieCodeMcpStep {
+  title: string;
+  detail: string;
+}
+
+/** The four setup steps from D10 §2 (learner path), shown in order. */
+export const GENIE_CODE_MCP_CONNECTION_STEPS: readonly GenieCodeMcpStep[] = [
+  {
+    title: 'Copy your MCP URL',
+    detail: 'This link connects Genie Code to this workshop app.',
+  },
+  {
+    title: 'Open Genie Code in Agent mode',
+    detail: 'In your Databricks workspace, open Genie Code and switch the mode to Agent.',
+  },
+  {
+    title: 'Add the URL as a custom MCP server',
+    detail: 'Open MCP settings, choose "Add custom MCP server", paste the URL from Step 1, then Save.',
+  },
+  {
+    title: 'Start the workshop',
+    detail: 'Paste this message into the Genie Code chat and press Enter:',
+  },
+];
 
 /**
  * The MCP prompt every start line names (`src/backend/mcp_server.py`, args `track`

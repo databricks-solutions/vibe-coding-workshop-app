@@ -7,13 +7,29 @@ export interface ServiceQuickQuestion {
   question: string;
 }
 
+/** One benefit or watch-out: a short plain-English headline plus one sentence on why it matters. */
+export interface ServicePoint {
+  title: string;
+  detail: string;
+}
+
+/**
+ * Popover copy is written for people new to Databricks: `badge`, `summary`,
+ * `useWhen`, `benefits` and `limitations` use plain words with no code, YAML
+ * keys or unexplained acronyms. `description` keeps the technical detail for the
+ * chat modal header and the LLM system prompt.
+ */
 export interface ServiceInfo {
   name: string;
-  /** Optional status or version badge rendered in the popover header (e.g. 'YAML v1.1', 'Beta', 'GA'). */
+  /** One or two plain words shown in the popover header (e.g. 'Semantic layer'). */
   badge?: string;
+  /** "What it is": one sentence, max ~25 words. */
+  summary: string;
+  /** "Use it when": one sentence tied to a real situation. */
+  useWhen: string;
   description: string;
-  benefits: string[];
-  limitations: string[];
+  benefits: ServicePoint[];
+  limitations: ServicePoint[];
   docUrl: string;
   docLabel: string;
   /** Optional service-specific quick questions shown in the embedded AI chat. */
@@ -27,30 +43,32 @@ export interface ServiceInfo {
 export const serviceData: Record<string, ServiceInfo> = {
   databricksApp: {
     name: 'Databricks Apps',
-    badge: 'Serverless',
+    badge: 'App hosting',
+    summary:
+      'A way to build and run your own web apps directly inside Databricks, with no separate servers to manage.',
+    useWhen:
+      'You want to give business users a custom tool or screen on top of your Databricks data and AI.',
     description:
       'Build, host, and deploy custom full-stack web applications (React, FastAPI, Python, Node.js) directly on serverless Databricks compute. Apps inherit Unity Catalog governance, workspace SSO, and on-behalf-of-user OAuth.',
     benefits: [
-      'Zero external hosting infra — runs on managed serverless compute',
-      'Built-in SSO & on-behalf-of-user auth (X-Forwarded-Access-Token)',
-      'Native access to Lakebase Postgres, Genie Agents, and Serving Endpoints',
-      'Declarative CI/CD and resource binding with Databricks Asset Bundles',
-      'Embeds AI/BI Dashboards and conversational Genie experiences natively',
+      { title: 'No servers to manage', detail: 'Databricks hosts and scales the app for you, so there is no outside infrastructure to run.' },
+      { title: 'Sign-in is built in', detail: 'Users log in with their workspace account, and the app can act with their permissions.' },
+      { title: 'Connects to your data and AI', detail: 'Apps talk directly to Lakebase databases, Genie, and AI models in your workspace.' },
     ],
     limitations: [
-      'Scoped to supported Python / Node.js runtimes and container limits',
-      'Stateful persistence must live in Lakebase or Unity Catalog (ephemeral local disk)',
-      'On-behalf-of-user queries require explicit OAuth scope grants in app.yaml',
+      { title: 'Supported languages only', detail: 'Apps run on supported Python and Node.js versions, within set size and memory limits.' },
+      { title: "Local files don't last", detail: "Files saved on the app's own disk are lost on restart; store data in Lakebase or Unity Catalog." },
+      { title: 'Acting as the user needs setup', detail: "To use each person's permissions, list the access the app needs in its config file." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/dev-tools/databricks-apps/',
     docLabel: 'Databricks Apps Documentation',
     quickQuestions: [
       {
-        label: '🔐 How does user auth & Lakebase access work?',
+        label: '🔐 How do users sign in to an app?',
         question: 'How do Databricks Apps authenticate users with X-Forwarded-Access-Token and connect to Lakebase Postgres and Unity Catalog?',
       },
       {
-        label: '🚀 How do I deploy an app with Asset Bundles?',
+        label: '🚀 How do I deploy my first app?',
         question: 'How do I configure app.yaml and deploy a React + FastAPI Databricks App using Databricks Asset Bundles?',
       },
     ],
@@ -58,30 +76,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   lakebase: {
     name: 'Lakebase (PostgreSQL)',
-    badge: 'Autoscaling OLTP',
+    badge: 'App database',
+    summary:
+      'A fully managed Postgres database inside Databricks, built for the fast, everyday reads and writes apps need, like saving orders or user profiles.',
+    useWhen:
+      'Your app needs to store and update individual records instantly, not just analyze data in bulk.',
     description:
       'Fully managed, autoscaling PostgreSQL (Postgres 16–18) built into Databricks on the LTAP architecture. Separates stateless compute from durable storage to power sub-10ms transactional app backends, synced analytics serving, and agent state.',
     benefits: [
-      'Serverless autoscaling Postgres with separated compute and storage',
-      'Sub-10ms low-latency OLTP reads and full ACID transactions for apps',
-      'Bidirectional Lakehouse integration: UC registration & Synced Tables',
-      'Instant database branching, point-in-time recovery, and OAuth role auth',
-      'Built-in hybrid search via lakebase_vector and lakebase_text extensions',
+      { title: 'Instant responses for apps', detail: 'Reads and writes typically finish in under 10 milliseconds, with full transaction safety.' },
+      { title: 'Scales on its own', detail: 'Capacity grows and shrinks with demand, and you can copy a database instantly for testing.' },
+      { title: 'Connected to your analytics', detail: 'Register it in Unity Catalog and sync curated analytics tables in for your app to use.' },
     ],
     limitations: [
-      'Designed for OLTP and low-latency point lookups, not heavy OLAP scans',
-      'Each registered Unity Catalog catalog maps to a single Lakebase database',
-      'Synced tables inside Lakebase are read-only (writes happen in the Lakehouse)',
+      { title: 'Not built for big reports', detail: 'It is designed for quick lookups and updates; run heavy analysis in the lakehouse instead.' },
+      { title: 'One catalog per database', detail: 'Each Unity Catalog catalog you register maps to exactly one Lakebase database.' },
+      { title: 'Synced copies are read-only', detail: "Tables synced in from the lakehouse can't be edited here; change them at the source." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/oltp/',
     docLabel: 'Lakebase Postgres Documentation',
     quickQuestions: [
       {
-        label: '⚡ How does Lakebase connect to Unity Catalog?',
+        label: '⚡ How does Lakebase connect to my analytics data?',
         question: 'How does Lakebase integrate with Unity Catalog via database registration and Synced Tables in the LTAP architecture?',
       },
       {
-        label: '⚠️ What are the sizing & connection considerations?',
+        label: '⚠️ What limits should I plan for?',
         question: 'What are the key connection limits, autoscaling behaviors, and OLTP vs OLAP considerations when using Lakebase?',
       },
     ],
@@ -89,30 +109,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   dataIngestion: {
     name: 'Data Ingestion Pipeline',
-    badge: 'UC Registration + CDC',
+    badge: 'Data ingestion',
+    summary:
+      'Moves data from your app database (or other sources) into the lakehouse, so it can be cleaned and analyzed.',
+    useWhen:
+      'Day-to-day data lives in an app database and you want to report on it or feed it to AI.',
     description:
       'Bridge operational data from Lakebase Postgres (or external sources) into the Lakehouse. Register your Lakebase database as a read-only Unity Catalog catalog, then ingest operational changes into Bronze Delta tables using Change Data Feed (CDF) and Lakeflow.',
     benefits: [
-      'Zero-ETL catalog registration exposes Postgres schemas in Unity Catalog',
-      'Cross-source SQL joins across live operational Postgres and Delta tables',
-      'Incremental CDC ingestion into Bronze with Change Data Feed (CDF)',
-      'Automatic schema evolution and column-level lineage in Unity Catalog',
-      'Orchestrated end-to-end via Databricks Asset Bundles and Lakeflow jobs',
+      { title: 'See app data without copying', detail: 'Register your Postgres database in Unity Catalog and browse its tables right away.' },
+      { title: 'Join live and historical data', detail: 'Query app tables and lakehouse tables together in a single SQL statement.' },
+      { title: 'Only move what changed', detail: 'After the first load, only new and updated rows flow in, keeping runs fast and cheap.' },
     ],
     limitations: [
-      'Unity Catalog catalogs registered from Lakebase are read-only on serverless compute',
-      'Initial full snapshot of large operational tables can be I/O intensive',
-      'Requires serverless SQL warehouse or serverless compute to query registered catalogs',
+      { title: 'Registered data is read-only', detail: 'You can query the registered database from Databricks, but not write to it.' },
+      { title: 'The first load can be heavy', detail: 'Copying very large tables the first time takes time and resources, so plan for it.' },
+      { title: 'Needs serverless compute', detail: 'Querying the registered database requires a serverless SQL warehouse or serverless compute.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/oltp/projects/register-uc',
     docLabel: 'Lakebase UC Registration Docs',
     quickQuestions: [
       {
-        label: '🔗 How does Lakebase UC registration work?',
+        label: '🔗 How do I bring app data into the lakehouse?',
         question: 'How do I register a Lakebase Postgres database in Unity Catalog and ingest its tables into the Bronze layer?',
       },
       {
-        label: '⚠️ What compute is required for cross-source queries?',
+        label: '⚠️ What compute do I need?',
         question: 'What are the compute requirements and read-only rules when querying a registered Lakebase catalog in Unity Catalog?',
       },
     ],
@@ -120,30 +142,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   bronze: {
     name: 'Bronze Layer',
-    badge: 'Medallion · Raw',
+    badge: 'Raw data',
+    summary:
+      'The first layer of your lakehouse, where data lands exactly as it arrived, before any cleanup.',
+    useWhen:
+      'You need a safe, complete copy of source data that later steps can always rebuild from.',
     description:
       'The raw landing zone of the Medallion Lakehouse architecture. Bronze Delta tables capture operational snapshots and append-only change streams exactly as received, with Change Data Feed (CDF) enabled for downstream incremental processing.',
     benefits: [
-      'Immutable, auditable history of raw source records with Delta Time Travel',
-      'Change Data Feed (CDF) tracks row-level inserts, updates, and deletes',
-      'Decouples upstream operational systems from analytical transformations',
-      'Supports schema evolution and rescued data columns without pipeline failure',
-      'Allows deterministic replay of Silver and Gold pipelines at any time',
+      { title: 'Complete, auditable history', detail: 'Every raw record is kept, and you can look back at earlier versions of a table.' },
+      { title: 'Tracks every change', detail: "Each insert, update, and delete is recorded, so later layers process only what's new." },
+      { title: 'Protects source systems', detail: 'Analysis runs on this copy, so it never slows down the apps that produced the data.' },
     ],
     limitations: [
-      'Contains unvalidated rows, duplicates, and raw operational schemas',
-      'Never expose Bronze tables directly to Genie Agents or BI dashboards',
-      'Requires retention and vacuum policies to manage storage growth',
+      { title: 'The data is messy', detail: 'Expect duplicates, bad values, and source-specific formats; clean them in the Silver layer.' },
+      { title: 'Not for business users', detail: 'Never point Genie or dashboards at Bronze tables; use curated Gold tables instead.' },
+      { title: 'Storage keeps growing', detail: "Set retention and cleanup rules so old raw files don't pile up." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/lakehouse/medallion',
     docLabel: 'Medallion Architecture Docs',
     quickQuestions: [
       {
-        label: '🔄 Why enable Change Data Feed (CDF) on Bronze?',
+        label: '🔄 Why track changes in Bronze?',
         question: 'Why is Change Data Feed (CDF) important on Bronze tables and how do downstream pipelines consume it?',
       },
       {
-        label: '⚠️ What should NOT be done in the Bronze layer?',
+        label: '⚠️ What should I avoid in Bronze?',
         question: 'What transformations or query patterns should be avoided in the Bronze layer of a medallion architecture?',
       },
     ],
@@ -151,30 +175,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   silver: {
     name: 'Silver Layer',
-    badge: 'Medallion · Cleansed',
+    badge: 'Cleaned data',
+    summary:
+      'The second layer of your lakehouse, where raw data is checked, de-duplicated, and standardized into one reliable record per item.',
+    useWhen:
+      'You need trustworthy records (one per customer, order, or product) before building reports.',
     description:
       'Validated, deduplicated, and conformed enterprise data built with Spark Declarative Pipelines (SDP). Silver tables enforce data quality expectations, resolve data types, and apply SCD Type 1/2 merges via AUTO CDC.',
     benefits: [
-      'Enforces explicit data quality expectations (WARN, DROP, or FAIL on violation)',
-      'Deduplicates records and handles out-of-order events with AUTO CDC',
-      'Supports Slowly Changing Dimensions (SCD Type 1 and SCD Type 2)',
-      'Provides a single validated, non-aggregated source of truth per entity',
-      'Streaming incremental reads from Bronze minimize compute cost and latency',
+      { title: 'Built-in quality checks', detail: 'Set rules for bad data and choose to warn, drop the row, or stop the pipeline.' },
+      { title: 'Handles duplicates and late data', detail: 'Records that arrive twice or out of order are merged into one correct, current version.' },
+      { title: 'Keeps history when you need it', detail: 'Either overwrite changes or keep a full history of how each record changed.' },
     ],
     limitations: [
-      'Entity-normalized grain is not yet shaped for direct business KPI reporting',
-      'Strict FAIL expectations can halt pipeline runs if upstream data drifts',
-      'SCD Type 2 history requires filtering on current-row flags downstream',
+      { title: 'Not shaped for reports yet', detail: 'Data is organized by item, not by business metric; shape it for reporting in Gold.' },
+      { title: 'Strict rules can stop runs', detail: 'If you choose to stop on bad data, an unexpected upstream change can halt the pipeline.' },
+      { title: 'History needs filtering', detail: 'Tables that keep change history must be filtered to the current record in later steps.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/lakehouse/medallion',
     docLabel: 'Medallion Architecture Docs',
     quickQuestions: [
       {
-        label: '🛡️ How do SDP quality expectations work in Silver?',
+        label: '🛡️ How do quality checks work in Silver?',
         question: 'How do data quality expectations and AUTO CDC flows work when building Silver tables in Spark Declarative Pipelines?',
       },
       {
-        label: '⚠️ How should Silver handle bad records?',
+        label: '⚠️ What should happen to bad records?',
         question: 'When should I use WARN vs DROP ROW vs FAIL UPDATE for data quality expectations in the Silver layer?',
       },
     ],
@@ -182,30 +208,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   gold: {
     name: 'Gold Layer',
-    badge: 'Medallion · Curated',
+    badge: 'Business-ready',
+    summary:
+      'The final layer of your lakehouse: clean, business-friendly tables organized around how your company measures itself.',
+    useWhen:
+      "You're ready to power metrics, dashboards, Genie, or apps with trusted data.",
     description:
       'Business-ready dimensional models (star/snowflake schemas of fact and dimension tables) and curated aggregates in Unity Catalog. Rich table/column COMMENTs and PK/FK constraints make Gold the foundation for Metric Views, Genie, Dashboards, and Synced Tables.',
     benefits: [
-      'Dimensional fact and dimension tables aligned to business processes',
-      'Primary/Foreign Key (RELY) constraints accelerate star-schema join plans',
-      'Rich Unity Catalog table and column COMMENTs ground AI and Genie accuracy',
-      'Directly feeds Unity Catalog Metric Views, TVFs, and AI/BI Dashboards',
-      'Ready for low-latency reverse-ETL activation into Lakebase Synced Tables',
+      { title: 'Organized for business questions', detail: 'Tables hold events (like sales) and the things they describe (like customers or products).' },
+      { title: 'Descriptions make AI smarter', detail: 'Clear table and column descriptions help Genie understand your data and answer correctly.' },
+      { title: 'Feeds everything downstream', detail: 'Metric views, dashboards, Genie, and apps all build on these tables.' },
     ],
     limitations: [
-      'Missing or vague column COMMENTs degrade Genie natural-language accuracy',
-      'Pre-aggregated tables lose row-level detail unless paired with atomic facts',
-      'Schema changes impact downstream Metric Views, Dashboards, and Synced Tables',
+      { title: 'Vague descriptions hurt accuracy', detail: 'Missing or unclear column descriptions lead Genie to wrong answers.' },
+      { title: 'Summaries lose detail', detail: "Pre-summarized tables can't answer row-level questions unless you keep the detailed table too." },
+      { title: 'Changes ripple downstream', detail: 'Renaming or removing columns can break the metric views, dashboards, and apps built on top.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/lakehouse/medallion',
     docLabel: 'Medallion Architecture Docs',
     quickQuestions: [
       {
-        label: '⭐ How do Gold tables prepare data for Metric Views?',
+        label: '⭐ How should I design Gold tables for metrics?',
         question: 'How should I design Gold fact and dimension tables, PK/FK constraints, and comments to power Unity Catalog Metric Views and Genie?',
       },
       {
-        label: '🔄 How do Gold tables sync back to Lakebase?',
+        label: '🔄 How do Gold tables reach my app?',
         question: 'What makes a Gold table a good candidate for reverse-ETL into Lakebase via Synced Tables?',
       },
     ],
@@ -213,30 +241,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   sdp: {
     name: 'Spark Declarative Pipelines (SDP)',
-    badge: 'Lakeflow · dp',
+    badge: 'Data pipelines',
+    summary:
+      'A framework for building data pipelines by describing the tables you want, while Databricks works out how and when to build them.',
+    useWhen:
+      'You need to move and clean data through Bronze, Silver, and Gold, in batches or continuously.',
     description:
       'Declarative framework for batch and streaming ETL in SQL and Python (`from pyspark import pipelines as dp`). Lakeflow pipelines extend Apache Spark Declarative Pipelines with AUTO CDC, data quality expectations, and a queryable event log.',
     benefits: [
-      'Declarative SQL (CREATE STREAMING TABLE / MATERIALIZED VIEW) & Python (@dp.table)',
-      'Automatic dependency graph resolution, parallel execution, and incremental refresh',
-      'Built-in data quality expectations (@dp.expect, CONSTRAINT ... EXPECT)',
-      'Native AUTO CDC flows for out-of-order events and SCD Type 1 / Type 2',
-      'Portable open-source Apache Spark SDP syntax with managed Lakeflow observability',
+      { title: 'Describe the result, not the steps', detail: 'Write simple SQL or Python for each table; ordering and dependencies are handled for you.' },
+      { title: 'Quality rules built in', detail: 'Add data quality checks right next to each table definition.' },
+      { title: 'Handles changing records', detail: 'Built-in change handling merges updates and late-arriving data correctly.' },
     ],
     limitations: [
-      'Requires declarative mindset (define target state, not imperative step loops)',
-      'AUTO CDC and expectations are Lakeflow extensions beyond base open-source SDP',
-      'Standalone MV/ST vs multi-dataset ETL pipelines have different operational scopes',
+      { title: 'A different way of thinking', detail: 'You define what each table should contain, rather than writing step-by-step code.' },
+      { title: 'Some features are Databricks-only', detail: 'Change handling and quality checks go beyond the open-source version of the framework.' },
+      { title: 'Pick the right table type', detail: 'Streaming tables and materialized views behave differently; choose based on how data arrives.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/ldp/',
     docLabel: 'Spark Declarative Pipelines on Lakeflow',
     quickQuestions: [
       {
-        label: '🐍 What is the Python `pyspark.pipelines` syntax?',
+        label: '🐍 What does a pipeline look like in Python?',
         question: 'How do I write streaming tables, materialized views, expectations, and AUTO CDC flows using `from pyspark import pipelines as dp`?',
       },
       {
-        label: '⚖️ Streaming Table vs Materialized View?',
+        label: '⚖️ Streaming table or materialized view?',
         question: 'When should I use a Streaming Table vs a Materialized View in Spark Declarative Pipelines on Lakeflow?',
       },
     ],
@@ -244,30 +274,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   tvf: {
     name: 'Table-Valued Functions (TVFs)',
-    badge: 'Unity Catalog SQL',
+    badge: 'Reusable queries',
+    summary:
+      'Saved SQL queries that take inputs (like a date range or region) and return a table, stored and secured in Unity Catalog.',
+    useWhen:
+      "A question needs inputs or step-by-step logic a metric view can't express, like a ranked top-10 list.",
     description:
       'Parameterized SQL functions registered in Unity Catalog (`CREATE FUNCTION ... RETURNS TABLE`) that encapsulate complex, reusable query logic. Used alongside Metric Views when questions require procedural parameters, dynamic top-N ranking, or custom table returns.',
     benefits: [
-      'Encapsulates complex multi-join or window SQL behind typed input parameters',
-      'Governed and versioned in Unity Catalog with standard EXECUTE privileges',
-      'Callable as trusted tools by Genie Agents, Mosaic AI Agents, and MCP servers',
-      'Parameterized Metric Views (DBR 18.2+) can also be invoked with TVF syntax',
-      'Enforces consistent filtering (e.g. date ranges, thresholds) across callers',
+      { title: 'Complex logic, simple to call', detail: 'Hide multi-step SQL behind a function name and a few inputs.' },
+      { title: 'Secured and versioned', detail: 'Lives in Unity Catalog with the same permissions model as your tables.' },
+      { title: 'Callable by AI agents', detail: 'Genie and AI agents can call these functions as trusted tools.' },
     ],
     limitations: [
-      'Use TVFs only where Metric Views cannot express the parameterized logic',
-      'Fixed output table schema is less flexible than ad-hoc `MEASURE()` slicing',
-      'Requires clear function and parameter COMMENTs so AI agents pass valid arguments',
+      { title: 'Use only when needed', detail: "Prefer metric views; reach for these functions only for logic metric views can't handle." },
+      { title: 'Fixed output shape', detail: 'Results always have the same columns, so they are less flexible than slicing a metric view.' },
+      { title: 'Needs clear descriptions', detail: 'Describe each function and input well so AI agents pass the right values.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-qry-select-tvf',
     docLabel: 'SQL Table-Valued Functions Docs',
     quickQuestions: [
       {
-        label: '🤔 When should I use a TVF vs a Metric View?',
+        label: '🤔 When should I use a function instead of a metric view?',
         question: 'When should I create a SQL Table-Valued Function (TVF) instead of using a Unity Catalog Metric View?',
       },
       {
-        label: '🛠️ How do Genie and MCP agents call TVFs?',
+        label: '🛠️ How do Genie and agents call these functions?',
         question: 'How do Genie Agents and Mosaic AI MCP tools discover and invoke Unity Catalog Table-Valued Functions?',
       },
     ],
@@ -275,30 +307,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   metricViews: {
     name: 'Metric Views',
-    badge: 'YAML v1.1 · UC Semantics',
+    badge: 'Semantic layer',
+    summary:
+      'A single, shared place to define business metrics like revenue or profit margin, so every report and AI assistant calculates them the same way.',
+    useWhen:
+      'Different teams or dashboards report different numbers for the same metric, and you want one trusted answer.',
     description:
       'Unity Catalog governed semantic layer defined with `CREATE OR REPLACE VIEW ... WITH METRICS LANGUAGE YAML` (YAML spec v1.1). Centralizes `fields` (dimensions), aggregate `measures`, star/snowflake `joins`, `synonyms`, and `window` measures so Genie, AI/BI Dashboards, and SQL query one source of truth via `MEASURE()`.',
     benefits: [
-      'Define KPIs once in YAML v1.1; query at any grain with `SELECT MEASURE(...)`',
-      'Supports star & nested snowflake joins, `rely: at_most_one_match`, and `one_to_many`',
-      'Rich semantic metadata: `display_name`, `format`, `comment`, and `synonyms` (up to 10)',
-      'Supports rolling/cumulative `window` measures, `parameters`, and `materialization`',
-      'Import Tableau/Power BI workbooks via `/importBI` and promote local views to UC',
+      { title: 'One definition, used everywhere', detail: 'Define "revenue" once; dashboards, Genie, and SQL queries all reuse the exact same logic.' },
+      { title: 'Slice by anything, instantly', detail: 'Break a metric down by region, month, or product without building new tables.' },
+      { title: 'AI understands your business words', detail: 'Add friendly names and synonyms so Genie knows "sales" and "revenue" mean the same thing.' },
     ],
     limitations: [
-      'Must be queried with `MEASURE(measure_name)` and `GROUP BY` (not `SELECT *` aggregates)',
-      'Local dashboard metric views from `/importBI` must be promoted to UC for Genie Agents',
-      '`SHOW CREATE TABLE` is blocked on Metric Views — inspect via `DESCRIBE TABLE EXTENDED`',
+      { title: 'Queried a little differently', detail: 'Metrics are requested through a special function, so standard SQL habits need a small adjustment.' },
+      { title: 'Percentages need careful setup', detail: 'Ratios like profit margin must be defined as a division, otherwise totals come out wrong.' },
+      { title: 'Publish before Genie can use it', detail: 'Metric views built inside a single dashboard must be saved to Unity Catalog to be shared.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/uc-semantics/metric-views/',
     docLabel: 'Unity Catalog Metric Views Docs',
     quickQuestions: [
       {
-        label: '📐 How do I write & query a Metric View in YAML v1.1?',
+        label: '📐 How do I create and query my first metric view?',
         question: 'Show me how to create a Metric View with `WITH METRICS LANGUAGE YAML` (version 1.1) and query it using `MEASURE()`.',
       },
       {
-        label: '⚠️ What are the key rules (joins, non-additive, /importBI)?',
+        label: '⚠️ What mistakes should I avoid?',
         question: 'What are the key considerations for Metric Views, including star/snowflake joins, non-additive ratios, and promoting `/importBI` views to Unity Catalog?',
       },
     ],
@@ -306,30 +340,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   metricViewSynonyms: {
     name: 'Metric View Synonyms',
-    badge: 'YAML v1.1 · Discovery',
+    badge: 'Business terms',
+    summary:
+      'Alternative names you attach to each metric or field, so people and AI can find it using the words they actually use.',
+    useWhen:
+      'People ask for the same metric in different ways, like "AOV", "average order value", or "spend per order".',
     description:
       'Alternative business names attached directly to `measures` and `fields` in Metric View YAML v1.1 (`synonyms:`, up to 10 per column, max 255 chars each). Because synonyms live on the Unity Catalog Metric View itself, both Genie Agents and AI/BI Dashboards share the exact same natural-language term resolution.',
     benefits: [
-      'Lives on the Metric View YAML (`synonyms:`), shared across Genie and AI/BI Dashboards',
-      'Maps acronyms ("AOV"), informal phrasings ("spend per order"), and legacy report names',
-      'Preserves original Tableau / Power BI field aliases when importing via `/importBI`',
-      'Eliminates the #1 cause of Genie benchmark misses ("right measure not found")',
-      'Up to 10 curated synonyms per measure or field without duplicating SQL definitions',
+      { title: 'Written once, shared everywhere', detail: 'Synonyms live on the metric view, so Genie and dashboards understand the same words.' },
+      { title: 'Matches how people really talk', detail: 'Cover acronyms, casual phrases, and old report names for each metric.' },
+      { title: 'Fixes the most common Genie miss', detail: "Most wrong answers happen when Genie can't find the right metric; synonyms fix that." },
     ],
     limitations: [
-      'Requires Metric View YAML specification `version: 1.1` (up to 10 synonyms per field)',
-      'Not allowed on wildcard (`source.*`) field imports — exclude and define explicitly',
-      'Overlapping synonyms across different measures in the same view create ambiguity',
+      { title: 'Up to 10 per field', detail: 'Each metric or field holds at most 10 synonyms, so pick the most useful ones.' },
+      { title: 'Define fields one by one', detail: "Synonyms can't be added when importing all columns at once; list those fields individually." },
+      { title: 'Avoid overlaps', detail: 'Using the same synonym on two different metrics confuses Genie about which one you mean.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/uc-semantics/metric-views/yaml-reference',
     docLabel: 'Metric View Synonyms & YAML Reference',
     quickQuestions: [
       {
-        label: '🏷️ What makes a high-impact synonym list?',
+        label: '🏷️ How do I pick good synonyms?',
         question: 'How should I choose the up to 10 synonyms per measure/field (acronyms, informal phrasings, legacy names, BI aliases) on a Metric View?',
       },
       {
-        label: '🔍 Why put synonyms on the Metric View instead of Genie?',
+        label: '🔍 Why put synonyms on the metric view?',
         question: 'Why is defining `synonyms:` in Metric View YAML v1.1 better than only adding column synonyms inside a single Genie Space?',
       },
     ],
@@ -337,30 +373,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   genieSpaces: {
     name: 'Genie Spaces',
-    badge: 'Conversational AI/BI',
+    badge: 'Ask in plain English',
+    summary:
+      'A chat space where business users ask questions about data in plain English and get answers, charts, and the SQL behind them.',
+    useWhen:
+      'Business users need answers from data without writing SQL or waiting for an analyst.',
     description:
       'Conversational analytics spaces (also called Genie Agents) that let business users ask questions in plain English over governed Unity Catalog Metric Views, Gold tables, and TVFs—returning instant SQL-backed answers, interactive charts, and follow-up insights.',
     benefits: [
-      'Self-service natural language exploration grounded in Unity Catalog permissions',
-      'Directly consumes governed Metric Views (`MEASURE()`), Gold tables, and TVFs',
-      'Curated with general instructions, verified SQL examples, and benchmark test suites',
-      'Supports Chat mode and multi-step Agent mode reasoning with Flash speed option',
-      'Embeds into Databricks Apps and powers multi-agent supervisor architectures',
+      { title: 'Self-service answers', detail: 'Anyone can ask questions, and they only see data they have permission to see.' },
+      { title: 'Built on trusted definitions', detail: 'Answers come from your metric views, Gold tables, and saved query functions.' },
+      { title: 'Gets better with tuning', detail: 'Instructions, example questions, and test sets make answers more accurate over time.' },
     ],
     limitations: [
-      'Supports up to 50 data objects (tables, views, or metric views) per space',
-      'Accuracy depends heavily on Metric View synonyms, column comments, and curation',
-      'Service principal API usage is billed at standard pay-as-you-go Genie pricing',
+      { title: 'Up to 50 data sources', detail: 'Each space can include at most 50 tables or views, so keep it focused.' },
+      { title: 'Quality depends on setup', detail: 'Accuracy relies on good synonyms, column descriptions, and careful tuning.' },
+      { title: 'Automated use is billed', detail: 'Calling Genie from automated accounts through the API is charged at standard rates.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/genie-agents/',
     docLabel: 'Genie Spaces & Agents Documentation',
     quickQuestions: [
       {
-        label: '🎯 How do I curate a Genie Space for high accuracy?',
+        label: '🎯 How do I make Genie answers accurate?',
         question: 'What are the best practices for curating a Genie Space with Metric Views, lean instructions, verified queries, and benchmarks?',
       },
       {
-        label: '⚠️ What are the object limits and governance rules?',
+        label: '⚠️ What limits and rules apply?',
         question: 'What are the table limits, permission rules, and common pitfalls when deploying a Genie Space?',
       },
     ],
@@ -368,30 +406,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   genieAgent: {
     name: 'Genie Agent',
-    badge: 'Governed NL Analytics',
+    badge: 'Tuned Genie',
+    summary:
+      'A Genie space built on a single metric view, then tested and tuned step by step until its answers are reliably right.',
+    useWhen:
+      'You need Genie answers people can trust for real decisions, not just a quick demo.',
     description:
       'A governed conversational analytics agent (Genie Space) grounded strictly on your curated Unity Catalog Metric View. Built through a disciplined 5-step arc: attach only the Metric View, author lean rule-shaped instructions, pin verified `MEASURE()` queries, load ground-truth SQL benchmarks, and run an iterative optimize loop.',
     benefits: [
-      'Attaches the governed Metric View under `data_sources.metric_views` (up to 50 objects)',
-      'Lean, rule-shaped instructions (<=20 lines) enforce `MEASURE()` and scope boundaries',
-      'Verified example queries (`example_question_sqls`) pin proven SQL for top questions',
-      'Benchmarks (up to 500 questions) pair user prompts with human-verified ground-truth SQL',
-      'Iterative optimize loop maps every benchmark miss to a targeted curation fix',
+      { title: 'Grounded in one trusted source', detail: 'Answers come only from your metric view, so numbers match your official definitions.' },
+      { title: 'Proven example answers', detail: 'Pin tested queries for the most common questions so Genie reuses known-good answers.' },
+      { title: 'Measurable accuracy', detail: 'Test questions with verified answers show exactly where Genie is wrong and what to fix.' },
     ],
     limitations: [
-      'Benchmarks without expected ground-truth SQL cannot be automatically scored',
-      'Generated benchmark answers must be human-verified to avoid grading Genie against itself',
-      'Instruction bloat (>20 lines of prose/formulas) dilutes attention on every turn',
+      { title: 'Tests need correct answers', detail: "Each test question needs a verified answer, or it can't be scored automatically." },
+      { title: 'A person must check answers', detail: "Don't let Genie write its own answer key; have a person verify each one." },
+      { title: 'Keep instructions short', detail: 'Long instructions (more than about 20 lines) make Genie less accurate, not more.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/genie-agents/best-practices',
     docLabel: 'Curate an Effective Genie Agent Docs',
     quickQuestions: [
       {
-        label: '🔁 How does the Benchmark & Optimize loop work?',
+        label: '🔁 How do I test and improve Genie?',
         question: 'How do I load benchmarks with expected `MEASURE()` SQL and run the append-only optimize loop to reach ~85%+ accuracy?',
       },
       {
-        label: '📏 What belongs in General Instructions vs the Metric View?',
+        label: '📏 What goes in instructions vs the metric view?',
         question: 'What rules belong in a Genie Agent\'s General Instructions (<=20 lines) versus on the Unity Catalog Metric View?',
       },
     ],
@@ -399,26 +439,28 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   discoverOntology: {
     name: 'Discover Ontology',
-    badge: 'Beta · UC Semantics',
+    badge: 'Business context · Beta',
+    summary:
+      'A layer of business context that organizes data by business area and defines key terms, so Genie answers using your official definitions.',
+    useWhen:
+      "Teams use the same words differently and you want AI answers to follow your company's official meaning.",
     description:
       'The human-modeled business context layer of Unity Catalog semantics in Databricks Discover. Combines business-aligned **Domains & Subdomains**, authoritative **Pages** for core concepts/measures, and **Question-to-Metric-View Routing** so Genie One grounds answers in governed definitions with clickable citations.',
     benefits: [
-      'Domains & subdomains organize assets by business purpose using governed tags',
-      'Published Pages provide authoritative definitions prioritized and cited by Genie One',
-      'Routing Pages turn fragile table inference into a deterministic Metric View lookup',
-      'Inherits domain access controls and pairs with asset certification/deprecation',
-      'Scales consistent business terminology across teams in Catalog -> Discover',
+      { title: 'Organized by business area', detail: 'Group data into areas like Sales or Finance, with smaller sub-areas inside each.' },
+      { title: 'Official definitions, cited', detail: 'Published pages define key terms, and Genie uses and links to them in its answers.' },
+      { title: 'Questions go to the right metric', detail: 'A routing page sends each kind of question to the correct metric view.' },
     ],
     limitations: [
-      'Public Preview / Beta feature — requires Genie One Pages enabled in the workspace',
-      'Curating domains and Pages requires `MANAGE DISCOVER` or domain `MANAGE` permission',
-      'Pages are authored/published in the Discover UI editor (no public headless create API)',
+      { title: 'Beta feature', detail: 'It is in preview and must be turned on in your workspace before use.' },
+      { title: 'Needs special permissions', detail: 'Organizing areas and pages requires Discover management permission.' },
+      { title: 'Built in the editor', detail: 'Pages are written and published in the Discover editor, not created through an API.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/uc-semantics/',
     docLabel: 'Unity Catalog Semantics & Ontology Docs',
     quickQuestions: [
       {
-        label: '🧭 How do Domains, Pages, and Routing fit together?',
+        label: '🧭 How do areas, pages, and routing fit together?',
         question: 'How do Discover Domains, Subdomains, concept Pages, and the Question-to-Metric-View Routing Page work together in the Genie Ontology?',
       },
       {
@@ -430,30 +472,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   discoverDomains: {
     name: 'Discover Domains',
-    badge: 'Beta · Governed Tags',
+    badge: 'Business areas · Beta',
+    summary:
+      'Folders for your business, like Revenue or Supply Chain, that group related tables, metrics, dashboards, and Genie spaces in one place.',
+    useWhen:
+      "People struggle to find the right data because it's organized by system instead of by business area.",
     description:
       'Account-level business organization layer in Databricks Discover (`Catalog → Discover`). Domains group tables, Metric Views, AI/BI Dashboards, Genie Agents, and Pages by business area, and partition into **Subdomains** (one level of nesting) built on governed tags (`{parentDomainTag}/{subdomainName}`).',
     benefits: [
-      'Organizes data products and Pages around business areas (e.g. Revenue → Orders, Returns)',
-      'Built on Unity Catalog governed tags with `{parentDomainTag}/{subdomainName}` hierarchy',
-      'Many-to-many asset assignment; subdomain assets automatically surface in parent domain',
-      'Controls access inheritance for all published Discover Pages inside the domain',
-      'Supports AI-recommended domains and custom curator-highlighted sections',
+      { title: 'Find data by business area', detail: 'Group assets under areas like Revenue, with sub-areas like Orders or Returns.' },
+      { title: 'One asset, many areas', detail: 'An asset can belong to several areas, and sub-area assets also appear in the parent area.' },
+      { title: 'Access follows the area', detail: 'Pages published inside an area inherit its access controls.' },
     ],
     limitations: [
-      'Supports exactly one level of subdomain nesting (subdomains cannot nest further)',
-      'Requires `MANAGE DISCOVER` (account) or `MANAGE` (domain) permission to curate',
-      'Downstream Page and bulk-import workflows require the internal **Domain ID**, not the name',
+      { title: 'Only one level of sub-areas', detail: "Areas can have sub-areas, but sub-areas can't contain further sub-areas." },
+      { title: 'Needs special permissions', detail: 'Creating and managing areas requires Discover management permission.' },
+      { title: "Save each area's ID", detail: "Later steps need the area's internal ID, not its name, so record it when you create it." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/uc-semantics/domains',
     docLabel: 'Discover Domains & Subdomains Docs',
     quickQuestions: [
       {
-        label: '🆔 Why must I capture Domain & Subdomain IDs?',
+        label: '🆔 Why do I need to save area IDs?',
         question: 'Why is capturing the internal Domain ID and Subdomain IDs critical when modeling a Discover domain for Pages and bulk imports?',
       },
       {
-        label: '🗂️ How do governed tags power Domains & Subdomains?',
+        label: '🗂️ How are areas and sub-areas set up?',
         question: 'How do Unity Catalog governed tags (`{parentDomainTag}/{subdomainName}`) and permissions work for Discover Domains and Subdomains?',
       },
     ],
@@ -461,30 +505,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   discoverPages: {
     name: 'Discover Pages',
-    badge: 'Beta · Genie One Citations',
+    badge: 'Official definitions · Beta',
+    summary:
+      'Short, official write-ups of your key business terms and metrics that Genie reads first and links to in its answers.',
+    useWhen:
+      'You want Genie to use your company\'s exact definition of a metric like "net revenue" every time.',
     description:
       'Governed, authoritative definitions of business concepts, KPIs, and acronyms authored inside a Discover domain or subdomain. When Genie One answers a question involving a concept defined in a published Page, it prioritizes the Page over inferred context and cites the Page in its response.',
     benefits: [
-      'Authoritative ground truth for top measures: plain-language definition + exact `MEASURE()` formula',
-      'Captures full synonym lists (acronyms, informal phrasings, legacy names) and negative rules',
-      'Links the governed Unity Catalog Metric View directly under `Related assets`',
-      'Prioritized by Genie One over automatic inference and surfaced as a clickable citation',
-      'Supports rich text, inline `@` asset mentions, and glossary bulk-import drafting',
+      { title: 'One official definition', detail: 'Each page explains a metric in plain words alongside its exact formula.' },
+      { title: 'Covers every way people say it', detail: 'List acronyms, casual names, and old report names, plus what the term does not mean.' },
+      { title: 'Genie cites it', detail: 'Genie trusts published pages over its own guesses and shows them as clickable sources.' },
     ],
     limitations: [
-      'Pages are split into chunks before retrieval — every rule sentence must name its measure/table inline',
-      'Authored and published in the Discover UI Page editor (Genie Code drafts fields; human publishes)',
-      'Draft Pages are only visible to the Page owner; must be Published for organization-wide Genie One use',
+      { title: 'Write self-contained sentences', detail: 'Pages are read in small pieces, so each sentence must name the metric it describes.' },
+      { title: 'A person must publish', detail: 'Genie Code can draft a page, but a person reviews and publishes it in the editor.' },
+      { title: 'Drafts are private', detail: "Only the author sees a draft; publish it before anyone else's Genie answers can use it." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/uc-semantics/pages',
     docLabel: 'Discover Pages Documentation',
     quickQuestions: [
       {
-        label: '✂️ What is the "chunk-safe sentence" rule for Pages?',
+        label: '✂️ How should I write a page so Genie reads it well?',
         question: 'Why are Discover Pages split into chunks, and how do I write chunk-safe definitions and negative rules that never arrive orphaned?',
       },
       {
-        label: '📋 What 5 elements belong in a measure Page?',
+        label: '📋 What belongs on a metric page?',
         question: 'What are the 5 essential elements to include when drafting a Discover Page for a key business measure?',
       },
     ],
@@ -492,30 +538,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   discoverRouting: {
     name: 'Question-to-Metric-View Routing',
-    badge: 'Beta · Highest-ROI Pattern',
+    badge: 'Question routing · Beta',
+    summary:
+      'A special page that lists every way people ask about a metric and points each one to the exact metric view to use.',
+    useWhen:
+      'Genie picks the wrong table or calculation because people phrase the same question many different ways.',
     description:
       'A high-leverage Discover Page ("Question to Metric View Routing") that maps every real-world question phrasing—formal name, acronym, informal phrasing, and legacy report term—to the exact governed Unity Catalog Metric View and measure, replacing fragile table inference with a deterministic lookup.',
     benefits: [
-      'Highest-return ontology exercise: turns "guess the table" inference into a curated lookup',
-      'Covers every measure in the signed-off inventory in a flat phrasing → (Metric View, measure) table',
-      'Resolves sloppy phrasings ("top line", "net sales", "sales $") to the same governed measure',
-      'Links the governed Metric View as a related asset and assigns a named domain owner',
-      'Eliminates "right calculation, wrong raw table" errors across Genie One conversations',
+      { title: 'A lookup instead of a guess', detail: 'Genie follows a clear list instead of guessing which table answers a question.' },
+      { title: 'Catches loose phrasing', detail: 'Terms like "top line", "net sales", and "sales $" all point to the same metric.' },
+      { title: 'Fewer wrong-table answers', detail: 'Stops answers that use the right formula on the wrong source data.' },
     ],
     limitations: [
-      'Must be kept in sync as new measures or Metric Views are added to the domain',
-      'Requires a named owner and published status in the Discover domain to ground all users',
-      'Works alongside (not as a replacement for) Metric View YAML v1.1 `synonyms:`',
+      { title: 'Must stay up to date', detail: 'Update the page whenever new metrics or metric views are added.' },
+      { title: 'Needs an owner and publishing', detail: "Assign a named owner and publish it so everyone's answers use it." },
+      { title: 'Adds to synonyms, not instead', detail: 'Keep synonyms on your metric views too; this page works alongside them.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/uc-semantics/pages',
     docLabel: 'Discover Pages & Routing Docs',
     quickQuestions: [
       {
-        label: '🗺️ How do I structure a Routing Page table?',
+        label: '🗺️ What does a routing page look like?',
         question: 'Show me an example of a "Question to Metric View Routing" Page table mapping formal, acronym, informal, and legacy phrasings to a Metric View.',
       },
       {
-        label: '💡 Why does lookup beat inference for Genie?',
+        label: '💡 Why does a lookup beat guessing?',
         question: 'Why do most Genie misses happen from choosing the wrong source table, and how does a Routing Page solve that?',
       },
     ],
@@ -523,30 +571,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   syncedTables: {
     name: 'Synced Tables',
-    badge: 'GA · Reverse ETL',
+    badge: 'Data to apps',
+    summary:
+      'Automatically copies curated analytics tables from the lakehouse into your Lakebase app database, so apps can show them instantly.',
+    useWhen:
+      'Your app needs to show analytics results (like customer scores) next to its own live data.',
     description:
       'Managed reverse-ETL pipelines (powered by Lakeflow) that sync curated Unity Catalog Gold tables into Lakebase Postgres (`_synced` read-only tables) so operational apps serve governed analytics with sub-10ms OLTP latency alongside transactional data.',
     benefits: [
-      'Three sync modes: Snapshot (full copy), Triggered (scheduled incremental), Continuous (seconds latency)',
-      'Fully managed Lakeflow sync pipeline — no custom ETL scripts or external orchestrators',
-      'Optional LTAP Direct Writes (Postgres 16–18) accelerate bulk loads without taxing compute endpoints',
-      'Supports write-time Delta Change Data Feed (CDF) and read-time Automatic CDF (Public Preview)',
-      'Enables single-query Postgres joins between live app tables and governed Lakehouse Gold metrics',
+      { title: 'Three sync speeds', detail: 'Copy everything once, refresh on a schedule, or stay up to date within seconds.' },
+      { title: 'Fully managed', detail: 'Databricks runs the sync for you, with no custom scripts or schedulers.' },
+      { title: 'Join in one query', detail: 'Apps can combine their own tables with synced analytics in a single database query.' },
     ],
     limitations: [
-      'Never sync a Metric View directly — sync the underlying Gold dimension and fact tables',
-      'Triggered and Continuous modes require a Primary Key and Change Data Feed (or Automatic CDF)',
-      'Synced tables in Lakebase are read-only (up to 16 connections per sync pipeline)',
+      { title: 'Sync tables, not metric views', detail: "Metric views can't be synced; sync the Gold tables underneath them instead." },
+      { title: 'Ongoing sync needs setup', detail: 'Scheduled and continuous syncs need a primary key and change tracking on the source table.' },
+      { title: 'Copies are read-only', detail: "Synced tables can't be edited in Lakebase; change the data at the source." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/oltp/projects/sync-tables',
     docLabel: 'Lakebase Synced Tables Documentation',
     quickQuestions: [
       {
-        label: '🔄 Snapshot vs Triggered vs Continuous sync mode?',
+        label: '🔄 Which sync speed should I choose?',
         question: 'How do I choose between Snapshot, Triggered, and Continuous sync modes for Lakebase Synced Tables, and when is CDF required?',
       },
       {
-        label: '⚠️ Why sync Gold tables instead of Metric Views?',
+        label: "⚠️ Why can't I sync a metric view?",
         question: 'Why must I sync the base Gold fact and dimension tables into Lakebase rather than syncing a Metric View directly?',
       },
     ],
@@ -554,30 +604,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   aiBIDashboards: {
     name: 'AI/BI Dashboards',
-    badge: 'Lakeview · Native BI',
+    badge: 'Dashboards',
+    summary:
+      'Interactive dashboards built into Databricks that anyone in your company can view and explore, with AI help to build and explain them.',
+    useWhen:
+      'You want to share key metrics visually across teams without buying a separate BI tool.',
     description:
       'Native, serverless business intelligence dashboards (`.lvdash.json`) built into Databricks. Query Unity Catalog Metric Views directly with `MEASURE()` for KPIs and breakdowns, use the low-code Metric View UI, enable cross-filtering and Dashboard Insights, and deploy via Asset Bundles.',
     benefits: [
-      'Zero per-viewer licensing — share governed dashboards across the entire organization',
-      'Native Metric View integration: `MEASURE()` for KPIs/trends + low-code local/UC metric view UI',
-      'Interactive cross-filtering, faceted counters, pivot drill-down, and Global Filter pages',
-      'AI-assisted authoring with Genie Code (automatic semantic validation) + embedded Genie Q&A',
-      'Version-controlled as `.lvdash.json` artifacts and deployed via Databricks Asset Bundles',
+      { title: 'No per-viewer licenses', detail: 'Share dashboards with your whole organization at no extra per-user cost.' },
+      { title: 'Uses your official metrics', detail: 'Charts read straight from metric views, so numbers match Genie and SQL.' },
+      { title: 'Explore by clicking', detail: 'Click a chart to filter the rest, drill down, and ask follow-up questions in Genie.' },
     ],
     limitations: [
-      'Use a mixed dataset strategy: `MEASURE()` on Metric Views for KPIs; direct Gold SQL for detail/filter lists',
-      '6-column canvas grid (widget widths 1–6) and exact `fieldName`-to-SQL-alias matching required',
-      'Unity Catalog metric views that define `parameters` cannot be locally extended in a dashboard',
+      { title: 'Mix metrics and detail tables', detail: 'Use metric views for headline numbers and Gold tables for detailed lists and filters.' },
+      { title: 'The layout has rules', detail: "Dashboards use a six-column grid, and field names must exactly match the query's columns." },
+      { title: "Some metric views can't be extended", detail: "Metric views that take inputs can't be customized inside a dashboard." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/dashboards/',
     docLabel: 'AI/BI Dashboards Documentation',
     quickQuestions: [
       {
-        label: '📊 How do AI/BI Dashboards query Metric Views?',
+        label: '📊 How do dashboards use metric views?',
         question: 'What is the recommended mixed dataset strategy (`MEASURE()` on Metric Views vs direct Gold SQL) when building an AI/BI Dashboard?',
       },
       {
-        label: '📦 How are `.lvdash.json` dashboards deployed in bundles?',
+        label: '📦 How do I deploy a dashboard?',
         question: 'How do I extract an `.lvdash.json` definition and deploy an AI/BI Dashboard with Databricks Asset Bundles?',
       },
     ],
@@ -585,30 +637,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   agents: {
     name: 'Databricks Agents',
-    badge: 'Mosaic AI',
+    badge: 'AI agents',
+    summary:
+      'Tools for building, testing, and running AI assistants that can look up your company data and take actions safely.',
+    useWhen:
+      'You want an AI assistant that answers from your own data or completes multi-step tasks.',
     description:
       'Build, evaluate, register, and deploy enterprise AI agents on Mosaic AI. Connect foundation models to governed Unity Catalog data, Genie Spaces, Vector Search, and MCP tools with full MLflow 3 observability and AI Gateway guardrails.',
     benefits: [
-      'Grounded on governed enterprise data via Genie Spaces, UC Functions, and Vector Search',
-      'End-to-end lifecycle with Mosaic AI Agent Framework and MLflow 3 Evaluation',
-      'Scale-to-zero Model Serving endpoints with AI Gateway rate limits and guardrails',
-      'Supports multi-agent supervisor patterns orchestrating specialized domain agents',
-      'Full trace observability, inference table logging, and human Review App sign-off',
+      { title: 'Grounded in your data', detail: 'Agents use Genie, saved functions, and document search over data in Unity Catalog.' },
+      { title: 'Build, test, and ship in one place', detail: 'Develop, evaluate, and deploy agents with built-in tracking at every step.' },
+      { title: 'Safe in production', detail: 'Usage limits and safety guardrails protect every deployed agent.' },
     ],
     limitations: [
-      'Requires clear tool descriptions and system prompts for deterministic tool routing',
-      'Multi-turn tool-calling increases foundation model token consumption and latency',
-      'On-behalf-of-user data access requires explicit credential forwarding configuration',
+      { title: 'Clear tool descriptions matter', detail: 'Agents choose tools from their descriptions, so vague ones lead to wrong choices.' },
+      { title: 'Multi-step tasks cost more', detail: 'Each extra tool call adds response time and AI model usage cost.' },
+      { title: 'User-level access needs setup', detail: "For agents to act with each user's permissions, credential passing must be configured." },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-agent',
     docLabel: 'Mosaic AI Agents Documentation',
     quickQuestions: [
       {
-        label: '🤖 How do Mosaic AI Agents connect to Genie & UC?',
+        label: '🤖 How do agents connect to my data?',
         question: 'How do I wire a Mosaic AI Agent to query Genie Spaces, Unity Catalog Functions, and Vector Search?',
       },
       {
-        label: '🛡️ How are agents governed and monitored in production?',
+        label: '🛡️ How are agents kept safe in production?',
         question: 'How do Unity Catalog permissions, AI Gateway guardrails, and MLflow 3 monitoring work for Databricks Agents?',
       },
     ],
@@ -616,30 +670,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   agentFramework: {
     name: 'Agent Framework',
-    badge: 'ResponsesAgent',
+    badge: 'Build agents',
+    summary:
+      'The coding toolkit for writing an AI agent in Python with the framework of your choice, then logging and deploying it on Databricks.',
+    useWhen:
+      "You're ready to write the code for a custom agent and run it in production.",
     description:
       'The Mosaic AI Agent Framework lets you author production-grade agents using the `ResponsesAgent` (recommended) or `ChatAgent` interfaces. Framework-agnostic (LangGraph, OpenAI Agents SDK, LlamaIndex, custom Python) with automatic MLflow 3 signature inference and native Playground, Evaluation, and Apps compatibility.',
     benefits: [
-      '`ResponsesAgent` recommended primary interface with automatic MLflow signature inference',
-      'Bring any orchestrator: LangGraph, OpenAI Agents SDK, LlamaIndex, or custom Python',
-      'Supports streaming responses, tool-call traces, and on-behalf-of-user authentication',
-      'Seamless drop-in compatibility with AI Playground, Agent Evaluation, and Databricks Apps',
-      'Single `mlflow.models.log_model` + Unity Catalog registration + `agents.deploy()` workflow',
+      { title: 'Use any framework', detail: 'Works with LangGraph, the OpenAI Agents SDK, LlamaIndex, or plain Python.' },
+      { title: 'Works with built-in tools', detail: 'Your agent plugs straight into the AI Playground, evaluation tools, and Databricks Apps.' },
+      { title: 'A simple path to production', detail: 'Log, register, and deploy the agent in a few standard steps.' },
     ],
     limitations: [
-      'Requires Python and familiarity with async/streaming generator patterns for custom UIs',
-      'Reasoning and tool-selection quality depend on the underlying Foundation Model endpoint',
-      'Stateless by default unless paired with Lakebase Memory checkpointers',
+      { title: 'Requires Python skills', detail: 'Custom interfaces need comfort with Python and streaming responses.' },
+      { title: 'Quality depends on the model', detail: 'How well the agent reasons and picks tools depends on the AI model behind it.' },
+      { title: 'No memory by default', detail: 'Agents forget past conversations unless you add Lakebase Memory.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-agent',
     docLabel: 'Mosaic AI Agent Framework Docs',
     quickQuestions: [
       {
-        label: '🧱 Why is `ResponsesAgent` recommended over `ChatAgent`?',
+        label: '🧱 Which agent interface should I use?',
         question: 'What are the advantages of building with `ResponsesAgent` in the Mosaic AI Agent Framework and how does it handle streaming and tool calls?',
       },
       {
-        label: '🚀 How do I log and deploy an agent to Unity Catalog?',
+        label: '🚀 How do I deploy my agent?',
         question: 'What are the steps to log a `ResponsesAgent` with MLflow 3, register it in Unity Catalog, and deploy it?',
       },
     ],
@@ -647,30 +703,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   toolsMcp: {
     name: 'Tools & MCP',
-    badge: 'Model Context Protocol',
+    badge: 'Agent tools',
+    summary:
+      'A standard way to plug tools into AI agents, using the open Model Context Protocol (MCP), so they can query data, search documents, or call other services.',
+    useWhen:
+      'Your agent needs to do more than chat, like querying data, searching documents, or using another app.',
     description:
       'Connect agents to enterprise capabilities via the standardized Model Context Protocol (MCP). Supports three server architectures on Databricks: **Managed MCP** (Unity Catalog Functions, Vector Search, Genie Spaces, DBSQL), **External MCP** (OAuth third-party services), and **Custom MCP** (hosted on Databricks Apps).',
     benefits: [
-      'Open MCP standard lets agents discover and invoke tools uniformly across frameworks',
-      'Managed MCP servers expose UC Functions, Vector Search, Genie, and SQL with zero infra',
-      'Automatic Unity Catalog governance and on-behalf-of-user credential propagation',
-      'External MCP servers connect third-party SaaS tools via governed UC OAuth connections',
-      'Custom MCP servers wrap proprietary APIs as a scalable Databricks App',
+      { title: 'One standard for all tools', detail: 'Agents find and use tools the same way, whichever framework you build with.' },
+      { title: 'Ready-made Databricks tools', detail: 'Built-in servers give agents Genie, search, SQL, and functions with no setup.' },
+      { title: 'Respects user permissions', detail: "Tools run with each user's own access, governed by Unity Catalog." },
     ],
     limitations: [
-      'External MCP servers require Unity Catalog HTTP connection and OAuth handshake setup',
-      'Custom MCP servers add a separate Databricks App lifecycle to deploy and maintain',
-      'Large tool catalogs increase prompt context tokens — scope tools to the agent domain',
+      { title: 'Outside tools need setup', detail: 'Third-party services need a secure connection and sign-in configured first.' },
+      { title: 'Custom servers are more to run', detail: 'Hosting your own tool server means deploying and maintaining a separate app.' },
+      { title: 'Too many tools slow agents down', detail: 'Every tool adds to what the agent must read; give each agent only what it needs.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/generative-ai/agent-framework/mcp',
     docLabel: 'MCP on Databricks Documentation',
     quickQuestions: [
       {
-        label: '🔌 Managed vs External vs Custom MCP servers?',
+        label: '🔌 Which kind of tool server do I need?',
         question: 'What is the difference between Managed, External, and Custom MCP servers on Databricks and when should I use each?',
       },
       {
-        label: '🔐 How does on-behalf-of-user auth work with MCP?',
+        label: '🔐 How do tools respect user permissions?',
         question: 'How do MCP tools enforce Unity Catalog permissions using on-behalf-of-user authentication?',
       },
     ],
@@ -678,30 +736,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   lakebaseMemory: {
     name: 'Lakebase Memory',
-    badge: 'Short & Long-Term State',
+    badge: 'Agent memory',
+    summary:
+      'Lets AI agents remember the current conversation and recall facts about users across sessions, stored in your Lakebase database.',
+    useWhen:
+      "Your agent should remember what was said earlier, or recall a user's preferences next time.",
     description:
       'Persist stateful agent memory on Lakebase Postgres. **Short-term memory** uses a LangGraph (or OpenAI Agents SDK) Postgres checkpointer keyed by `thread_id` for multi-turn continuity; **long-term memory** extracts user insights into Lakebase tables indexed with `lakebase_vector` or Mosaic AI Vector Search.',
     benefits: [
-      'Short-term conversational state survives across stateless HTTP requests (`thread_id`)',
-      'Long-term semantic memory recalls user preferences and prior facts across sessions',
-      'Reuses your existing Lakebase Postgres instance — no separate Redis or vector DB needed',
-      'Supports hybrid vector + keyword recall via Lakebase Search (`lakebase_vector`) or UC Vector Search',
-      'Unified Postgres governance and ACID reliability for both app data and agent state',
+      { title: 'Remembers the conversation', detail: 'Each conversation is saved, so follow-up questions keep their context.' },
+      { title: 'Recalls users over time', detail: 'Important facts and preferences are stored and found again in later sessions.' },
+      { title: 'No extra database needed', detail: 'Uses the Lakebase database you already have instead of a separate memory store.' },
     ],
     limitations: [
-      'Long-term memory requires an async extraction step to summarize and store facts',
-      'Unbounded thread checkpoint growth requires TTL / retention cleanup policies',
-      'Connection pooling must be configured properly for concurrent streaming agent turns',
+      { title: 'Long-term memory takes an extra step', detail: 'Facts must be summarized and saved in a separate background step.' },
+      { title: 'Memory keeps growing', detail: "Set cleanup rules so old conversations don't pile up forever." },
+      { title: 'Plan for many users at once', detail: 'Configure database connections carefully so many simultaneous chats do not overload it.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/oltp/projects/lakehouse-integrations',
     docLabel: 'Lakebase Agent State & Memory Docs',
     quickQuestions: [
       {
-        label: '🧠 Short-term checkpointer vs Long-term memory?',
+        label: '🧠 Short-term vs long-term memory?',
         question: 'How do I implement both short-term `thread_id` checkpointing and long-term semantic memory on Lakebase Postgres?',
       },
       {
-        label: '⚡ How do I manage connection pooling & TTL?',
+        label: '⚡ How do I keep memory fast and tidy?',
         question: 'What are the best practices for Postgres connection pooling and checkpoint retention when using Lakebase Memory?',
       },
     ],
@@ -709,30 +769,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   mlflowPromptRegistry: {
     name: 'Prompt Registry',
-    badge: 'MLflow 3 · @production',
+    badge: 'Prompt versions',
+    summary:
+      'A version history for the instructions (prompts) you give AI models, so you can change, compare, and roll back prompts without redeploying your app.',
+    useWhen:
+      "You're improving an agent's prompts and want to test changes safely before users see them.",
     description:
       'MLflow 3 Prompt Registry provides Git-style version control for prompt templates in Unity Catalog, complete with mutable deployment aliases (`@production`, `@staging`). Decouple prompts from agent code so you can iterate, evaluate, and roll back prompts without redeploying.',
     benefits: [
-      'Immutable Git-style commit history and side-by-side diffs for every prompt revision',
-      'Aliases (`@production`, `@staging`) let agents resolve live prompts dynamically at runtime',
-      'Decouples prompt engineering from application/endpoint container redeployments',
-      'Automatic lineage linking prompt versions to `mlflow.genai.evaluate()` runs and traces',
-      'Governed in Unity Catalog alongside models, functions, and evaluation datasets',
+      { title: 'Full version history', detail: 'Every prompt change is saved, and you can compare any two versions side by side.' },
+      { title: 'Switch versions without redeploying', detail: 'Point a label like "production" at a version, and agents pick it up automatically.' },
+      { title: 'Linked to test results', detail: 'Each version connects to the evaluation runs that tested it.' },
     ],
     limitations: [
-      'Requires `mlflow >= 3.3.0` and Unity Catalog prompt registry support',
-      'Moving the `@production` alias immediately changes live agent behavior — gate with evals',
-      'Template variable schemas (`{{var}}`) must stay compatible with caller code',
+      { title: 'Needs an up-to-date MLflow', detail: 'Requires a recent MLflow release with prompt support in Unity Catalog.' },
+      { title: 'Labels change live behavior', detail: 'Moving the production label changes what users see immediately, so test first.' },
+      { title: 'Keep placeholders compatible', detail: 'Placeholders in a prompt must keep matching the values your code fills in.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/evaluate-prompts',
     docLabel: 'MLflow 3 Prompt Registry Docs',
     quickQuestions: [
       {
-        label: '🏷️ How do `@production` and `@staging` aliases work?',
+        label: '🏷️ How do I promote a prompt to production?',
         question: 'How do I register a prompt in MLflow 3, promote it with `@staging` and `@production` aliases, and load it inside an agent?',
       },
       {
-        label: '🔄 How do I compare prompt versions with `mlflow.genai.evaluate`?',
+        label: '🔄 How do I compare two prompt versions?',
         question: 'How do I run `mlflow.genai.evaluate()` across two different Prompt Registry versions before promoting to `@production`?',
       },
     ],
@@ -740,30 +802,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   mlflowEval: {
     name: 'MLflow Evaluation',
-    badge: 'MLflow 3 · LLM Judges',
+    badge: 'Quality testing',
+    summary:
+      'Repeatable tests for AI agents that score answers automatically, using AI judges and your own rules, plus review by experts.',
+    useWhen:
+      'You need proof an agent gives correct, safe answers before releasing or changing it.',
     description:
       'Systematic quality gates for GenAI agents using `mlflow.genai.evaluate()`. Curate repeatable evaluation datasets in Unity Catalog, score responses with built-in and custom LLM judges (`Correctness`, `RetrievalGroundedness`, `Guidelines`, code scorers), and collect SME sign-off in the Review App.',
     benefits: [
-      'Unity Catalog evaluation datasets ensure repeatable, apples-to-apples benchmark runs',
-      'Built-in Mosaic AI judges (`Correctness`, `Safety`, `RetrievalGroundedness`, `Guidelines`)',
-      'Custom Python code scorers and `@scorer` decorators for deterministic domain rules',
-      'Full span-level MLflow Traces pinpoint exact tool-call or retrieval failures',
-      'Stakeholder Review App captures human ratings and feedback directly into eval tables',
+      { title: 'Repeatable test sets', detail: 'Saved question sets let you compare agent versions fairly, like for like.' },
+      { title: 'Automatic AI judges', detail: 'Built-in judges score correctness, safety, and whether answers stick to the sources.' },
+      { title: 'See exactly what went wrong', detail: 'Step-by-step traces show which tool call or lookup caused a bad answer.' },
     ],
     limitations: [
-      'LLM-as-a-judge evaluation runs incur foundation model token costs',
-      'Evaluation datasets must evolve continuously to reflect real production edge cases',
-      'Judge guidelines must be specific and unambiguous to avoid noisy pass/fail scores',
+      { title: 'Judging has a cost', detail: 'AI judges use model calls, which add cost to every test run.' },
+      { title: 'Tests must keep growing', detail: 'Add new real-world cases over time so tests reflect what users actually ask.' },
+      { title: 'Vague rules give noisy scores', detail: 'Write specific, clear judging rules to get consistent pass or fail results.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/concepts/judges',
     docLabel: 'MLflow 3 Evaluation & Judges Docs',
     quickQuestions: [
       {
-        label: '⚖️ Built-in Judges vs `Guidelines` vs Custom Scorers?',
+        label: '⚖️ Which kind of judge should I use?',
         question: 'When should I use built-in MLflow 3 judges (`Correctness`, `RetrievalGroundedness`), `Guidelines` judges, or custom Python code scorers?',
       },
       {
-        label: '👥 How does human sign-off work in the Review App?',
+        label: '👥 How do experts review answers?',
         question: 'How do domain experts use the MLflow Review App to inspect traces and sign off on agent quality before promotion?',
       },
     ],
@@ -771,30 +835,32 @@ export const serviceData: Record<string, ServiceInfo> = {
 
   mlflowMonitoring: {
     name: 'Production Monitoring',
-    badge: 'AI Gateway + Scheduled Scorers',
+    badge: 'Live quality checks',
+    summary:
+      'Keeps watching an AI agent after launch, logging real conversations and automatically scoring a sample of them for quality.',
+    useWhen:
+      'Your agent is live and you want to catch quality drops before users notice.',
     description:
       'Continuous quality and drift observability in production. Capture every live request, response, and trace via **AI Gateway-enabled inference tables**, then attach **MLflow 3 scheduled scorers** (`scorer.register()` / `.start()`) at a configurable sampling rate (`0.0–1.0`) to grade live traffic automatically.',
     benefits: [
-      'AI Gateway-enabled inference tables log full production payloads and MLflow traces',
-      'Scheduled scorers (`scorer.register()` / `.start()`) evaluate live traffic without redeploying',
-      'Configurable `sample_rate` (0.0 to 1.0) balances observability coverage with judge cost',
-      'Reuses the exact same MLflow 3 judges and custom scorers used in offline evaluation',
-      'Outputs land in Unity Catalog tables ready to power AI/BI Monitoring Dashboards & Alerts',
+      { title: 'Every request logged', detail: 'Full requests, responses, and traces are saved to tables you can query.' },
+      { title: 'Live traffic scored automatically', detail: 'The same judges used in testing grade real conversations, without redeploying.' },
+      { title: 'You control the cost', detail: 'Score anything from a small sample to all traffic to balance coverage and cost.' },
     ],
     limitations: [
-      'Maximum of 20 scheduled scorers per MLflow experiment',
-      'Legacy inference tables are deprecated (use AI Gateway-enabled inference tables)',
-      'Asynchronous scorer execution has a minute-scale lag behind real-time requests',
+      { title: 'Up to 20 scorers', detail: 'Each experiment supports at most 20 scheduled scorers.' },
+      { title: 'Use the newer logging tables', detail: 'Older inference tables are retired; use the AI Gateway versions instead.' },
+      { title: 'Scores arrive with a delay', detail: 'Scoring runs in the background, a few minutes behind live traffic.' },
     ],
     docUrl: 'https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/run-scorer-in-prod',
     docLabel: 'MLflow 3 Production Monitoring Docs',
     quickQuestions: [
       {
-        label: '📈 How do I register & start a scheduled scorer in prod?',
+        label: '📈 How do I start scoring live traffic?',
         question: 'How do I enable AI Gateway inference tables and register an MLflow 3 scheduled scorer with `sample_rate` on production traffic?',
       },
       {
-        label: '⚠️ What are the limits and cost controls for prod scoring?',
+        label: '⚠️ What limits and costs should I plan for?',
         question: 'What are the scorer limits per experiment, sampling rate best practices, and AI Gateway requirements for production monitoring?',
       },
     ],

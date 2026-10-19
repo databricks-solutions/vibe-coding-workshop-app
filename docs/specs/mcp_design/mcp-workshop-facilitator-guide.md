@@ -79,23 +79,28 @@ The switches are read per call, but `app.yaml` only changes on the next deploy.
 
 ## 2. Add the app as a Custom MCP server (learner)
 
-1. Open **Genie Code** in your workspace and switch to **Agent mode**.
-2. Open the MCP / custom-tools settings and **Add a custom MCP server**.
-3. Enter the app's MCP URL: `https://<app-url>/mcp` (the app URL + `/mcp`).
-4. Save. Genie Code performs the handshake; the `vibe_*` tools and the workshop prompts become
-   available.
-5. If it doesn't appear, see Troubleshooting (§7) — the usual cause is the 307 or an `mcp-` name.
+In the app, choose **Interactive Mode (MCP Server)** (Recommended · Beta; Copy & Paste is the
+default). The panel shows these four steps in order:
 
-Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any other track say
-"Start a workshop track" with the track id shown in the app.
+1. **Copy your MCP URL** — This link connects Genie Code to this workshop app.
+   (The app shows the real URL, `https://<app-url>/mcp`, with a copy button.)
+2. **Open Genie Code in Agent mode** — In your Databricks workspace, open Genie Code and switch the mode to Agent.
+3. **Add the URL as a custom MCP server** — Open MCP settings, choose "Add custom MCP server", paste the URL from Step 1, then Save.
+4. **Start the workshop** — Paste this message into the Genie Code chat and press Enter:
+   **"Start a workshop track: <track name> (session <id>)"** (shown in the app with a copy button).
+
+After Save, Genie Code performs the handshake; the `vibe_*` tools and the workshop prompts become
+available. If it doesn't appear, see Troubleshooting (§7) — the usual cause is the 307 or an
+`mcp-` name. Without the web UI, say "Start a workshop track" with the track name ("Start the
+Genie Accelerator" still works too).
 
 ---
 
 ## 3. Start the track / continue
 
 - Type the line the web UI shows: **"Start a workshop track: <track name> (session <id>)"**. It is
-  in the Genie Code card of **Choose Your Coding Assistant** (with the MCP URL and the three
-  connection steps) and again in **Set Up Project**, each with a copy button; it names the
+  in the Genie Code card of **Choose Your Coding Assistant** (with the MCP URL and the four
+  setup steps) and again in **Set Up Project**, each with a copy button; it names the
   session's track and id, so Genie Code continues that same web session. Without the web UI, say
   **"Start a workshop track"** with the track ("Start the Genie Accelerator" still works too). The track can be its
   id or a name a learner would say ("Genie Accelerator", "Apps + Lakebase", "lakehouse with AI",

@@ -27,12 +27,49 @@ const { SetUpProjectStep } = await loadComponentModule<SetupModule>('src/compone
 const SID = '0f8e2c1a-1111-4222-8333-944455556666';
 const noop = () => {};
 
-test('the panel names the session track and id, never the retired prompt', () => {
-  const html = renderToStaticMarkup(createElement(ConnectToGenieCodePanel, { workshopLevel: 'lakehouse-di', sessionId: SID }));
-  assert.match(html, /data-testid="start-line"/);
+/** Renders with a stubbed window whose saved Genie Code mode is `savedMode`. */
+function withSavedMode<T>(savedMode: string | null, render: () => T): T {
+  const g = globalThis as unknown as { window?: unknown };
+  const realWindow = g.window;
+  try {
+    g.window = {
+      location: { origin: 'https://app.example' },
+      localStorage: {
+        getItem: (k: string) => (k === 'vibe.genieCode.mode' ? savedMode : null),
+        setItem: () => {},
+      },
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    return render();
+  } finally {
+    g.window = realWindow;
+  }
+}
+
+test('with nothing saved, Copy & Paste is selected first and no MCP setup renders', () => {
+  const html = withSavedMode(null, () =>
+    renderToStaticMarkup(createElement(ConnectToGenieCodePanel, { workshopLevel: 'genie-accelerator', sessionId: SID })));
+  const copyPasteAt = html.indexOf('Copy &amp; Paste Prompts Mode');
+  const interactiveAt = html.indexOf('Interactive Mode (MCP Server)');
+  assert.ok(copyPasteAt >= 0 && interactiveAt > copyPasteAt, 'Copy & Paste card comes first');
+  assert.match(html, /aria-checked="true"[^>]*>[\s\S]*?Copy &amp; Paste Prompts Mode/);
+  assert.match(html, /data-testid="interactive-mode-badge"[^>]*>[\s\S]*?Recommended[\s\S]*?Beta/);
+  assert.doesNotMatch(html, /data-testid="mcp-url"/);
+  assert.doesNotMatch(html, /data-testid="start-line"/);
+});
+
+test('Interactive Mode shows four numbered steps with the URL in Step 1 and the start line in Step 4', () => {
+  const html = withSavedMode('mcp', () =>
+    renderToStaticMarkup(createElement(ConnectToGenieCodePanel, { workshopLevel: 'lakehouse-di', sessionId: SID })));
+  for (const n of [1, 2, 3, 4]) assert.match(html, new RegExp(`data-testid="mcp-step-${n}"`));
+  assert.match(html, /Set up Interactive Mode in 4 steps/);
+  const step1 = html.slice(html.indexOf('data-testid="mcp-step-1"'), html.indexOf('data-testid="mcp-step-2"'));
+  assert.match(step1, /data-testid="mcp-url"/);
+  const step4 = html.slice(html.indexOf('data-testid="mcp-step-4"'));
+  assert.match(step4, /data-testid="start-line"/);
   assert.match(html, new RegExp(`Start a workshop track: Lakehouse \\+ AI and Agents \\(session ${SID}\\)`));
   assert.doesNotMatch(html, /Start the Genie Accelerator/);
-  assert.match(html, /data-testid="mcp-url"/);
 });
 
 const selector = (selectedAssistant: string, extra: Record<string, unknown> = {}) =>
@@ -72,33 +109,19 @@ const setup = (codingAssistant: string) =>
   }));
 
 test('Set Up Project repeats the start line for Genie Code only', () => {
-  const genie = setup('genie-code');
+  const genie = withSavedMode('mcp', () => setup('genie-code'));
   assert.match(genie, /data-testid="genie-code-start-note"/);
   assert.match(genie, new RegExp(`Start a workshop track: Databricks Apps \\+ Lakebase \\(session ${SID}\\)`));
   assert.doesNotMatch(setup('cursor'), /genie-code-start-note/);
 });
 
 test('Copy & Paste Prompts Mode renders only the two mode cards with no MCP setup or redundant step boxes underneath', () => {
-  const g = globalThis as unknown as { window?: unknown };
-  const realWindow = g.window;
-  try {
-    g.window = {
-      location: { origin: 'https://app.example' },
-      localStorage: {
-        getItem: (k: string) => (k === 'vibe.genieCode.mode' ? 'copy-paste' : null),
-        setItem: () => {},
-      },
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    };
-    const html = renderToStaticMarkup(createElement(ConnectToGenieCodePanel, { workshopLevel: 'genie-accelerator', sessionId: SID }));
-    assert.doesNotMatch(html, /How Copy &amp; Paste Mode works|How Copy & Paste Mode works/);
-    assert.doesNotMatch(html, /Want hands-free mode instead/i);
-    assert.doesNotMatch(html, /data-testid="mcp-url"/);
-    assert.doesNotMatch(html, /data-testid="start-line"/);
-  } finally {
-    g.window = realWindow;
-  }
+  const html = withSavedMode('copy-paste', () =>
+    renderToStaticMarkup(createElement(ConnectToGenieCodePanel, { workshopLevel: 'genie-accelerator', sessionId: SID })));
+  assert.doesNotMatch(html, /How Copy &amp; Paste Mode works|How Copy & Paste Mode works/);
+  assert.doesNotMatch(html, /Want hands-free mode instead/i);
+  assert.doesNotMatch(html, /data-testid="mcp-url"/);
+  assert.doesNotMatch(html, /data-testid="start-line"/);
 });
 
 test('WorkflowDiagram no longer shows the panel for every assistant, and passes the session', () => {

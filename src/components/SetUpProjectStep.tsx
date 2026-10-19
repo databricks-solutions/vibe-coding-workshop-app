@@ -652,10 +652,22 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                     How are you running Genie Code?
                   </p>
                   <p className="text-ui-xs text-muted-foreground mt-0.5">
-                    Pick your mode below — Interactive MCP Autopilot is recommended so you never have to copy and paste step prompts.
+                    Copy &amp; Paste is the default. Interactive MCP (Beta) is recommended if you want Genie Code to walk you through each step.
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-secondary/70 border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setGenieMode('copy-paste')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-ui-xs font-semibold transition-colors ${
+                      genieMode === 'copy-paste'
+                        ? 'bg-violet-600 text-white shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <ClipboardCopy className="w-3.5 h-3.5" />
+                    Copy &amp; Paste
+                  </button>
                   <button
                     type="button"
                     onClick={() => setGenieMode('mcp')}
@@ -668,18 +680,11 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                     <Zap className="w-3.5 h-3.5" />
                     Interactive MCP
                     <Star className="w-3 h-3 fill-current" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGenieMode('copy-paste')}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-ui-xs font-semibold transition-colors ${
-                      genieMode === 'copy-paste'
-                        ? 'bg-violet-600 text-white shadow-2xs'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <ClipboardCopy className="w-3.5 h-3.5" />
-                    Copy &amp; Paste
+                    <span className={`rounded px-1 py-px text-ui-3xs font-bold uppercase tracking-wider ${
+                      genieMode === 'mcp' ? 'bg-white/20' : 'bg-primary/15 text-primary'
+                    }`}>
+                      Beta
+                    </span>
                   </button>
                 </div>
               </div>

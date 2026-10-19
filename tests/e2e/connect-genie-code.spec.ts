@@ -12,7 +12,7 @@ import {
  */
 
 test.describe('Connect to Genie Code on-ramp', () => {
-  test('the panel shows only with Genie Code selected: MCP URL, copy, three steps, start line', async ({
+  test('Copy & Paste is the default; Interactive shows MCP URL, copy, four numbered steps, start line', async ({
     page,
   }) => {
     await page.goto('/');
@@ -28,6 +28,15 @@ test.describe('Connect to Genie Code on-ramp', () => {
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('heading', { name: 'Connect to Genie Code' })).toBeVisible();
 
+    const copyPaste = panel.getByRole('radio', { name: /Copy & Paste Prompts Mode/ });
+    const interactive = panel.getByRole('radio', { name: /Interactive Mode \(MCP Server\)/ });
+    await expect(copyPaste).toHaveAttribute('aria-checked', 'true');
+    await expect(panel.getByTestId('mcp-url')).toHaveCount(0);
+    await expect(panel.getByTestId('interactive-mode-badge')).toContainText(/Recommended.*Beta/);
+
+    await interactive.click();
+    await expect(interactive).toHaveAttribute('aria-checked', 'true');
+
     const mcpUrl = panel.getByTestId('mcp-url');
     await expect(mcpUrl).toBeVisible();
     const urlText = (await mcpUrl.textContent())?.trim() ?? '';
@@ -35,9 +44,14 @@ test.describe('Connect to Genie Code on-ramp', () => {
 
     await expect(panel.getByRole('button', { name: /copy/i }).first()).toBeVisible();
 
-    for (const step of GENIE_CODE_MCP_CONNECTION_STEPS) {
-      await expect(panel.getByText(step, { exact: true })).toBeVisible();
+    for (const [index, step] of GENIE_CODE_MCP_CONNECTION_STEPS.entries()) {
+      const item = panel.getByTestId(`mcp-step-${index + 1}`);
+      await expect(item).toContainText(`Step ${index + 1}`);
+      await expect(item.getByText(step.title, { exact: true })).toBeVisible();
+      await expect(item.getByText(step.detail, { exact: true })).toBeVisible();
     }
+    await expect(panel.getByTestId('mcp-step-1').getByTestId('mcp-url')).toBeVisible();
+    await expect(panel.getByTestId('mcp-step-4').getByTestId('start-line')).toBeVisible();
 
     // Session linking: the line names the session's track and id, so Genie Code
     // continues this session.
@@ -60,7 +74,8 @@ test.describe('Connect to Genie Code on-ramp', () => {
     const normalizedSection = normalize(section2);
     for (const step of GENIE_CODE_MCP_CONNECTION_STEPS) {
       // D10 uses markdown emphasis + backticks; compare plain prose.
-      expect(normalizedSection).toContain(normalize(step));
+      expect(normalizedSection).toContain(normalize(step.title));
+      expect(normalizedSection).toContain(normalize(step.detail));
     }
   });
 });
