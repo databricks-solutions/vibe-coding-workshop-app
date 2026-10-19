@@ -171,6 +171,11 @@ try:
 except Exception as _blueprint_fit_err:  # pragma: no cover
     print(f"[Blueprints] use case matching disabled, failed to load: {_blueprint_fit_err}", file=sys.stderr)
     blueprint_fit_router = None
+try:
+    from src.backend.api.data_sources import router as data_sources_router
+except Exception as _data_sources_err:  # pragma: no cover
+    print(f"[DataSources] approved data sources disabled, failed to load: {_data_sources_err}", file=sys.stderr)
+    data_sources_router = None
 
 try:
     from src.backend.api.insights import router as insights_router
@@ -287,6 +292,8 @@ if blueprint_fit_router is not None:
     app.include_router(blueprint_fit_router, prefix="/api", tags=["Blueprints"])
 if blueprints_router is not None:
     app.include_router(blueprints_router, prefix="/api", tags=["Blueprints"])
+if data_sources_router is not None:
+    app.include_router(data_sources_router, prefix="/api", tags=["Data Sources"])
 if insights_router is not None:
     app.include_router(insights_router, prefix="/api", tags=["Insights"])
 

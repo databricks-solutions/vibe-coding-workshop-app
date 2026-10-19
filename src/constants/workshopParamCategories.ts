@@ -89,7 +89,7 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
   [CATEGORY_IDS.lakehouse]: {
     id: CATEGORY_IDS.lakehouse,
     label: 'Lakehouse Data Layout',
-    description: 'Default lakehouse catalog and the sample source catalog/schema used in Step 10. Users can override the source per session.',
+    description: 'Default lakehouse catalog, the sample source catalog/schema used in Step 10, and the approved schemas offered on the Insights data step.',
     icon: Layers,
     cadence: 'Per session',
     defaultOpen: false,
@@ -168,6 +168,7 @@ export const PARAM_KEY_TO_CATEGORY: Record<string, ParamLocation> = {
   lakehouse_default_catalog: { category: CATEGORY_IDS.lakehouse },
   chapter_3_lakehouse_catalog: { category: CATEGORY_IDS.lakehouse },
   chapter_3_lakehouse_schema: { category: CATEGORY_IDS.lakehouse },
+  approved_data_sources: { category: CATEGORY_IDS.lakehouse },
 
   // Participant Experience
   company_brand_url: { category: CATEGORY_IDS.participant },

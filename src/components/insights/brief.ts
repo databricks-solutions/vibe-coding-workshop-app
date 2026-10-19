@@ -1,4 +1,4 @@
-import type { BlueprintChoice } from './blueprint/types';
+import type { BlueprintChoice, SourceChoice } from './blueprint/types';
 import { ADD_ON_LABEL, ADD_ON_ORDER, normalizeAddOns, type AddOn } from './recipes';
 import type { ApprovedUseCase } from './usecases/useCaseApi';
 
@@ -11,6 +11,8 @@ export interface InsightsBrief {
   dataSource: DataSource;
   dataLocation: string;
   blueprint?: BlueprintChoice | null;
+  /** Tables picked in the approved-data explorer; only used with `existing`. */
+  source?: SourceChoice | null;
   useCase?: ApprovedUseCase | null;
   idea?: IdeaBrief | null;
   /** What the build adds beyond the Genie space and dashboard. Empty keeps the brief exactly as before. */
@@ -32,6 +34,9 @@ export interface IdeaBrief {
 const QUESTIONS_HEADER = 'Questions this should answer:';
 const DATA_HEADER = 'Data:';
 const BLUEPRINT_HEADER = 'Blueprint:';
+const SOURCE_HEADER = 'Governed source:';
+const PROPOSED_HEADER = 'Proposed KPI:';
+const MATCH_WARNING_HEADER = 'Match warning:';
 const USE_CASE_HEADER = 'Approved use case:';
 const IDEA_HEADER = 'Idea:';
 const BUILDS_HEADER = 'Builds:';
@@ -79,6 +84,50 @@ function blueprintLines(b: BlueprintChoice): string[] {
   ];
 }
 
+/** Written when the participant chose to continue past a very low match. */
+function matchWarningLine(c: BlueprintChoice | SourceChoice): string[] {
+  if (!c.lowMatch) return [];
+  const e = c.evidence;
+  const coverage = e && e.totalQuestions ? ` (${e.matchedQuestions} of ${e.totalQuestions} questions answered)` : '';
+  return [`${MATCH_WARNING_HEADER} very low${coverage}. The participant chose to continue; confirm the data can answer the questions before building.`];
+}
+
+function sourceLines(s: SourceChoice): string[] {
+  const e = s.evidence;
+  const evidence = e ? ` | fit: ${e.fit} | coverage: ${e.matchedQuestions}/${e.totalQuestions}` : '';
+  return [
+    `${SOURCE_HEADER} ${s.sources.join(', ')}${s.certified ? ' | certified' : ''} | areas: ${s.areas.join(', ') || 'all'} | tables: ${s.tables.join(', ') || 'all'} | KPIs: ${s.kpis.join(', ') || 'none picked'}${evidence}`,
+    ...s.proposed.map(p => `${PROPOSED_HEADER} ${p.replace(/\s+/g, ' ').trim()} (create as a metric view)`),
+  ];
+}
+
+function parseSource(line: string, proposed: string[], label: string): SourceChoice | null {
+  const rest = line.slice(SOURCE_HEADER.length);
+  const parts = rest.split('|').map(p => p.trim());
+  const sources = (parts[0] ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!sources.length) return null;
+  const field = (name: string) => parts.find(p => p.startsWith(`${name}:`))?.slice(name.length + 1).trim() ?? '';
+  const list = (v: string) => (v && v !== 'all' && v !== 'none picked' ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const fit = field('fit');
+  const cov = field('coverage').match(/^(\d+)\/(\d+)$/);
+  return {
+    sources,
+    label: label || sources.join(', '),
+    certified: parts.includes('certified'),
+    areas: list(field('areas')),
+    tables: list(field('tables')),
+    kpis: list(field('KPIs')),
+    proposed,
+    ...(fit ? {
+      evidence: {
+        fit: (['strong', 'partial', 'weak', 'fallback'].includes(fit) ? fit : 'unknown') as NonNullable<SourceChoice['evidence']>['fit'],
+        matchedQuestions: cov ? Number(cov[1]) : 0,
+        totalQuestions: cov ? Number(cov[2]) : 0,
+      },
+    } : {}),
+  };
+}
+
 /**
  * The brief is stored as the session's custom use-case description, so every
  * generated prompt sees the questions. `parseBrief` must keep reading what
@@ -88,8 +137,10 @@ export function composeBrief(b: InsightsBrief): string {
   const audience = b.industryLabel ? `${b.industryLabel} ` : '';
   const bp = b.dataSource === 'blueprint' ? b.blueprint : null;
   const source: DataSource = b.dataSource === 'blueprint' && !bp ? 'existing' : b.dataSource;
+  const governed = source === 'existing' ? b.source ?? null : null;
   const dataDetail = bp
     ? ` "${bp.label}" (${bp.catalog})`
+    : governed ? ` "${governed.label.replace(/[()"]/g, '').trim()}" (${governed.sources.join(', ')})`
     : b.dataSource === 'existing' && b.dataLocation ? ` (${b.dataLocation})` : '';
   const addOns = normalizeAddOns(b.addOns ?? []);
   const withApp = addOns.includes('copilot') || addOns.includes('app_view');
@@ -105,7 +156,8 @@ export function composeBrief(b: InsightsBrief): string {
     ...b.questions.map(q => `- ${q}`),
     '',
     `${DATA_HEADER} ${DATA_PHRASES[source]}${dataDetail}.`,
-    ...(bp ? blueprintLines(bp) : []),
+    ...(bp ? [...blueprintLines(bp), ...matchWarningLine(bp)] : []),
+    ...(governed ? [...sourceLines(governed), ...matchWarningLine(governed)] : []),
     ...(b.useCase ? [approvedUseCaseLine(b.useCase)] : []),
   ];
   return lines.join('\n');
@@ -202,6 +254,7 @@ export interface ParsedBrief {
   dataSource: DataSource;
   dataLocation: string;
   blueprint: BlueprintChoice | null;
+  source: SourceChoice | null;
   useCase: ApprovedUseCase | null;
   /** Headline of the idea the brief was set up from, if it came from one. */
   ideaHeadline: string;
@@ -213,7 +266,8 @@ export function parseBrief(description: string): ParsedBrief {
   let dataSource: DataSource = 'existing';
   let dataLocation = '';
   let blueprint: BlueprintChoice | null = null;
-  if (!description) return { questions, dataSource, dataLocation, blueprint, useCase: null, ideaHeadline: '', addOns: [] };
+  let source: SourceChoice | null = null;
+  if (!description) return { questions, dataSource, dataLocation, blueprint, source, useCase: null, ideaHeadline: '', addOns: [] };
 
   const lines = description.split('\n');
   const start = lines.findIndex(l => l.trim() === QUESTIONS_HEADER);
@@ -244,11 +298,21 @@ export function parseBrief(description: string): ParsedBrief {
       const loc = rest.match(/\(([^)]+)\)/);
       if (loc) dataLocation = loc[1];
     }
+    const srcLine = dataSource === 'existing' ? lines.find(l => l.startsWith(SOURCE_HEADER)) : undefined;
+    if (srcLine) {
+      const proposed = lines.filter(l => l.startsWith(PROPOSED_HEADER)).map(l => l.slice(PROPOSED_HEADER.length).replace(/\s*\(create as a metric view\)\s*$/, '').trim());
+      source = parseSource(srcLine, proposed, rest.match(/"([^"]+)"/)?.[1] ?? '');
+      if (source) dataLocation = source.sources.join(', ');
+    }
+  }
+  if (lines.some(l => l.startsWith(MATCH_WARNING_HEADER))) {
+    if (blueprint) blueprint = { ...blueprint, lowMatch: true };
+    if (source) source = { ...source, lowMatch: true };
   }
   const ucLine = lines.find(l => l.startsWith(USE_CASE_HEADER));
   const ideaLine = lines.find(l => l.startsWith(IDEA_HEADER));
   return {
-    questions, dataSource, dataLocation, blueprint,
+    questions, dataSource, dataLocation, blueprint, source,
     useCase: ucLine ? parseUseCase(ucLine) : null,
     ideaHeadline: ideaLine ? ideaLine.slice(IDEA_HEADER.length).trim() : '',
     addOns: parseAddOns(lines.find(l => l.startsWith(RECIPE_HEADER))),

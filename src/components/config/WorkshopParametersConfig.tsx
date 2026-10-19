@@ -34,6 +34,9 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { CodingAssistantsConfigEditor } from './CodingAssistantsConfigEditor';
+import { ApprovedDataSourcesEditor } from './ApprovedDataSourcesEditor';
+import { invalidDataSourceRows, parseDataSources } from './dataSourcesConfig';
+import { sourcesApi } from '../insights/sources/sourcesApi';
 import { parseCodingAssistantsConfig } from '../../constants/codingAssistants';
 import {
   CATEGORY_ORDER,
@@ -68,7 +71,21 @@ const paramIcons: Record<string, React.ElementType> = {
   catalog: Layers,
   endpoint: Bot,
   assistant_config: ListChecks,
+  data_sources: Database,
 };
+
+/** Why a custom-editor value cannot be saved yet, or null when it can. */
+function saveBlockedReason(paramType: string, value: string | undefined): string | null {
+  if (paramType === 'assistant_config') {
+    return (parseCodingAssistantsConfig(value)?.length ?? 0) === 0 ? 'At least one assistant must be visible before saving' : null;
+  }
+  if (paramType === 'data_sources') {
+    const rows = parseDataSources(value);
+    if (!rows) return 'The list is not valid';
+    return invalidDataSourceRows(rows).length ? 'Fix the highlighted rows before saving' : null;
+  }
+  return null;
+}
 
 // v2: bumped when defaults flipped to all-collapsed so cached state from v1
 // doesn't override the new default behavior on first render.
@@ -174,6 +191,7 @@ export function WorkshopParametersConfig({ onToast }: WorkshopParametersConfigPr
         p.param_key === paramKey ? { ...p, param_value: editedValues[paramKey] } : p
       ));
       setHasChanges(prev => ({ ...prev, [paramKey]: false }));
+      if (paramKey === 'approved_data_sources') sourcesApi.reset();
       onToast(data.message || 'Parameter saved successfully', 'success');
     } catch (error) {
       console.error('Error saving parameter:', error);
@@ -399,26 +417,26 @@ export function WorkshopParametersConfig({ onToast }: WorkshopParametersConfigPr
               </p>
             )}
 
-            {param.param_type === 'assistant_config' ? (
+            {param.param_type === 'assistant_config' || param.param_type === 'data_sources' ? (
               <div className="space-y-2">
-                <CodingAssistantsConfigEditor
-                  value={editedValues[param.param_key] || ''}
-                  onChange={(next) => handleValueChange(param.param_key, next)}
-                />
+                {param.param_type === 'assistant_config' ? (
+                  <CodingAssistantsConfigEditor
+                    value={editedValues[param.param_key] || ''}
+                    onChange={(next) => handleValueChange(param.param_key, next)}
+                  />
+                ) : (
+                  <ApprovedDataSourcesEditor
+                    value={editedValues[param.param_key] || ''}
+                    onChange={(next) => handleValueChange(param.param_key, next)}
+                  />
+                )}
                 <div className="flex items-center gap-2">
                   {isChanged && (
                     <>
                       <button
                         onClick={() => handleSave(param.param_key)}
-                        disabled={
-                          isSaving ||
-                          (parseCodingAssistantsConfig(editedValues[param.param_key])?.length ?? 0) === 0
-                        }
-                        title={
-                          (parseCodingAssistantsConfig(editedValues[param.param_key])?.length ?? 0) === 0
-                            ? 'At least one assistant must be visible before saving'
-                            : undefined
-                        }
+                        disabled={isSaving || !!saveBlockedReason(param.param_type, editedValues[param.param_key])}
+                        title={saveBlockedReason(param.param_type, editedValues[param.param_key]) ?? undefined}
                         className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                       >
                         {isSaving ? (

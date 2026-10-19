@@ -60,19 +60,24 @@ const CONFIDENCE = {
   none: { label: 'Not covered yet', className: 'bg-secondary text-muted-foreground', note: 'Nothing in this model fits. Genie Code can add it later, or try another area.' },
 } as const;
 
+const FROM_TABLES = { label: 'From your tables', className: 'bg-emerald-500/10 text-emerald-500', note: 'No KPI yet, but these tables hold the answer. Genie Code builds the metric for it.' };
+
 interface AnswerRecipeProps {
   index: number;
   recipe: Recipe;
+  /** For approved data: the tables that answer it when no KPI does. */
+  path?: { tables: string[]; how: string } | null;
   digest: BlueprintDigest;
   pinned: boolean;
   onTogglePin: (kpiId: string) => void;
   onShowArea: (area: string) => void;
 }
 
-export function AnswerRecipe({ index, recipe: initial, digest, pinned, onTogglePin, onShowArea }: AnswerRecipeProps) {
+export function AnswerRecipe({ index, recipe: initial, path, digest, pinned, onTogglePin, onShowArea }: AnswerRecipeProps) {
   const [altIdx, setAltIdx] = useState(-1);
   const recipe = altIdx < 0 ? initial : recipeFor(initial.alternatives[altIdx], initial.question);
-  const conf = CONFIDENCE[altIdx < 0 ? recipe.confidence : 'partial'];
+  const byTables = altIdx < 0 && recipe.confidence === 'none' && !!path;
+  const conf = byTables ? FROM_TABLES : CONFIDENCE[altIdx < 0 ? recipe.confidence : 'partial'];
   const kpi = recipe.kpi as BlueprintKpi | null;
   const table = kpi ? digest.tables.find(t => t.id === kpi.table) : null;
   const area = kpi ? digest.areas.find(a => a.name === kpi.area) : null;
@@ -99,6 +104,7 @@ export function AnswerRecipe({ index, recipe: initial, digest, pinned, onToggleP
             <div className="flex flex-wrap items-center gap-1.5 text-ui-sm">
               <span className="text-muted-foreground">Measure</span>
               <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-semibold">{recipe.measure.label}</span>
+              {kpi.proposed && <span title="Genie Code creates this as a metric view" className="px-1.5 py-0.5 rounded-md bg-secondary text-ui-2xs uppercase tracking-wider text-muted-foreground">Proposed</span>}
               {recipe.slice && <>
                 <span className="text-muted-foreground">by</span>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-secondary text-foreground font-medium">
@@ -128,6 +134,22 @@ export function AnswerRecipe({ index, recipe: initial, digest, pinned, onToggleP
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Example shape</span>
           </div>
         </div>
+      ) : byTables && path ? (
+        <div className="space-y-2 px-5 py-4">
+          {path.how && <p className="text-ui-sm text-foreground/90 leading-relaxed">{path.how}</p>}
+          <div className="flex flex-wrap items-center gap-1.5 text-ui-xs text-muted-foreground">
+            <Table2 className="w-3.5 h-3.5" />
+            {path.tables.map((id, i) => {
+              const t = digest.tables.find(x => x.id === id);
+              return (
+                <span key={id} className="inline-flex items-center gap-1.5">
+                  {i > 0 && <span className="w-3 h-px bg-border" />}
+                  <button onClick={() => t && onShowArea(t.area)} title={t?.fqn} className="font-medium text-foreground/85 hover:text-primary">{tableLabel(id)}</button>
+                </span>
+              );
+            })}
+          </div>
+        </div>
       ) : (
         <div className="flex items-center gap-3 px-5 py-4 text-ui-sm text-muted-foreground">
           <CircleDashed className="w-4 h-4 shrink-0" /> {conf.note}
@@ -151,7 +173,7 @@ export function AnswerRecipe({ index, recipe: initial, digest, pinned, onToggleP
             <Shuffle className="w-3.5 h-3.5" /> {altIdx === initial.alternatives.length - 1 ? 'Back to best match' : 'Try another KPI'}
           </button>
         )}
-        {kpi && (
+        {kpi?.sourceUrl && (
           <a href={kpi.sourceUrl} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-ui-xs text-muted-foreground hover:text-primary">
             View KPI source <ArrowUpRight className="w-3 h-3" />
           </a>

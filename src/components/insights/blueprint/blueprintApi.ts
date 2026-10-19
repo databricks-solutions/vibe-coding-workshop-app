@@ -133,23 +133,30 @@ export function useBlueprintDigest(slug: string | null, attempt = 0): Loadable<B
   return { data: null, error: null, loading: true };
 }
 
+export type FitFetcher = (id: string, context: string, questions: string[], suggested: string[]) => Promise<BlueprintFit>;
+export type FitState = { data: BlueprintFit | null; loading: boolean; failed: boolean };
+
 /** The AI's match of the idea to a loaded model; `data` stays null while it thinks or when it fails. */
-export function useBlueprintFit(slug: string | null, context: string, questions: string[], suggested: string[] = []) {
-  const enabled = !!slug && (!!context.trim() || questions.length > 0);
-  const key = enabled ? JSON.stringify([slug, context, questions, suggested]) : '';
+export function useFitWith(fetcher: FitFetcher, id: string | null, context: string, questions: string[], suggested: string[] = []): FitState {
+  const enabled = !!id && (!!context.trim() || questions.length > 0);
+  const key = enabled ? JSON.stringify([id, context, questions, suggested]) : '';
   const [result, setResult] = useState<{ key: string; data: BlueprintFit | null; failed: boolean } | null>(null);
   useEffect(() => {
     if (!key) return;
     const [s, c, q, sg] = JSON.parse(key) as [string, string, string[], string[]];
     let alive = true;
-    blueprintApi.fit(s, c, q, sg)
+    fetcher(s, c, q, sg)
       .then(data => alive && setResult({ key, data, failed: false }))
       .catch(() => alive && setResult({ key, data: null, failed: true }));
     return () => { alive = false; };
-  }, [key]);
+  }, [key, fetcher]);
   if (!enabled) return { data: null, loading: false, failed: false };
   if (result?.key === key) return { data: result.data, loading: false, failed: result.failed };
   return { data: null, loading: true, failed: false };
+}
+
+export function useBlueprintFit(slug: string | null, context: string, questions: string[], suggested: string[] = []): FitState {
+  return useFitWith(blueprintApi.fit, slug, context, questions, suggested);
 }
 
 /** Polls install status; fast while installing, slow otherwise. */

@@ -11,7 +11,8 @@ import {
 } from '../journeykit';
 import { composeBrief, fitName, parseBrief, toSlug, type DataSource, type IdeaBrief } from './brief';
 import type { ModelHint } from './blueprint/industryMap';
-import type { BlueprintChoice } from './blueprint/types';
+import type { BlueprintChoice, SourceChoice } from './blueprint/types';
+import { sourceKey, sourcesIn } from './sources/sourcesApi';
 import { INDUSTRY_IDEAS } from './journey';
 import { openPathComparison } from './pathEvents';
 import { assessPriority } from './priorityAssessment';
@@ -29,6 +30,7 @@ import { InsightsStudio } from './studio/InsightsStudio';
 import type { InsightsFlowProps, WorkspaceLinks } from './types';
 
 const BlueprintScreen = lazy(() => import('./blueprint/BlueprintScreen'));
+const SourceScreen = lazy(() => import('./sources/SourceScreen'));
 
 const DATA_LABELS: Record<DataSource, string> = {
   existing: 'data already in Databricks',
@@ -150,6 +152,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [dataLocation, setDataLocation] = useState('');
   const [blueprint, setBlueprint] = useState<BlueprintChoice | null>(null);
+  const [source, setSource] = useState<SourceChoice | null>(null);
   const [preferredSlug, setPreferredSlug] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [launching, setLaunching] = useState(false);
@@ -181,6 +184,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
       setDataSource(parsed.questions.length ? parsed.dataSource : null);
       setDataLocation(parsed.dataLocation);
       setBlueprint(parsed.blueprint);
+      setSource(parsed.source);
       setName(fitName(linked?.title ?? (parsed.questions.length ? (customUseCaseLabel || selectedUseCaseLabel) : '')));
       setStartIndustry(INDUSTRY_IDEAS.find(i => i.label === selectedIndustryLabel)?.id ?? insightsIndustryFor(selectedIndustry));
     }
@@ -193,7 +197,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     setStage('locked');
   }
   // Building needs a locked idea; editing one sends you back to finish it.
-  if ((stage === 'locked' || stage === 'data' || stage === 'blueprint' || stage === 'ready') && !idea?.lockedAt) {
+  if ((stage === 'locked' || stage === 'data' || stage === 'blueprint' || stage === 'source' || stage === 'ready') && !idea?.lockedAt) {
     setStage(idea ? 'idea' : 'start');
   }
 
@@ -246,6 +250,10 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     text: [ideaText, ...questions].filter(Boolean).join('\n'),
   };
   const usingBlueprint = dataSource === 'blueprint';
+  const pickedSources = dataSource === 'existing' ? sourcesIn(dataLocation) : [];
+  const exploringTables = pickedSources.length > 0;
+  // An earlier exploration only counts while the data step still points at the same sources.
+  const usingSource = exploringTables && !!source && sourceKey(source.sources) === sourceKey(pickedSources);
   const required = requiredAddOns(idea);
   const optionalOffered = offeredAddOns(idea, enabledAddOns)
     .filter(a => !required.includes(a) && addOnAvailable(a, availability));
@@ -265,7 +273,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const priority = idea ? assessPriority(idea, { dataSource, dataLocation, blueprint, addOns: chosenAddOns }) : null;
   const portfolio = ideas.map(other => other.id === idea?.id && priority ? priority : assessPriority(other));
 
-  const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint });
+  const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint, tables: exploringTables });
   const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
   const compare = (
     <button onClick={openPathComparison} className="inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -323,6 +331,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         dataSource: useBlueprint ? 'blueprint' : dataSource === 'blueprint' ? 'existing' : dataSource,
         dataLocation: useBlueprint ? blueprint.catalog : dataLocation.trim(),
         blueprint: useBlueprint ? blueprint : null,
+        source: usingSource ? source : null,
         useCase,
         idea: ideaBriefOf(idea),
         addOns: chosenAddOns,
@@ -356,6 +365,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         dataSource: parsed.dataSource,
         dataLocation: parsed.dataLocation,
         blueprint: parsed.blueprint,
+        source: parsed.source,
         useCase,
         idea: ideaBriefOf(idea),
         addOns: effectiveBuiltAddOns,
@@ -495,10 +505,36 @@ function InsightsFlowInner(props: InsightsFlowProps) {
             setStage('blueprint');
             return;
           }
+          if (exploringTables) {
+            setStage('source');
+            return;
+          }
           if (!name.trim()) setName(fitName(idea.title));
           setStage('ready');
         }}
       />
+    );
+  } else if (stage === 'source') {
+    key = 'source';
+    content = (
+      <BlueprintBoundary onBack={() => setStage('data')} onSwitchToTechnical={onSwitchToTechnical}>
+        <Suspense fallback={<div className="min-h-[50vh]" />}>
+          <SourceScreen
+            questions={questions}
+            context={ideaText}
+            sources={pickedSources}
+            initialChoice={source}
+            progress={progress}
+            onSourcesChange={s => setDataLocation(s.join(', '))}
+            onBack={() => setStage('data')}
+            onNext={choice => {
+              setSource(choice);
+              if (!name.trim()) setName(fitName(idea.title));
+              setStage('ready');
+            }}
+          />
+        </Suspense>
+      </BlueprintBoundary>
     );
   } else if (stage === 'blueprint') {
     key = 'blueprint';
@@ -534,10 +570,14 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         name={name}
         onNameChange={setName}
         questionCount={questions.length}
-        dataLabel={usingBlueprint && blueprint ? `the ${blueprint.label} industry data model` : DATA_LABELS[dataSource && dataSource !== 'blueprint' ? dataSource : 'existing']}
+        dataLabel={usingBlueprint && blueprint
+          ? `the ${blueprint.label} industry data model`
+          : usingSource && source
+            ? `${source.certified ? 'approved ' : ''}tables in ${source.sources.join(', ')}`
+            : DATA_LABELS[dataSource && dataSource !== 'blueprint' ? dataSource : 'existing']}
         blueprint={usingBlueprint ? blueprint : null}
         useCase={useCase}
-        onBack={() => setStage(usingBlueprint ? 'blueprint' : 'data')}
+        onBack={() => setStage(usingBlueprint ? 'blueprint' : exploringTables ? 'source' : 'data')}
         onStart={start}
         readOnly={readOnly}
         moments={momentsFor(chosenAddOns)}
@@ -550,7 +590,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         priority={priority}
         portfolio={portfolio}
         onImproveValue={editIdea}
-        onImproveFeasibility={() => setStage(usingBlueprint ? 'blueprint' : 'data')}
+        onImproveFeasibility={() => setStage(usingBlueprint ? 'blueprint' : exploringTables ? 'source' : 'data')}
       />
     );
   }

@@ -71,6 +71,8 @@ export interface BlueprintTable {
   columns: BlueprintColumn[];
   linksTo: { to: string; via: string; reason: string }[];
   standard?: string;
+  /** Unity Catalog name, set for approved data sources. */
+  fqn?: string;
 }
 
 export interface BlueprintKpi {
@@ -79,9 +81,11 @@ export interface BlueprintKpi {
   table: string;
   label: string;
   description: string;
-  measures: { name: string; label: string; comment: string; agg: string }[];
-  slices: { name: string; label: string; comment: string; kind: 'time' | 'flag' | 'category' }[];
+  measures: { name: string; label: string; comment: string; agg: string; expr?: string }[];
+  slices: { name: string; label: string; comment: string; kind: 'time' | 'flag' | 'category'; column?: string }[];
   sourceUrl: string;
+  /** Suggested by the AI from real columns; Genie Code creates it as a metric view. */
+  proposed?: boolean;
 }
 
 export interface StarterQuestion {
@@ -107,7 +111,11 @@ export interface BlueprintDigest {
     links: number;
     brokenLinks: number;
     siloedTables: number;
+    /** Every source is on the admin's approved list. */
+    certified?: boolean;
   };
+  /** catalog.schema ids, set for approved data sources. */
+  sources?: string[];
   stats: { areas: number; tables: number; columns: number; links: number; kpiSets: number; measures: number };
   areas: BlueprintArea[];
   tables: BlueprintTable[];
@@ -171,7 +179,8 @@ export interface BlueprintFit {
   areas: { name: string; role: 'core' | 'supporting'; why: string; join?: [string, string] }[];
   /** Areas from the quick pick the AI left out, with what their tables actually hold. */
   skipped?: { name: string; why: string }[];
-  questions: { index: number; kpi: string | null }[];
+  /** `tables` and `how` are set for approved data sources: the tables that answer it without a KPI. */
+  questions: { index: number; kpi: string | null; tables?: string[]; how?: string }[];
   fit: 'strong' | 'partial' | 'weak';
   summary: string;
 }
@@ -195,4 +204,27 @@ export interface BlueprintChoice {
     tableCount: number;
     modelQuality: number | null;
   };
+  /** Set when the participant continued past a very low match. */
+  lowMatch?: boolean;
+}
+
+/** What the user picked in the approved-data explorer; persisted inside the brief. */
+export interface SourceChoice {
+  /** catalog.schema ids. */
+  sources: string[];
+  label: string;
+  certified: boolean;
+  areas: string[];
+  /** Unity Catalog names of the tables in the chosen areas. */
+  tables: string[];
+  kpis: string[];
+  /** One line per pinned proposed KPI, written for Genie Code to build as a metric view. */
+  proposed: string[];
+  evidence?: {
+    fit: 'strong' | 'partial' | 'weak' | 'fallback' | 'unknown';
+    matchedQuestions: number;
+    totalQuestions: number;
+  };
+  /** Set when the participant continued past a very low match. */
+  lowMatch?: boolean;
 }

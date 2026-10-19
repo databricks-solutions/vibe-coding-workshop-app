@@ -58,7 +58,10 @@ export function KpiLibrary({ digest, focus, pinned, onTogglePin }: KpiLibraryPro
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-ui-xs text-muted-foreground">{areaLabel.get(k.area)}</p>
-                  <p className="text-ui-md font-semibold text-foreground">{k.label}</p>
+                  <p className="text-ui-md font-semibold text-foreground">
+                    {k.label}
+                    {k.proposed && <span title="Genie Code creates this as a metric view" className="ml-2 align-middle px-1.5 py-0.5 rounded-md bg-secondary text-ui-2xs uppercase tracking-wider font-medium text-muted-foreground">Proposed</span>}
+                  </p>
                 </div>
                 <button
                   onClick={() => onTogglePin(k.id)}
@@ -81,9 +84,11 @@ export function KpiLibrary({ digest, focus, pinned, onTogglePin }: KpiLibraryPro
                   Slice by {k.slices.filter(s => s.kind !== 'time').slice(0, 2).map(s => s.label.toLowerCase()).join(', ') || 'time'}
                   {time ? ' and time' : ''}
                 </span>
-                <a href={k.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 shrink-0 hover:text-primary">
-                  Source <ArrowUpRight className="w-3 h-3" />
-                </a>
+                {k.sourceUrl ? (
+                  <a href={k.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 shrink-0 hover:text-primary">
+                    Source <ArrowUpRight className="w-3 h-3" />
+                  </a>
+                ) : k.proposed && <span className="shrink-0">Genie Code builds it</span>}
               </div>
             </div>
           );

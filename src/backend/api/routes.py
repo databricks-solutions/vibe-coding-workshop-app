@@ -1076,6 +1076,35 @@ DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
 # were seeded before this parameter existed.
 DEFAULT_DATABRICKS_CLI_PROFILE = 'DEFAULT'
 
+# Certified Unity Catalog schemas offered on the Insights data step.
+DEFAULT_APPROVED_DATA_SOURCES_JSON = json.dumps([
+    {"catalog": "samples", "schema": "wanderbricks", "label": "Wanderbricks (sample)"},
+])
+
+
+def _bootstrap_approved_data_sources_if_missing() -> None:
+    """Self-healing insert of the approved_data_sources row; idempotent via ON CONFLICT."""
+    schema = get_schema()
+    sql = f"""
+        INSERT INTO {schema}.workshop_parameters
+            (param_key, param_label, param_value, param_description, param_type,
+             display_order, is_required, is_active, allow_session_override,
+             inserted_at, updated_at, created_by)
+        VALUES
+            ('approved_data_sources',
+             'Approved Data Sources',
+             %s,
+             'Certified Unity Catalog schemas offered on the Insights data step. Users can pick one, explore its tables, and see how their questions would be answered.',
+             'data_sources',
+             29, FALSE, TRUE, FALSE,
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'system-bootstrap')
+        ON CONFLICT (param_key) DO NOTHING
+    """
+    try:
+        execute_insert(sql, (DEFAULT_APPROVED_DATA_SOURCES_JSON,))
+    except Exception as e:
+        logger.warning(f"[Config API] approved_data_sources bootstrap skipped: {e}")
+
 
 def _bootstrap_databricks_cli_profile_if_missing() -> None:
     """
@@ -1181,6 +1210,7 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'agent_tool_external_mcp_enabled': 'false',
             'external_mcp_connection': '',
             'databricks_cli_profile': DEFAULT_DATABRICKS_CLI_PROFILE,
+            'approved_data_sources': DEFAULT_APPROVED_DATA_SOURCES_JSON,
         }
     
     out = {row['param_key']: row['param_value'] for row in results}
@@ -1188,6 +1218,7 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
     # even before the GET endpoint has had a chance to bootstrap.
     out.setdefault('coding_assistants_config', DEFAULT_CODING_ASSISTANTS_CONFIG_JSON)
     out.setdefault('databricks_cli_profile', DEFAULT_DATABRICKS_CLI_PROFILE)
+    out.setdefault('approved_data_sources', DEFAULT_APPROVED_DATA_SOURCES_JSON)
     return out
 
 
@@ -4490,6 +4521,17 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_active=True,
                 allow_session_override=True
             ),
+            WorkshopParameter(
+                param_key="approved_data_sources",
+                param_label="Approved Data Sources",
+                param_value=DEFAULT_APPROVED_DATA_SOURCES_JSON,
+                param_description="Certified Unity Catalog schemas offered on the Insights data step. Users can pick one, explore its tables, and see how their questions would be answered.",
+                param_type="data_sources",
+                display_order=29,
+                is_required=False,
+                is_active=True,
+                allow_session_override=False
+            ),
         ]
     
     # Self-heal: existing deployments that were seeded before these params
@@ -4501,6 +4543,9 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
         needs_reread = True
     if not any(row.get('param_key') == 'databricks_cli_profile' for row in results):
         _bootstrap_databricks_cli_profile_if_missing()
+        needs_reread = True
+    if not any(row.get('param_key') == 'approved_data_sources' for row in results):
+        _bootstrap_approved_data_sources_if_missing()
         needs_reread = True
     if needs_reread:
         results = execute_query(sql)
