@@ -1,4 +1,5 @@
 import type { CollectionKind, LibraryCollection, LibraryMember, LibraryPayload, LibraryUseCase } from '../../api/library';
+import { isContributed } from './curation';
 
 export const ucKey = (industry: string, useCase: string) => `${industry}.${useCase}`;
 export const keyOf = (uc: Pick<LibraryUseCase, 'industry' | 'use_case'>) => ucKey(uc.industry, uc.use_case);
@@ -20,6 +21,7 @@ export interface CollectionStats {
   hidden: number;
   certified: number;
   crossListed: number;
+  contributed: number;
 }
 
 export interface LibraryModel {
@@ -33,6 +35,7 @@ export interface LibraryModel {
   stats: Record<string, CollectionStats>;
   skills: LibraryUseCase[];
   pendingReview: LibraryUseCase[];
+  contributed: LibraryUseCase[];
   attendeeCollections: LibraryCollection[];
   attendeeUseCaseCount: number;
   attendeeCertifiedCount: number;
@@ -88,6 +91,7 @@ export function buildModel(p: LibraryPayload): LibraryModel {
       hidden: list.length - live,
       certified: list.filter(e => e.uc.is_certified).length,
       crossListed: list.filter(e => !e.isHome || (membersByKey[e.key]?.length ?? 0) > 0).length,
+      contributed: list.filter(e => isContributed(e.uc)).length,
     };
   });
 
@@ -106,6 +110,7 @@ export function buildModel(p: LibraryPayload): LibraryModel {
     collections, byId, byKind, useCases, ucByKey, membersByKey, entriesByCollection, stats,
     skills: useCases.filter(u => u.path_type === 'skill'),
     pendingReview: useCases.filter(u => (u.source === 'ideate' || u.source === 'ideate_pending') && !u.is_active),
+    contributed: useCases.filter(u => u.path_type !== 'skill' && isContributed(u)),
     attendeeCollections,
     attendeeUseCaseCount: attendeeKeys.size,
     attendeeCertifiedCount,

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { List, Search, Sparkles, X } from 'lucide-react';
+import { HeartHandshake, List, Search, Sparkles, X } from 'lucide-react';
 import type { LibraryUseCase } from '../../api/library';
 import { intersect, keyOf, type LibraryModel } from './model';
+import { isContributed } from './curation';
 import type { LibraryActions } from './useLibrary';
 import { BulkBar } from './BulkBar';
 import { UseCaseTable } from './UseCaseTable';
@@ -9,12 +10,18 @@ import { KINDS } from './theme';
 import { CollectionGlyph, EmptyState, SegmentedControl } from './ui';
 import { cx } from './cx';
 
-type Filter = 'all' | 'live' | 'hidden' | 'certified';
+type Filter = 'all' | 'live' | 'hidden' | 'certified' | 'uncertified' | 'contributed';
+
+const HEADER = {
+  all: { icon: List, title: 'All use cases', blurb: 'Every use case across industries, business functions and technical solutions.' },
+  contributed: { icon: HeartHandshake, title: 'Contributed', blurb: 'Use cases from partners and the community (contrib/) and ideas people submitted through Ideate.' },
+  skills: { icon: Sparkles, title: 'Skills', blurb: 'Skill-building paths participants can pick instead of a use case.' },
+};
 
 interface Props {
   model: LibraryModel;
   actions: LibraryActions;
-  mode: 'all' | 'skills';
+  mode: 'all' | 'contributed' | 'skills';
   pair: string[];
   onClearPair: () => void;
   onOpen: (uc: LibraryUseCase) => void;
@@ -29,6 +36,7 @@ export function AllUseCases({ model, actions, mode, pair, onClearPair, onOpen, o
 
   const base = useMemo(() => {
     if (mode === 'skills') return model.skills;
+    if (mode === 'contributed') return model.contributed;
     if (pair.length === 2) return intersect(model, pair[0], pair[1]);
     return model.useCases.filter(u => u.path_type !== 'skill');
   }, [model, mode, pair]);
@@ -40,8 +48,12 @@ export function AllUseCases({ model, actions, mode, pair, onClearPair, onOpen, o
     if (filter === 'live') return u.is_active;
     if (filter === 'hidden') return !u.is_active;
     if (filter === 'certified') return u.is_certified;
+    if (filter === 'uncertified') return u.is_active && !u.is_certified;
+    if (filter === 'contributed') return isContributed(u);
     return true;
   });
+  const header = HEADER[mode];
+  const HeaderIcon = header.icon;
   const selectedUcs = base.filter(u => selected.has(keyOf(u)));
   const pairCols = pair.map(id => model.byId[id]).filter(Boolean);
 
@@ -49,13 +61,11 @@ export function AllUseCases({ model, actions, mode, pair, onClearPair, onOpen, o
     <div className="px-8 py-8 max-w-[90rem] mx-auto">
       <header className="flex items-center gap-3 mb-5">
         <span className="w-10 h-10 rounded-xl bg-secondary inline-flex items-center justify-center text-primary">
-          {mode === 'skills' ? <Sparkles className="w-5 h-5" /> : <List className="w-5 h-5" />}
+          <HeaderIcon className="w-5 h-5" />
         </span>
         <div className="flex-1">
-          <h1 className="text-ui-2xl font-semibold text-foreground">{mode === 'skills' ? 'Skills' : 'All use cases'}</h1>
-          <p className="text-ui-sm text-muted-foreground">
-            {mode === 'skills' ? 'Skill-building paths participants can pick instead of a use case.' : 'Every use case across industries, business functions and technical solutions.'}
-          </p>
+          <h1 className="text-ui-2xl font-semibold text-foreground">{header.title}</h1>
+          <p className="text-ui-sm text-muted-foreground">{header.blurb}</p>
         </div>
       </header>
 
@@ -83,9 +93,11 @@ export function AllUseCases({ model, actions, mode, pair, onClearPair, onOpen, o
             { id: 'live', label: 'Live', count: base.filter(u => u.is_active).length },
             { id: 'hidden', label: 'Hidden', count: base.filter(u => !u.is_active).length },
             { id: 'certified', label: 'Certified', count: base.filter(u => u.is_certified).length },
+            { id: 'uncertified', label: 'Live, not certified', count: base.filter(u => u.is_active && !u.is_certified).length },
+            ...(mode === 'all' ? [{ id: 'contributed' as const, label: 'Contributed', count: base.filter(isContributed).length }] : []),
           ]}
         />
-        {mode === 'all' && (
+        {mode !== 'skills' && (
           <div className="flex items-center gap-1">
             {[{ id: 'any', label: 'Any home' }, ...KINDS.map(k => ({ id: k.id, label: k.short }))].map(k => (
               <button key={k.id} onClick={() => setKind(k.id)} className={cx('px-2.5 py-1 rounded-full text-ui-xs font-medium ring-1 transition-colors', kind === k.id ? 'bg-primary/15 text-primary ring-primary/30' : 'text-muted-foreground ring-border hover:text-foreground')}>
@@ -97,7 +109,11 @@ export function AllUseCases({ model, actions, mode, pair, onClearPair, onOpen, o
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState icon={<Search className="w-6 h-6" />} title="Nothing here" body={pair.length === 2 ? 'No use case sits in both collections yet.' : 'Try a different search or filter.'} />
+        <EmptyState
+          icon={<Search className="w-6 h-6" />}
+          title="Nothing here"
+          body={pair.length === 2 ? 'No use case sits in both collections yet.' : mode === 'contributed' && base.length === 0 ? 'Partner and community use cases from contrib/ and approved Ideate submissions show up here.' : 'Try a different search or filter.'}
+        />
       ) : (
         <UseCaseTable
           rows={rows.map(uc => ({ uc }))}

@@ -1,5 +1,5 @@
 import { useState, type DragEvent, type ReactNode } from 'react';
-import { ChevronRight, Eye, Inbox, LayoutDashboard, LibraryBig, List, Pencil, Plus, Search, Sparkles, Trash2, ToggleLeft } from 'lucide-react';
+import { ChevronRight, Eye, HeartHandshake, Inbox, LayoutDashboard, LibraryBig, List, Pencil, Plus, Search, Sparkles, Trash2, ToggleLeft } from 'lucide-react';
 import type { CollectionKind, LibraryCollection } from '../../api/library';
 import type { LibraryModel } from './model';
 import type { LibraryActions } from './useLibrary';
@@ -7,7 +7,7 @@ import { KINDS, collectionTint, tintStyle } from './theme';
 import { CollectionGlyph, Kbd, RowMenu, Switch } from './ui';
 import { cx } from './cx';
 
-export type LibraryView = { name: 'home' } | { name: 'all' } | { name: 'review' } | { name: 'skills' } | { name: 'collection'; id: string };
+export type LibraryView = { name: 'home' } | { name: 'all' } | { name: 'contributed' } | { name: 'review' } | { name: 'skills' } | { name: 'collection'; id: string };
 
 interface Props {
   model: LibraryModel;
@@ -108,6 +108,15 @@ export function CollectionNavigator({ model, view, actions, onNavigate, onSearch
             trailing={<span className="text-ui-2xs tabular-nums text-muted-foreground">{model.useCases.length - model.skills.length}</span>}
           />
           <NavItem
+            icon={<HeartHandshake className="w-4 h-4" />}
+            label="Contributed"
+            active={view.name === 'contributed'}
+            onClick={() => onNavigate('/library/contributed')}
+            trailing={model.contributed.length > 0 ? (
+              <span className="min-w-[1.25rem] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300 ring-1 ring-violet-500/30 text-ui-2xs font-semibold tabular-nums">{model.contributed.length}</span>
+            ) : undefined}
+          />
+          <NavItem
             icon={<Inbox className="w-4 h-4" />}
             label="Needs review"
             active={view.name === 'review'}
@@ -151,7 +160,7 @@ export function CollectionNavigator({ model, view, actions, onNavigate, onSearch
                     </button>
                   )}
                   {list.map(c => {
-                    const s = model.stats[c.collection_id] || { live: 0, total: 0 };
+                    const s = model.stats[c.collection_id] || { live: 0, total: 0, contributed: 0 };
                     const active = view.name === 'collection' && view.id === c.collection_id;
                     return (
                       <div
@@ -175,8 +184,9 @@ export function CollectionNavigator({ model, view, actions, onNavigate, onSearch
                         <CollectionGlyph collection={c} size="sm" off={!c.is_enabled} />
                         <div className="flex-1 min-w-0">
                           <div className={cx('text-ui-sm truncate', c.is_enabled ? 'text-foreground font-medium' : 'text-muted-foreground')} title={c.label}>{c.label}</div>
-                          <div className="text-ui-2xs text-muted-foreground tabular-nums">
+                          <div className="text-ui-2xs text-muted-foreground tabular-nums truncate">
                             {c.is_enabled ? (s.total === 0 ? 'Empty' : `${s.live} of ${s.total} live`) : 'Off for attendees'}
+                            {s.contributed > 0 && <span className="text-violet-600 dark:text-violet-300" title={`${s.contributed} contributed`}> · {s.contributed} contributed</span>}
                           </div>
                         </div>
                         <RowMenu

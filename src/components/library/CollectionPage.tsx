@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BadgeCheck, Eye, EyeOff, LayoutGrid, Link2, List as ListIcon, Pencil, Plus, Search, Settings2, SearchX } from 'lucide-react';
+import { BadgeCheck, Eye, EyeOff, HeartHandshake, LayoutGrid, Link2, List as ListIcon, Pencil, Plus, Search, Settings2, SearchX, Target } from 'lucide-react';
 import type { LibraryCollection, LibraryUseCase } from '../../api/library';
 import { columnsFor, keyOf, UNCATEGORIZED, type Column, type Entry, type LibraryModel } from './model';
+import { focusPlan, isContributed } from './curation';
+import { FocusDialog } from './FocusDialog';
 import type { LibraryActions } from './useLibrary';
 import { BulkBar } from './BulkBar';
 import { UseCaseCard } from './UseCaseCard';
@@ -12,7 +14,7 @@ import { Avatar, CollectionGlyph, EmptyState, KindBadge, Meter, SegmentedControl
 import { cx } from './cx';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
 
-type Filter = 'all' | 'live' | 'hidden' | 'certified' | 'cross';
+type Filter = 'all' | 'live' | 'hidden' | 'certified' | 'cross' | 'contributed';
 type ViewMode = 'board' | 'list';
 
 interface Props {
@@ -35,6 +37,7 @@ function matches(e: Entry, q: string, filter: Filter, model: LibraryModel): bool
     case 'hidden': return !e.uc.is_active;
     case 'certified': return e.uc.is_certified;
     case 'cross': return !e.isHome || (model.membersByKey[e.key]?.length ?? 0) > 0;
+    case 'contributed': return isContributed(e.uc);
     default: return true;
   }
 }
@@ -81,6 +84,7 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
   const [over, setOver] = useState<{ col: string; before: string | null } | null>(null);
   const [addingCat, setAddingCat] = useState(false);
   const [newCat, setNewCat] = useState('');
+  const [focusOpen, setFocusOpen] = useState(false);
 
   const [prevId, setPrevId] = useState(collection.collection_id);
   if (prevId !== collection.collection_id) {
@@ -92,8 +96,15 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
   const id = collection.collection_id;
   const tint = collectionTint(collection);
   const kind = KIND_BY_ID[collection.kind];
-  const stats = model.stats[id] || { total: 0, live: 0, hidden: 0, certified: 0, crossListed: 0 };
+  const stats = model.stats[id] || { total: 0, live: 0, hidden: 0, certified: 0, crossListed: 0, contributed: 0 };
   const allEntries = useMemo(() => model.entriesByCollection[id] || [], [model, id]);
+  const plan = useMemo(() => focusPlan(allEntries), [allEntries]);
+  const canFocus = plan.hide.length > 0 || plan.show.length > 0;
+  const applyFocus = async () => {
+    setFocusOpen(false);
+    if (plan.show.length) await actions.setFlags(plan.show.map(e => e.uc), { is_active: true }, { silent: plan.hide.length > 0 });
+    if (plan.hide.length) await actions.setFlags(plan.hide.map(e => e.uc), { is_active: false });
+  };
   const q = query.trim().toLowerCase();
   const entries = useMemo(() => allEntries.filter(e => matches(e, q, filter, model)), [allEntries, q, filter, model]);
   const columns = useMemo(() => columnsFor(entries, q || filter !== 'all' ? [] : extraCats), [entries, extraCats, q, filter]);
@@ -134,6 +145,7 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
     { id: 'hidden', label: 'Hidden', count: stats.hidden },
     { id: 'certified', label: 'Certified', count: stats.certified },
     { id: 'cross', label: 'Cross-listed', count: stats.crossListed },
+    ...(stats.contributed ? [{ id: 'contributed' as const, label: 'Contributed', count: stats.contributed }] : []),
   ];
 
   return (
@@ -182,6 +194,11 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
               <span><span className="text-foreground font-semibold">{stats.hidden}</span> hidden</span>
               <span className="inline-flex items-center gap-1"><BadgeCheck className="w-3.5 h-3.5 text-amber-500" /><span className="text-foreground font-semibold">{stats.certified}</span> certified</span>
               <span className="inline-flex items-center gap-1"><Link2 className="w-3.5 h-3.5" /><span className="text-foreground font-semibold">{stats.crossListed}</span> cross-listed</span>
+              {stats.contributed > 0 && (
+                <button onClick={() => setFilter('contributed')} className="inline-flex items-center gap-1 hover:text-foreground">
+                  <HeartHandshake className="w-3.5 h-3.5 text-violet-500" /><span className="text-foreground font-semibold">{stats.contributed}</span> contributed
+                </button>
+              )}
             </div>
             {lastEdit?.uc.updated_at && (
               <span className="ml-auto inline-flex items-center gap-2 text-ui-xs text-muted-foreground">
@@ -229,6 +246,11 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
           options={[{ id: 'board', label: 'Board', icon: <LayoutGrid className="w-3.5 h-3.5" /> }, { id: 'list', label: 'List', icon: <ListIcon className="w-3.5 h-3.5" /> }]}
         />
         <button className={BTN_SECONDARY} onClick={() => onEditCollection(collection)} title="Collection settings"><Settings2 className="w-4 h-4" /></button>
+        {canFocus && (
+          <button className={BTN_SECONDARY} onClick={() => setFocusOpen(true)} title="Keep the certified use cases live and hide the rest">
+            <Target className="w-4 h-4" />Focus on certified
+          </button>
+        )}
         <button className={BTN_SECONDARY} onClick={() => onPreview(id)}><Eye className="w-4 h-4" />Preview</button>
         <button className={BTN_PRIMARY} onClick={() => onNewUseCase(id)}><Plus className="w-4 h-4" />New use case</button>
       </div>
@@ -339,6 +361,8 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
         onFlags={flags => { void actions.setFlags(selectedUcs, flags); setSelected(new Set()); }}
         onAddTo={cid => { onAddTo(selectedUcs, cid); setSelected(new Set()); }}
       />
+
+      <FocusDialog open={focusOpen} plan={plan} collectionLabel={collection.label} onClose={() => setFocusOpen(false)} onApply={() => void applyFocus()} />
     </div>
   );
 }

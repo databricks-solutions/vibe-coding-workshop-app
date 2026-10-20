@@ -6,7 +6,7 @@ import { deriveValueProp } from '../outcomeMapTheme';
 import { placementsOf, type Entry, type LibraryModel } from './model';
 import { collectionIcon, relativeTime, tintStyle, iconForUseCase, type Tint } from './theme';
 import { CollectionGlyph, Switch } from './ui';
-import { UseCaseBadges } from '../provenance/ProvenanceBadges';
+import { ContributedBadge } from './ContributedBadge';
 import { cx } from './cx';
 
 interface Props {
@@ -87,7 +87,7 @@ export function UseCaseCard({
               {uc.is_certified && <BadgeCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" aria-label="Certified" />}
             </div>
             <p className="mt-1 text-ui-xs text-muted-foreground leading-relaxed line-clamp-2">{uc.contribution?.summary || deriveValueProp(uc.prompt_template, '')}</p>
-            <UseCaseBadges provenance={uc.provenance} contribution={uc.contribution} className="mt-2" />
+            <ContributedBadge uc={uc} className="mt-2" />
           </div>
         </div>
 

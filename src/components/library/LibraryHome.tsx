@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, BadgeCheck, Eye, Grid3x3, Inbox, Layers, Plus, Radio, Sparkles } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Eye, Grid3x3, HeartHandshake, Inbox, Layers, Plus, Radio, Sparkles } from 'lucide-react';
 import type { CollectionKind, LibraryCollection, LibraryUseCase } from '../../api/library';
 import { intersect, keyOf, type LibraryModel } from './model';
 import { KINDS, KIND_BY_ID, collectionIcon, collectionTint, relativeTime, tintStyle, iconForUseCase } from './theme';
@@ -179,6 +179,7 @@ export function LibraryHome({ model, onNavigate, onOpen, onPreview, onCreateColl
   );
   const onCount = model.collections.filter(c => c.is_enabled).length;
   const liveTotal = model.useCases.filter(u => u.is_active && u.path_type !== 'skill').length;
+  const liveUncertified = model.useCases.filter(u => u.is_active && !u.is_certified && u.path_type !== 'skill').length;
 
   return (
     <div className="px-8 py-8 max-w-[90rem] mx-auto space-y-8">
@@ -194,10 +195,11 @@ export function LibraryHome({ model, onNavigate, onOpen, onPreview, onCreateColl
         <button className={BTN_SECONDARY} onClick={() => onCreateCollection('industry')}><Plus className="w-4 h-4" />New collection</button>
       </header>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Kpi delay={0} icon={<Radio className="w-5 h-5" />} label="Live use cases" value={liveTotal} sub={`of ${model.useCases.length - model.skills.length} in the library`} tint={{ h: 158, s: 70 }} onClick={() => onNavigate('/library/all')} />
         <Kpi delay={0.04} icon={<Layers className="w-5 h-5" />} label="Collections on" value={onCount} sub={`${model.attendeeCollections.length} have live content`} tint={{ h: 172, s: 66 }} />
-        <Kpi delay={0.08} icon={<BadgeCheck className="w-5 h-5" />} label="Certified" value={model.useCases.filter(u => u.is_certified).length} sub="Pinned to the top with a badge" tint={{ h: 38, s: 92 }} />
+        <Kpi delay={0.08} icon={<BadgeCheck className="w-5 h-5" />} label="Certified" value={model.useCases.filter(u => u.is_certified).length} sub={liveUncertified ? `${liveUncertified} live use case${liveUncertified === 1 ? ' isn’t' : 's aren’t'} certified` : 'Every live use case is certified'} tint={{ h: 38, s: 92 }} onClick={() => onNavigate('/library/all')} />
+        <Kpi delay={0.1} icon={<HeartHandshake className="w-5 h-5" />} label="Contributed" value={model.contributed.length} sub={`${model.contributed.filter(u => u.is_active).length} live · partners, community and Ideate`} tint={{ h: 270, s: 70 }} onClick={() => onNavigate('/library/contributed')} />
         <Kpi delay={0.12} icon={<Inbox className="w-5 h-5" />} label="Needs review" value={model.pendingReview.length} sub="Ideas submitted from Ideate" tint={{ h: 262, s: 78 }} onClick={() => onNavigate('/library/review')} />
       </div>
 

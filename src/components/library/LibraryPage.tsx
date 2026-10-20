@@ -23,6 +23,7 @@ import './library.css';
 function parseView(pathname: string): LibraryView {
   const rest = pathname.replace(/^\/library\/?/, '');
   if (rest === 'all') return { name: 'all' };
+  if (rest === 'contributed') return { name: 'contributed' };
   if (rest === 'review') return { name: 'review' };
   if (rest === 'skills') return { name: 'skills' };
   if (rest.startsWith('c/')) return { name: 'collection', id: decodeURIComponent(rest.slice(2)) };
@@ -240,7 +241,7 @@ export function LibraryPage() {
                 onCreateIn={(home, also) => startNewUseCase(home, [also])}
               />
             )}
-            {(view.name === 'all' || view.name === 'skills') && (
+            {(view.name === 'all' || view.name === 'contributed' || view.name === 'skills') && (
               <AllUseCases
                 model={model}
                 actions={actions}

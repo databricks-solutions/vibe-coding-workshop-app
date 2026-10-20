@@ -6,7 +6,7 @@ import { keyOf, placementsOf, type LibraryModel } from './model';
 import { collectionIcon, relativeTime, iconForUseCase, collectionTint, tintStyle } from './theme';
 import { Avatar, CollectionGlyph, Switch } from './ui';
 import { cx } from './cx';
-import { UseCaseBadges } from '../provenance/ProvenanceBadges';
+import { ContributedBadge } from './ContributedBadge';
 
 type SortKey = 'name' | 'status' | 'updated' | 'home';
 
@@ -108,8 +108,7 @@ export function UseCaseTable({ rows, model, selected, onToggleSelect, onToggleAl
                       <div className="flex items-center gap-1">
                         <span className={cx('text-ui-sm font-medium truncate', uc.is_active ? 'text-foreground' : 'text-muted-foreground')}>{uc.use_case_label}</span>
                         {uc.is_certified && <BadgeCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                        {uc.source === 'ideate' && !uc.is_active && <span className="ml-1 px-1.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 text-ui-3xs font-semibold">IDEATE</span>}
-                        {uc.contribution && <UseCaseBadges provenance={uc.provenance} contribution={uc.contribution} compact className="ml-1 flex-nowrap" />}
+                        <ContributedBadge uc={uc} compact className="ml-1 flex-nowrap" />
                       </div>
                       <div className="text-ui-xs text-muted-foreground truncate">{deriveValueProp(uc.prompt_template, '')}</div>
                     </div>

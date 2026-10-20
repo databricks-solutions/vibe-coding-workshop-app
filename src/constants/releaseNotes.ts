@@ -68,6 +68,14 @@ export const RELEASES: Release[] = [
         icon: 'shield',
       },
       {
+        title: 'A leaner Use Case Library, with contributions easy to spot',
+        description:
+          'Each collection has a Focus on certified action. It keeps every certified use case live, keeps the best one in any column with nothing certified, and previews what it will hide before you apply it, with undo. Contributed use cases now carry a chip on every card and row: Partner or Third-party with the contributor\'s name for contrib/, and Ideate with the submitter\'s name for submitted ideas. A new Contributed view in the sidebar lists them all, each collection shows how many it has, and All use cases can filter to Contributed or to Live, not certified.',
+        category: 'improved',
+        audience: 'installer',
+        icon: 'shield',
+      },
+      {
         title: 'Certified assets only, on by default',
         description:
           'When you start from data already in Databricks, the Data step now scans only tables tagged certified in Unity Catalog (system.certification_status). Each source shows how many of its tables are certified. If the scan leaves tables out and a question goes unanswered, the Tables screen says so and offers to include uncertified tables in one click.',
