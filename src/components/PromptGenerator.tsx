@@ -12,6 +12,9 @@ import { UseCaseCardGrid } from './UseCaseCardGrid';
 import { OutcomeMapGrid } from './OutcomeMapGrid';
 import { SkillPathPanel } from './SkillPathPanel';
 import { UseCaseDescriptionBox } from './UseCaseDescriptionBox';
+import { ContributionPanel } from './provenance/ContributionPanel';
+import { SourceFilter } from './provenance/SourceFilter';
+import { filterBySource, hasContributions, type SourceFilterValue } from './provenance/provenance';
 import { BorderBeamButton } from './BorderBeamButton';
 
 const SKILL_USE_CASES = new Set(['build_skill']);
@@ -402,6 +405,11 @@ export function PromptGenerator({
   };
 
   const availableUsecases = selectedIndustry ? (useCases[selectedIndustry] || []) : [];
+  const [sourceFilter, setSourceFilter] = useState<SourceFilterValue>('all');
+  useEffect(() => setSourceFilter('all'), [selectedIndustry]);
+  const showSourceFilter = hasContributions(availableUsecases);
+  const pickerUsecases = showSourceFilter ? filterBySource(availableUsecases, sourceFilter) : availableUsecases;
+  const selectedContribution = availableUsecases.find(u => u.value === selectedUsecase)?.contribution;
 
   const canStart = mode === 'library'
     ? prerequisitesCompleted && !!selectedIndustry && !!selectedUsecase && !hasStarted && !isGenerating
@@ -547,10 +555,13 @@ export function PromptGenerator({
                         onSelect={handleIndustryChange}
                         disabled={hasStarted}
                       />
+                      {selectedIndustry && showSourceFilter && (
+                        <SourceFilter items={availableUsecases} value={sourceFilter} onChange={setSourceFilter} />
+                      )}
                       {selectedIndustry && (
-                        availableUsecases.some(uc => uc.category) ? (
+                        pickerUsecases.some(uc => uc.category) ? (
                           <OutcomeMapGrid
-                            useCases={availableUsecases}
+                            useCases={pickerUsecases}
                             selectedUseCase={selectedUsecase}
                             onSelect={handleUsecaseChange}
                             disabled={hasStarted}
@@ -558,7 +569,7 @@ export function PromptGenerator({
                           />
                         ) : (
                           <UseCaseCardGrid
-                            useCases={availableUsecases}
+                            useCases={pickerUsecases}
                             selectedUseCase={selectedUsecase}
                             onSelect={handleUsecaseChange}
                             disabled={hasStarted}
@@ -616,6 +627,7 @@ export function PromptGenerator({
                           onEdit={!hasStarted ? handleEnterEditMode : undefined}
                           onContentChange={!hasStarted ? (text) => setEditedDescription(text) : undefined}
                         />
+                        {selectedContribution && <ContributionPanel key={selectedContribution.key} contribution={selectedContribution} />}
                       </div>
                     )
                   )}

@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import type { SelectOption } from '../api/client';
 import { OutcomeMapColumn } from './OutcomeMapColumn';
 import { getThemeForColumn } from './outcomeMapTheme';
+import { hasContributions } from './provenance/provenance';
 
 interface OutcomeMapGridProps {
   useCases: SelectOption[];
@@ -141,6 +142,7 @@ export function OutcomeMapGrid({
   if (columns.length === 0) return null;
 
   const hasSelection = !!selectedUseCase;
+  const showNative = hasContributions(useCases);
   const cappedVisible = Math.min(visibleCount, columns.length);
   const visibleColumns = columns.slice(0, cappedVisible);
   const remaining = columns.length - cappedVisible;
@@ -186,6 +188,7 @@ export function OutcomeMapGrid({
             disabled={disabled}
             promptTemplates={promptTemplates}
             columnIndex={idx}
+            showNative={showNative}
           />
         ))}
       </div>

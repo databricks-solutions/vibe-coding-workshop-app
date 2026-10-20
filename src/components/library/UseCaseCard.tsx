@@ -6,6 +6,7 @@ import { deriveValueProp } from '../outcomeMapTheme';
 import { placementsOf, type Entry, type LibraryModel } from './model';
 import { collectionIcon, relativeTime, tintStyle, iconForUseCase, type Tint } from './theme';
 import { CollectionGlyph, Switch } from './ui';
+import { UseCaseBadges } from '../provenance/ProvenanceBadges';
 import { cx } from './cx';
 
 interface Props {
@@ -85,7 +86,8 @@ export function UseCaseCard({
               <h4 className="text-ui-sm font-semibold text-foreground leading-snug line-clamp-2" title={uc.use_case_label}>{uc.use_case_label}</h4>
               {uc.is_certified && <BadgeCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" aria-label="Certified" />}
             </div>
-            <p className="mt-1 text-ui-xs text-muted-foreground leading-relaxed line-clamp-2">{deriveValueProp(uc.prompt_template, '')}</p>
+            <p className="mt-1 text-ui-xs text-muted-foreground leading-relaxed line-clamp-2">{uc.contribution?.summary || deriveValueProp(uc.prompt_template, '')}</p>
+            <UseCaseBadges provenance={uc.provenance} contribution={uc.contribution} className="mt-2" />
           </div>
         </div>
 
@@ -105,7 +107,7 @@ export function UseCaseCard({
         <div className="mt-3 flex items-center gap-2">
           <Switch size="sm" checked={live} onChange={onLive} label={live ? 'Hide from attendees' : 'Show to attendees'} />
           <span className={cx('text-ui-2xs font-medium', live ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{live ? 'Live' : 'Hidden'}</span>
-          <button
+          {!uc.read_only && <button
             type="button"
             onClick={e => { e.stopPropagation(); onCertified(!uc.is_certified); }}
             aria-label={uc.is_certified ? 'Remove certification' : 'Certify'}
@@ -113,7 +115,7 @@ export function UseCaseCard({
             className={cx('p-0.5 rounded transition-colors', uc.is_certified ? 'text-amber-500' : 'text-muted-foreground/40 hover:text-amber-500')}
           >
             <Star className="w-3.5 h-3.5" fill={uc.is_certified ? 'currentColor' : 'none'} />
-          </button>
+          </button>}
           <span className="flex-1" />
           {others.length > 0 && (
             <span className="flex -space-x-1" title={`Also in ${others.map(o => o.collection!.label).join(', ')}`}>
@@ -121,7 +123,7 @@ export function UseCaseCard({
               {others.length > 3 && <span className="text-ui-3xs text-muted-foreground pl-1.5">+{others.length - 3}</span>}
             </span>
           )}
-          <span className="text-ui-3xs text-muted-foreground tabular-nums" title={uc.updated_at ? `Updated ${relativeTime(uc.updated_at)}` : undefined}>v{uc.version}</span>
+          <span className="text-ui-3xs text-muted-foreground tabular-nums" title={uc.updated_at ? `Updated ${relativeTime(uc.updated_at)}` : undefined}>v{uc.contribution?.version ?? uc.version}</span>
         </div>
       </div>
     </motion.div>

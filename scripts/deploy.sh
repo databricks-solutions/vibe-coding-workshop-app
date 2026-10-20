@@ -646,7 +646,7 @@ if [[ "$CODE_ONLY" == true ]]; then
         echo -e "Press ${BOLD}Ctrl+C${NC} to stop"
         echo ""
         echo -e "Files synced based on databricks.yml sync configuration:"
-        echo -e "  Include: src/**, dist/**, app.yaml, app.py, requirements.txt, scripts/**, db/**"
+        echo -e "  Include: src/**, dist/**, app.yaml, app.py, requirements.txt, scripts/**, db/**, contrib/**"
         echo -e "  Exclude: node_modules/**, __pycache__/**, *.pyc, .git/**, deploy.py"
         echo ""
         echo -e "${YELLOW}⚠️  IMPORTANT for UI changes:${NC}"

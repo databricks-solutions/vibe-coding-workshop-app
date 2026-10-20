@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=../../../schema/usecase.schema.json
+#
+# SAMPLE USE CASE. This is the reference contribution and the template the
+# scaffolder copies. To submit your own:
+#
+#   python scripts/contrib/new_usecase.py --contributor <your_id> --slug <your_slug>
+#
+# Then edit usecase.yaml and description.md, run
+#   python scripts/contrib/validate.py
+# and open a pull request. The full guide is contrib/README.md.
+#
+# Every contribution ships switched off. An admin turns it on in the Library
+# (Configuration > Library) before attendees see it in the workshop.
+
+schema_version: 1
+
+# Permanent id: must match this folder's name. Lowercase, digits, underscores, max 48.
+slug: contributed_usecase_starter
+
+# Card title (max 80) and the one line shown under it (max 200).
+title: "Sample: Field Service Scheduler"
+summary: The reference contribution. Clone this folder to add your own use case to the workshop library.
+
+# Semantic version. Bump it on every change and add a changelog entry below.
+# A certification only shows while it matches this version.
+version: 1.0.0
+
+# active | deprecated (still listed, with a Deprecated badge) | withdrawn (hidden,
+# but sessions that already use it keep working). Never delete a folder.
+status: active
+
+# Reserved: only the 'sample' contributor may set this. Remove it in your copy.
+sample: true
+
+# Other registered contributors who share credit (their ids).
+co_contributors: []
+
+# The people who wrote it.
+authors:
+  - name: Workshop Maintainers
+    github: databricks-solutions
+
+# Where attendees find it. `home` is a collection id such as sample, retail,
+# cpg or travel. If an install doesn't have it, the use case lands in the
+# Partner & Community collection, where every contribution also appears.
+collections:
+  home: sample
+  also: []
+  # Optional outcome-map column inside the home collection.
+  category: null
+  display_order: 99
+
+tags: [operations, scheduling, mobile]
+
+# Images live next to this file. png, jpg or webp, max 1 MB each, no SVG.
+media:
+  cover: images/cover.jpg
+  screenshots:
+    - images/screenshot-1.jpg
+
+# https only.
+links:
+  - label: How to contribute
+    url: https://github.com/databricks-solutions/vibe-coding-workshop-app/blob/main/contrib/README.md
+
+changelog:
+  - version: 1.0.0
+    date: 2026-10-20
+    notes: First version of the sample contribution.

@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import {
   BadgeCheck, Check, ChevronDown, Clock, Copy, Eye, FileDiff, GitCompare, History, Home, Layers, Link2, Maximize2,
-  Minimize2, PencilLine, Plus, RotateCcw, Search, Trash2, Undo2, X,
+  Lock, Minimize2, PencilLine, Plus, RotateCcw, Search, Trash2, Undo2, X,
 } from 'lucide-react';
 import { libraryApi, type LibraryCollection, type LibraryUseCase } from '../../api/library';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent.utils';
@@ -16,6 +16,8 @@ import type { LibraryActions } from './useLibrary';
 import { KINDS, collectionIcon, collectionTint, relativeTime, tintStyle, iconForUseCase } from './theme';
 import { Avatar, CollectionGlyph, KindBadge, Modal, RowMenu, StatusPill, Switch } from './ui';
 import { cx } from './cx';
+import { UseCaseBadges } from '../provenance/ProvenanceBadges';
+import { ContributionPanel } from '../provenance/ContributionPanel';
 import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
 
 type Tab = 'overview' | 'edit' | 'placement' | 'history';
@@ -55,6 +57,7 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
   }, [uc, onClose]);
 
   const home = uc ? model.byId[uc.industry] : undefined;
+  const readOnly = !!uc?.read_only;
   const tint = home ? collectionTint(home) : { h: 172, s: 66 };
 
   return createPortal(
@@ -98,7 +101,7 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
                   items={[
                     { label: 'Copy link', icon: <Link2 className="w-3.5 h-3.5" />, onSelect: () => void navigator.clipboard.writeText(window.location.href) },
                     { label: 'Copy description', icon: <Copy className="w-3.5 h-3.5" />, onSelect: () => void navigator.clipboard.writeText(uc.prompt_template) },
-                    { label: 'Delete…', icon: <Trash2 className="w-3.5 h-3.5" />, danger: true, onSelect: () => setConfirmDelete(true) },
+                    ...(readOnly ? [] : [{ label: 'Delete…', icon: <Trash2 className="w-3.5 h-3.5" />, danger: true, onSelect: () => setConfirmDelete(true) }]),
                   ]}
                 />
                 <button className="p-1 rounded-md hover:bg-secondary hover:text-foreground" onClick={() => setWide(w => !w)} aria-label={wide ? 'Collapse panel' : 'Expand panel'}>
@@ -109,13 +112,18 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
               <div className="flex items-start gap-4 px-6 pt-3 pb-4">
                 <span className="lib-tile w-12 h-12 rounded-2xl inline-flex items-center justify-center shrink-0"><UseCaseIcon uc={uc} home={home} className="w-6 h-6" /></span>
                 <div className="flex-1 min-w-0">
-                  <TitleEditor value={uc.use_case_label} onSave={v => void actions.renameUseCase(uc, v)} />
+                  {readOnly
+                    ? <h2 className="text-ui-2xl font-semibold tracking-tight text-foreground">{uc.use_case_label}</h2>
+                    : <TitleEditor value={uc.use_case_label} onSave={v => void actions.renameUseCase(uc, v)} />}
                   <div className="mt-1.5 flex items-center gap-3 text-ui-xs text-muted-foreground">
                     <code className="px-1.5 py-0.5 rounded bg-secondary/80 font-mono text-ui-2xs">{uc.use_case}</code>
-                    <span className="inline-flex items-center gap-1"><History className="w-3 h-3" />v{uc.version} of {uc.version_count}</span>
+                    {uc.contribution
+                      ? <span className="inline-flex items-center gap-1"><History className="w-3 h-3" />v{uc.contribution.version}</span>
+                      : <span className="inline-flex items-center gap-1"><History className="w-3 h-3" />v{uc.version} of {uc.version_count}</span>}
                     {uc.updated_at && <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" />{relativeTime(uc.updated_at)}</span>}
                     {uc.source === 'ideate' && <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 text-ui-3xs font-semibold">FROM IDEATE</span>}
                   </div>
+                  <UseCaseBadges provenance={uc.provenance} contribution={uc.contribution} className="mt-2" />
                 </div>
               </div>
               <div className="flex items-center gap-2 px-6 pb-4">
@@ -126,13 +134,19 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
                   tone="emerald"
                   onToggle={v => void actions.setFlags([uc], { is_active: v })}
                 />
-                <FlagPill
-                  on={uc.is_certified}
-                  label={uc.is_certified ? 'Certified' : 'Not certified'}
-                  icon={<BadgeCheck className="w-3.5 h-3.5" />}
-                  tone="amber"
-                  onToggle={v => void actions.setFlags([uc], { is_certified: v })}
-                />
+                {readOnly ? (
+                  <span className="inline-flex items-center gap-1.5 text-ui-xs text-muted-foreground">
+                    <Lock className="w-3.5 h-3.5" />Content and certification come from the contribution's files. You control Live and placement.
+                  </span>
+                ) : (
+                  <FlagPill
+                    on={uc.is_certified}
+                    label={uc.is_certified ? 'Certified' : 'Not certified'}
+                    icon={<BadgeCheck className="w-3.5 h-3.5" />}
+                    tone="amber"
+                    onToggle={v => void actions.setFlags([uc], { is_certified: v })}
+                  />
+                )}
               </div>
               <div className="flex items-center gap-1 px-4" role="tablist">
                 {([
@@ -140,7 +154,7 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
                   ['edit', 'Edit description', <PencilLine key="e" className="w-3.5 h-3.5" />],
                   ['placement', 'Placement', <Layers key="p" className="w-3.5 h-3.5" />],
                   ['history', 'History', <History key="h" className="w-3.5 h-3.5" />],
-                ] as [Tab, string, React.ReactNode][]).map(([id, label, icon]) => (
+                ] as [Tab, string, React.ReactNode][]).filter(([id]) => !readOnly || id === 'overview' || id === 'placement').map(([id, label, icon]) => (
                   <button
                     key={id}
                     role="tab"
@@ -158,9 +172,9 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
             {/* Body */}
             <div className="flex-1 min-h-0 overflow-y-auto lib-scroll">
               {tab === 'overview' && <OverviewTab model={model} uc={uc} />}
-              {tab === 'edit' && <EditTab uc={uc} actions={actions} onDone={() => setTab('overview')} />}
+              {tab === 'edit' && !readOnly && <EditTab uc={uc} actions={actions} onDone={() => setTab('overview')} />}
               {tab === 'placement' && <PlacementTab model={model} uc={uc} actions={actions} />}
-              {tab === 'history' && <HistoryTab uc={uc} actions={actions} />}
+              {tab === 'history' && !readOnly && <HistoryTab uc={uc} actions={actions} />}
             </div>
           </motion.div>
 
@@ -241,7 +255,7 @@ function OverviewTab({ model, uc }: { model: LibraryModel; uc: LibraryUseCase })
         <div className="grid grid-cols-[minmax(0,20rem)_1fr] gap-5 items-start">
           <div className={cx('pointer-events-none', !uc.is_active && 'opacity-50 grayscale')}>
             <OutcomeMapCard
-              useCase={{ value: uc.use_case, label: uc.use_case_label, is_certified: uc.is_certified, category: uc.category || undefined }}
+              useCase={{ value: uc.use_case, label: uc.use_case_label, is_certified: uc.is_certified, category: uc.category || undefined, provenance: uc.provenance, contribution: uc.contribution }}
               theme={getThemeForColumn(colIndex)}
               isSelected={false}
               hasSelection={false}
@@ -270,12 +284,20 @@ function OverviewTab({ model, uc }: { model: LibraryModel; uc: LibraryUseCase })
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-ui-xs">
               <dt className="text-muted-foreground">Home</dt><dd className="text-foreground">{model.byId[uc.industry]?.label || uc.industry}</dd>
               <dt className="text-muted-foreground">Category</dt><dd className="text-foreground">{uc.category || '—'}</dd>
-              <dt className="text-muted-foreground">Last edited by</dt><dd className="text-foreground inline-flex items-center gap-1.5"><Avatar email={uc.created_by} size="xs" />{uc.created_by || '—'}</dd>
+              {uc.contribution
+                ? <><dt className="text-muted-foreground">Contributed by</dt><dd className="text-foreground">{uc.contribution.contributor.display_name}</dd></>
+                : <><dt className="text-muted-foreground">Last edited by</dt><dd className="text-foreground inline-flex items-center gap-1.5"><Avatar email={uc.created_by} size="xs" />{uc.created_by || '—'}</dd></>}
               <dt className="text-muted-foreground">Status</dt><dd><StatusPill live={uc.is_active} compact /></dd>
             </dl>
           </div>
         </div>
       </section>
+      {uc.contribution && (
+        <section>
+          <h3 className="text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Contribution</h3>
+          <ContributionPanel key={uc.contribution.key} contribution={uc.contribution} defaultOpen />
+        </section>
+      )}
       <section>
         <h3 className="text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Description</h3>
         <article className="rounded-2xl ring-1 ring-border bg-background/40 px-6 py-5 text-ui-base">
@@ -353,9 +375,13 @@ function EditTab({ uc, actions, onDone }: { uc: LibraryUseCase; actions: Library
 }
 
 function PlacementTab({ model, uc, actions }: { model: LibraryModel; uc: LibraryUseCase; actions: LibraryActions }) {
-  const initial = useMemo(
-    () => placementsOf(model, uc).filter(p => !p.isHome).map(p => ({ collection_id: p.id, category: p.category })),
+  const lockedIds = useMemo(
+    () => new Set((model.membersByKey[keyOf(uc)] || []).filter(m => m.locked).map(m => m.collection_id)),
     [model, uc],
+  );
+  const initial = useMemo(
+    () => placementsOf(model, uc).filter(p => !p.isHome && !lockedIds.has(p.id)).map(p => ({ collection_id: p.id, category: p.category })),
+    [model, uc, lockedIds],
   );
   const [list, setList] = useState(initial);
   const [adding, setAdding] = useState(false);
@@ -368,7 +394,7 @@ function PlacementTab({ model, uc, actions }: { model: LibraryModel; uc: Library
   }
   const home = model.byId[uc.industry];
   const dirty = JSON.stringify(list) !== JSON.stringify(initial);
-  const taken = new Set([uc.industry, ...list.map(l => l.collection_id)]);
+  const taken = new Set([uc.industry, ...lockedIds, ...list.map(l => l.collection_id)]);
 
   return (
     <div className="px-6 py-6 space-y-6">
@@ -379,7 +405,9 @@ function PlacementTab({ model, uc, actions }: { model: LibraryModel; uc: Library
             <CollectionGlyph collection={home} size="lg" off={!home.is_enabled} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2"><span className="text-ui-md font-semibold text-foreground">{home.label}</span><KindBadge kind={home.kind} subtle /></div>
-              <div className="text-ui-xs text-muted-foreground mt-0.5">Owns the description and version history{uc.category ? ` · ${uc.category}` : ''}</div>
+              <div className="text-ui-xs text-muted-foreground mt-0.5">
+                {uc.read_only ? 'Declared in the contribution file' : 'Owns the description and version history'}{uc.category ? ` · ${uc.category}` : ''}
+              </div>
             </div>
             {!home.is_enabled && <span className="text-ui-2xs px-2 py-0.5 rounded-full bg-muted-foreground/15 text-muted-foreground">Collection off</span>}
           </div>
@@ -421,7 +449,26 @@ function PlacementTab({ model, uc, actions }: { model: LibraryModel; uc: Library
           )}
         </AnimatePresence>
 
-        {list.length === 0 ? (
+        {lockedIds.size > 0 && (
+          <div className="space-y-2 mb-2">
+            {[...lockedIds].map(id => {
+              const c = model.byId[id];
+              if (!c) return null;
+              return (
+                <div key={id} className="flex items-center gap-3 rounded-xl ring-1 ring-border bg-secondary/30 px-3 py-2.5" title="Declared in the contribution file">
+                  <CollectionGlyph collection={c} size="sm" off={!c.is_enabled} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-ui-sm font-medium text-foreground truncate">{c.label}</div>
+                    <div className="text-ui-2xs text-muted-foreground">From the contribution file{c.is_enabled ? '' : ' · collection is off'}</div>
+                  </div>
+                  <Lock className="w-3.5 h-3.5 text-muted-foreground" aria-label="Locked" />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {list.length === 0 && lockedIds.size === 0 ? (
           <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center">
             <p className="text-ui-sm text-foreground font-medium">Only in {home?.label}</p>
             <p className="text-ui-xs text-muted-foreground mt-1">Cross-list it into a business function or technical solution so it shows up there too.</p>

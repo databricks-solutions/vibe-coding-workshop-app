@@ -49,8 +49,24 @@ export const RELEASES: Release[] = [
   {
     version: '2.8.2',
     date: '2026-10-19',
-    title: 'Certified assets by default and sharper table matching',
+    title: 'Contributed use cases, certified assets by default and sharper table matching',
     items: [
+      {
+        title: 'Contributed use cases from partners and the community',
+        description:
+          'Anyone can now add use cases to the library through a pull request: a person, a company, a group or a Databricks partner. Each one is a folder of files under contrib/ in the repository, versioned with git and checked automatically, and ships with every install. Cards show where a use case comes from (Native, Partner or Third-party with the contributor\'s name) and who certified it. A details panel shows the version history, and a filter in the picker separates native and contributed use cases. A sample contribution in the new Partner & Community collection shows how to clone it and contribute your own.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'Contributions stay off until an admin turns them on',
+        description:
+          'Contributed use cases load at startup and appear in the Library with their badges, switched off. Turn on Live to show one to attendees, and place it in any collection. Content can only change through the repository, so it can\'t be edited, deleted or certified in the Library. A broken contribution is skipped on its own and never stops the app; skipped entries are listed at /api/contrib/status. See contrib/README.md for the contributor guide.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'shield',
+      },
       {
         title: 'Certified assets only, on by default',
         description:

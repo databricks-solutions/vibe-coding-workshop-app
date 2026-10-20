@@ -3084,21 +3084,32 @@ def _available_use_cases(industry: str) -> list[dict[str, Any]]:
     certified-first is frontend-only today — so the ordering is enforced here with a
     stable sort (``is_certified`` True sorts ahead; original order preserved within
     each group). The empty ``"Select a use case..."`` placeholder is dropped. Each
-    entry carries value/label/category/is_certified.
+    entry carries value/label/category/is_certified/provenance (plus
+    contributed_by/certified_by/sample for use cases from contrib/).
     """
     from .api.routes import get_use_cases_map
 
     entries = [e for e in get_use_cases_map().get(industry, []) if e.get("value")]
     ordered = sorted(entries, key=lambda e: not bool(e.get("is_certified")))
-    return [
-        {
-            "value": e.get("value"),
-            "label": e.get("label"),
-            "category": e.get("category"),
-            "is_certified": bool(e.get("is_certified")),
-        }
-        for e in ordered
-    ]
+    return [_use_case_summary(e) for e in ordered]
+
+
+def _use_case_summary(e: dict[str, Any]) -> dict[str, Any]:
+    summary = {
+        "value": e.get("value"),
+        "label": e.get("label"),
+        "category": e.get("category"),
+        "is_certified": bool(e.get("is_certified")),
+    }
+    contribution = e.get("contribution")
+    if contribution:
+        summary["provenance"] = contribution["provenance"]
+        summary["contributed_by"] = contribution["contributor"]["display_name"]
+        summary["certified_by"] = [c["by"]["display_name"] for c in contribution["certifications"]]
+        summary["sample"] = contribution["sample"]
+    else:
+        summary["provenance"] = "native"
+    return summary
 
 
 def _usecase_industries_resource() -> str:
@@ -3120,7 +3131,7 @@ def _usecases_for_industry_resource(industry: str) -> str:
     certified-first is frontend-only today — so the ordering is enforced here with
     a stable sort (``is_certified`` True sorts ahead; original order preserved
     within each group). The empty ``"Select a use case..."`` placeholder is
-    dropped. Each entry carries value/label/category/is_certified.
+    dropped. Each entry carries value/label/category/is_certified/provenance.
     """
     return json.dumps(
         {"industry": industry, "use_cases": _available_use_cases(industry)}, indent=2
@@ -3191,7 +3202,7 @@ mcp._resource_manager.add_template(
     _usecases_for_industry_resource,
     uri_template="vibe://usecases/{industry}",
     name="vibe-usecases-for-industry",
-    description="Use cases for an industry, certified-first, each with value/label/category/is_certified.",
+    description="Use cases for an industry, certified-first, each with value/label/category/is_certified/provenance.",
     mime_type="application/json",
     meta={"ttlMs": 3_600_000, "cacheScope": "global"},
 )

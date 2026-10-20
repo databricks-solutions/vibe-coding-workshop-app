@@ -159,7 +159,7 @@ export function LibraryPage() {
     if (!todo.length) { notify({ tone: 'info', message: `Already in ${target?.label || 'that collection'}` }); return; }
     try {
       await Promise.all(todo.map(u => libraryApi.setPlacements(u.industry, u.use_case, [
-        ...(m.membersByKey[keyOf(u)] || []).map(x => ({ collection_id: x.collection_id, category: x.category })),
+        ...(m.membersByKey[keyOf(u)] || []).filter(x => !x.locked).map(x => ({ collection_id: x.collection_id, category: x.category })),
         { collection_id: collectionId },
       ])));
       notify({ tone: 'success', message: `Added ${todo.length === 1 ? `“${todo[0].use_case_label}”` : `${todo.length} use cases`} to ${target?.label}` });

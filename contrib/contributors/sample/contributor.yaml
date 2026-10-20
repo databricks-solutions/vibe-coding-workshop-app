@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../schema/contributor.schema.json
+#
+# SAMPLE CONTRIBUTOR. Copy this folder to register yourself, your company,
+# your group or your partner organization:
+#
+#   python scripts/contrib/new_contributor.py --id acme --type company --name "Acme Analytics"
+#
+# One contributor.yaml per contributor. Every use case you submit lives under
+# contrib/usecases/<id>/. Maintainers review this file, especially `type` and
+# `can_certify`, so expect a quick check on your first PR.
+
+schema_version: 1
+
+# Permanent id: lowercase letters, digits and underscores, max 32 characters.
+# It must match this folder's name and becomes part of every use case key.
+id: sample
+
+# Who you are:
+#   partner    - an official partner organization (maintainers confirm this)
+#   company    - any other organization: customer, ISV, consultancy
+#   individual - a single person
+#   group      - several people: a user group, hackathon team, collective
+type: group
+
+display_name: Sample Contributor
+description: The reference contribution. Clone it to submit your own use case.
+
+# Optional. https only.
+website: https://github.com/databricks-solutions/vibe-coding-workshop-app
+
+# Optional square image in this folder: png, jpg or webp, max 1 MB.
+avatar: avatar.png
+
+# GitHub user, or org/team, that reviews changes to your use cases.
+github: databricks-solutions
+
+# For companies and groups: the people behind the contributions.
+members:
+  - name: Workshop Maintainers
+    github: databricks-solutions
+
+# Lets you certify use cases. Granted by maintainers only; the sample
+# contributor may only certify the sample use case.
+can_certify: true
+
+contact: Open an issue in the repository

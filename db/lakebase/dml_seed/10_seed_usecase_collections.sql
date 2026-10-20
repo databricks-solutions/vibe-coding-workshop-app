@@ -16,3 +16,9 @@ INSERT INTO ${schema}.usecase_collections (collection_id, kind, label, descripti
 ('data_integration', 'solution', 'Data Integration', 'Ingest, unify and model data from operational systems into governed, analytics-ready tables.', 'Workflow', 'sky', 1, FALSE, 'seed'),
 ('observability', 'solution', 'Observability', 'Monitor pipelines, models and applications with lineage-aware health, cost and quality signals.', 'Activity', 'cyan', 2, FALSE, 'seed')
 ON CONFLICT (collection_id) DO NOTHING;
+
+-- Home of every use case contributed through contrib/. Starts enabled so the
+-- sample contribution is visible on a fresh install; admins can switch it off.
+INSERT INTO ${schema}.usecase_collections (collection_id, kind, label, description, icon, color, display_order, is_enabled, updated_by) VALUES
+('community_contributions', 'solution', 'Partner & Community', 'Use cases contributed by partners, companies, groups and individuals.', 'Handshake', 'teal', 1, TRUE, 'seed')
+ON CONFLICT (collection_id) DO NOTHING;

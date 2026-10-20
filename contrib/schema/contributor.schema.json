@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "Person": {
+      "additionalProperties": false,
+      "properties": {
+        "github": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:/[A-Za-z0-9_.-]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Github"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Person",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``contrib/contributors/<id>/contributor.yaml``",
+  "properties": {
+    "avatar": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Image file in this folder (png, jpg or webp, max 1 MB).",
+      "title": "Avatar"
+    },
+    "can_certify": {
+      "default": false,
+      "description": "Granted by maintainers only.",
+      "title": "Can Certify",
+      "type": "boolean"
+    },
+    "contact": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Contact"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "maxLength": 280,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "display_name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "github": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:/[A-Za-z0-9_.-]+)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "GitHub user or org/team that co-owns this contributor's use cases.",
+      "title": "Github"
+    },
+    "id": {
+      "description": "Must match the folder name. Permanent.",
+      "maxLength": 32,
+      "pattern": "^[a-z0-9][a-z0-9_]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "members": {
+      "items": {
+        "$ref": "#/$defs/Person"
+      },
+      "maxItems": 50,
+      "title": "Members",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "description": "Contract version. Always 1 for now.",
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "type": {
+      "description": "partner | company | individual | group. Maintainers review changes.",
+      "enum": [
+        "partner",
+        "company",
+        "individual",
+        "group"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "website": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Website"
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "type",
+    "display_name"
+  ],
+  "title": "ContributorManifest",
+  "type": "object"
+}

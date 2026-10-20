@@ -26,6 +26,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Dict, Literal, Optional, Any, AsyncGenerator
 from datetime import datetime, timezone
 
+from src.backend.contrib import COMMUNITY_COLLECTION_ID, COMMUNITY_COLLECTION_LABEL, is_contributed_key
+
 SECTION_TAG_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
@@ -118,6 +120,7 @@ _lakebase_cache = {
     "section_input_prompts": None,
     "collections": None,
     "collection_members": None,
+    "contrib_overrides": None,
     "last_refresh": None
 }
 
@@ -132,6 +135,7 @@ def clear_lakebase_cache():
         "section_input_prompts": None,
         "collections": None,
         "collection_members": None,
+        "contrib_overrides": None,
         "last_refresh": None
     }
     logger.info("Lakebase cache cleared")
@@ -245,10 +249,36 @@ def ensure_library_schema(schema: str) -> Dict[str, bool]:
     return library_capabilities(schema)
 
 
+_community_collection_ensured = False
+
+
+def _ensure_community_collection(schema: str) -> None:
+    """Materialize the Partner & Community collection once so admins can switch it off."""
+    global _community_collection_ensured
+    if _community_collection_ensured:
+        return
+    _community_collection_ensured = True
+    try:
+        from src.backend.contrib import registry
+        if not registry.get_catalog().use_cases:
+            return
+        row = _community_collection_row()
+        execute_insert(
+            f"""INSERT INTO {schema}.usecase_collections
+                (collection_id, kind, label, description, icon, color, display_order, is_enabled, updated_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, 'contrib')
+                ON CONFLICT (collection_id) DO NOTHING""",
+            (row["collection_id"], row["kind"], row["label"], row["description"], row["icon"], row["color"], row["display_order"]),
+        )
+    except Exception as e:
+        logger.warning(f"[Contrib] Couldn't create the {COMMUNITY_COLLECTION_ID} collection: {e}")
+
+
 def _load_library_collections(schema: str):
     """Return (collections, members) or (None, None) when the tables are absent."""
     if not ensure_library_schema(schema)["tables"]:
         return None, None
+    _ensure_community_collection(schema)
     collections = execute_query(
         f"""SELECT collection_id, kind, label, description, icon, color, display_order, is_enabled
             FROM {schema}.usecase_collections"""
@@ -258,6 +288,15 @@ def _load_library_collections(schema: str):
             FROM {schema}.usecase_collection_members"""
     )
     return collections or [], members or []
+
+
+def _load_contrib_overrides(schema: str) -> Dict[str, Dict]:
+    try:
+        from src.backend.contrib import overrides as contrib_overrides
+        return contrib_overrides.load_all(schema)
+    except Exception as e:
+        logger.warning(f"[Contrib] Overrides unavailable: {e}")
+        return {}
 
 
 def _refresh_lakebase_cache():
@@ -329,6 +368,7 @@ def _refresh_lakebase_cache():
             collections, members = _load_library_collections(schema)
             _lakebase_cache["collections"] = collections
             _lakebase_cache["collection_members"] = members
+            _lakebase_cache["contrib_overrides"] = _load_contrib_overrides(schema)
             
             _lakebase_cache["last_refresh"] = time.time()
             logger.info(f"Lakebase cache refreshed: {len(_lakebase_cache['usecase_descriptions'])} use cases, {len(_lakebase_cache.get('section_input_prompts', []))} section prompts")
@@ -804,7 +844,69 @@ def _collection_rows_by_id(lakebase_data: List[Dict]) -> Dict[str, Dict]:
                 "display_order": _LEGACY_INDUSTRY_ORDER.index(ind) + 1 if ind in _LEGACY_INDUSTRY_ORDER else 100,
                 "is_enabled": True,
             }
+    if any(r.get("source") == "contributed" for r in lakebase_data) and COMMUNITY_COLLECTION_ID not in by_id:
+        by_id[COMMUNITY_COLLECTION_ID] = _community_collection_row()
     return by_id
+
+
+# ---------- Contributed use cases (contrib/) ----------
+
+def reject_contributed_write(use_case: str) -> None:
+    """Contributed content lives in contrib/ and changes only by pull request."""
+    if is_contributed_key(use_case):
+        raise HTTPException(
+            status_code=409,
+            detail="This use case is contributed through the contrib/ folder. Change it with a pull request; "
+                   "admins can hide it or move it in the Library.",
+        )
+
+
+def _community_collection_row() -> Dict:
+    return {
+        "collection_id": COMMUNITY_COLLECTION_ID,
+        "kind": "solution",
+        "label": COMMUNITY_COLLECTION_LABEL,
+        "description": "Use cases contributed by partners, companies, groups and individuals.",
+        "icon": "Handshake",
+        "color": "teal",
+        "display_order": 1,
+        "is_enabled": True,
+    }
+
+
+def _contrib_rows(db_rows: List[Dict], include_unlisted: bool = False) -> List[Dict]:
+    """Contributed rows placed into this install's collections, after admin overrides.
+
+    Never raises: a contrib problem must not take down the native catalog.
+    """
+    try:
+        from src.backend.contrib import merge, registry
+        raw = registry.catalog_rows()
+        if not raw:
+            return []
+        collections = _lakebase_cache.get("collections") or []
+        known = {c["collection_id"] for c in collections} | {r.get("industry") for r in db_rows if r.get("industry")}
+        labels = {r.get("industry"): r.get("industry_label") for r in db_rows if r.get("industry")}
+        labels.update({c["collection_id"]: c.get("label") for c in collections})
+        return merge.resolve_rows(raw, known, labels, _lakebase_cache.get("contrib_overrides") or {}, include_unlisted)
+    except Exception as e:
+        logger.warning(f"[Contrib] Contributed use cases unavailable: {e}")
+        return []
+
+
+def _members_with_contrib(contrib_rows: List[Dict]) -> List[Dict]:
+    """DB cross-listings plus file-declared ones; an admin's DB row wins for the same placement."""
+    members = list(_lakebase_cache.get("collection_members") or [])
+    if not contrib_rows:
+        return members
+    from src.backend.contrib import merge
+    known = {c["collection_id"] for c in (_lakebase_cache.get("collections") or [])}
+    known |= {r["industry"] for r in contrib_rows}
+    taken = {(m.get("collection_id"), m.get("home_industry"), m.get("use_case")) for m in members}
+    for m in merge.synthesize_members(contrib_rows, known):
+        if (m["collection_id"], m["home_industry"], m["use_case"]) not in taken:
+            members.append(m)
+    return members
 
 
 def _collection_option(c: Dict) -> Dict:
@@ -818,11 +920,11 @@ def _collection_option(c: Dict) -> Dict:
     }
 
 
-def _visible_collections(lakebase_data: List[Dict]) -> List[Dict]:
+def _visible_collections(lakebase_data: List[Dict], members: Optional[List[Dict]] = None) -> List[Dict]:
     """Enabled collections that contain at least one live use case (home or cross-listed)."""
     live = {(r.get("industry"), r.get("use_case")) for r in lakebase_data if r.get("use_case") != "_placeholder"}
     with_content = {ind for ind, _ in live}
-    for m in _lakebase_cache.get("collection_members") or []:
+    for m in members if members is not None else (_lakebase_cache.get("collection_members") or []):
         if (m.get("home_industry"), m.get("use_case")) in live:
             with_content.add(m.get("collection_id"))
     by_id = _collection_rows_by_id(lakebase_data)
@@ -831,12 +933,14 @@ def _visible_collections(lakebase_data: List[Dict]) -> List[Dict]:
     return [_collection_option(c) for c in visible]
 
 
-def _apply_collections_to_use_cases(use_cases_map: Dict[str, List[Dict]], lakebase_data: List[Dict]) -> Dict[str, List[Dict]]:
+def _apply_collections_to_use_cases(
+    use_cases_map: Dict[str, List[Dict]], lakebase_data: List[Dict], members: Optional[List[Dict]] = None
+) -> Dict[str, List[Dict]]:
     """Drop disabled collections and add cross-listed entries under their collections."""
     by_id = _collection_rows_by_id(lakebase_data)
     entries = {(ind, e["value"]): e for ind, lst in use_cases_map.items() for e in lst if e.get("value")}
     result = {ind: lst for ind, lst in use_cases_map.items() if by_id.get(ind, {}).get("is_enabled", True)}
-    for m in _lakebase_cache.get("collection_members") or []:
+    for m in members if members is not None else (_lakebase_cache.get("collection_members") or []):
         cid = m.get("collection_id")
         home = m.get("home_industry")
         base = entries.get((home, m.get("use_case")))
@@ -868,9 +972,11 @@ def get_industries() -> List[Dict]:
     priority_order = ["sample", "retail", "cpg", "travel"]
     
     # Try Lakebase first - data is already filtered by is_active=TRUE in the SQL query
-    lakebase_data = get_usecase_descriptions_from_lakebase()
+    db_rows = get_usecase_descriptions_from_lakebase()
+    contrib = _contrib_rows(db_rows or [])
+    lakebase_data = db_rows + contrib if db_rows else None
     if lakebase_data and _lakebase_cache.get("collections") is not None:
-        return [{"value": "", "label": "Select an industry..."}] + _visible_collections(lakebase_data)
+        return [{"value": "", "label": "Select an industry..."}] + _visible_collections(lakebase_data, _members_with_contrib(contrib))
     if lakebase_data:
         # Extract unique industries from Lakebase (only active use cases are returned)
         industries_dict = {}
@@ -902,7 +1008,13 @@ def get_industries() -> List[Dict]:
     
     # Fallback to YAML
     logger.info("[YAML Fallback] Using industries from prompts_config.yaml")
-    return get_config().get('industries', [])
+    industries = list(get_config().get('industries', []))
+    present = {i.get("value") for i in industries}
+    for row in contrib:
+        if row["industry"] not in present:
+            present.add(row["industry"])
+            industries.append({"value": row["industry"], "label": row["industry_label"]})
+    return industries
 
 SKILL_USE_CASES = {"build_skill"}
 
@@ -916,37 +1028,13 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
     per entry so the frontend OutcomeMapGrid can render data-driven columns.
     """
     # Try Lakebase first
-    lakebase_data = get_usecase_descriptions_from_lakebase()
+    db_rows = get_usecase_descriptions_from_lakebase()
+    contrib = _contrib_rows(db_rows or [])
+    lakebase_data = db_rows + contrib if db_rows else None
     if lakebase_data:
-        # Group use cases by industry
-        use_cases_map = {}
-        for row in lakebase_data:
-            industry = row.get("industry")
-            use_case = row.get("use_case")
-            # Skip placeholder rows so a half-created industry never renders a
-            # "(No use cases yet)" card in the workshop grids.
-            if use_case == "_placeholder":
-                continue
-            if industry and use_case:
-                if industry not in use_cases_map:
-                    use_cases_map[industry] = [{"value": "", "label": "Select a use case..."}]
-                entry = {
-                    "value": use_case,
-                    "label": row.get("use_case_label", use_case.title()),
-                    "path_type": _derive_path_type(row),
-                    "is_certified": bool(row.get("is_certified")),
-                }
-                # Outcome-map grouping (Travel & Hospitality). NULL/missing for
-                # Sample, legacy rows, and any database that hasn't run the
-                # 09_add_category_columns.sql migration yet.
-                category = row.get("category")
-                if category:
-                    entry["category"] = category
-                    entry["category_order"] = row.get("category_order")
-                    entry["display_order"] = row.get("display_order")
-                use_cases_map[industry].append(entry)
+        use_cases_map = _group_use_case_entries(lakebase_data)
         if _lakebase_cache.get("collections") is not None:
-            use_cases_map = _apply_collections_to_use_cases(use_cases_map, lakebase_data)
+            use_cases_map = _apply_collections_to_use_cases(use_cases_map, lakebase_data, _members_with_contrib(contrib))
         return use_cases_map
     
     # Fallback to YAML (no path_type in YAML — default to 'use_case')
@@ -956,7 +1044,45 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
         for uc in uc_list:
             if uc.get("value"):
                 uc.setdefault("path_type", "skill" if uc["value"] in SKILL_USE_CASES else "use_case")
+    if contrib:
+        yaml_data = {k: list(v) for k, v in yaml_data.items()}
+        for industry, entries in _group_use_case_entries(contrib).items():
+            yaml_data.setdefault(industry, [entries[0]]).extend(entries[1:])
     return yaml_data
+
+
+def _group_use_case_entries(rows: List[Dict]) -> Dict[str, List[Dict]]:
+    """Group catalog rows into picker entries by home collection."""
+    use_cases_map: Dict[str, List[Dict]] = {}
+    for row in rows:
+        industry = row.get("industry")
+        use_case = row.get("use_case")
+        # Skip placeholder rows so a half-created industry never renders a
+        # "(No use cases yet)" card in the workshop grids.
+        if use_case == "_placeholder":
+            continue
+        if industry and use_case:
+            if industry not in use_cases_map:
+                use_cases_map[industry] = [{"value": "", "label": "Select a use case..."}]
+            entry = {
+                "value": use_case,
+                "label": row.get("use_case_label", use_case.title()),
+                "path_type": _derive_path_type(row),
+                "is_certified": bool(row.get("is_certified")),
+            }
+            # Outcome-map grouping (Travel & Hospitality). NULL/missing for
+            # Sample, legacy rows, and any database that hasn't run the
+            # 09_add_category_columns.sql migration yet.
+            category = row.get("category")
+            if category:
+                entry["category"] = category
+                entry["category_order"] = row.get("category_order")
+                entry["display_order"] = row.get("display_order")
+            if row.get("contribution"):
+                entry["provenance"] = row["provenance"]
+                entry["contribution"] = row["contribution"]
+            use_cases_map[industry].append(entry)
+    return use_cases_map
 
 def get_skills_map() -> Dict[str, List[Dict]]:
     """Get skills map (entries with path_type='skill') grouped by industry."""
@@ -969,8 +1095,14 @@ def get_skills_map() -> Dict[str, List[Dict]]:
     return skills_map
 
 def get_prompt_templates_map() -> Dict[str, Dict[str, str]]:
-    """Get prompt templates - from Lakebase database only (no YAML fallback)."""
-    lakebase_data = get_usecase_descriptions_from_lakebase()
+    """Get prompt templates - from Lakebase database only (no YAML fallback).
+
+    Contributed use cases are included even when hidden or withdrawn so sessions
+    that already picked one keep resolving their brief.
+    """
+    db_rows = get_usecase_descriptions_from_lakebase()
+    contrib = _contrib_rows(db_rows or [], include_unlisted=True)
+    lakebase_data = (db_rows or []) + contrib
     if lakebase_data:
         # Group prompt templates by industry -> use_case
         templates_map = {}
@@ -983,7 +1115,7 @@ def get_prompt_templates_map() -> Dict[str, Dict[str, str]]:
                     templates_map[industry] = {}
                 templates_map[industry][use_case] = template
         # Cross-listed use cases resolve under the collection they are browsed in.
-        for m in _lakebase_cache.get("collection_members") or []:
+        for m in _members_with_contrib(contrib):
             template = templates_map.get(m.get("home_industry"), {}).get(m.get("use_case"))
             if template:
                 templates_map.setdefault(m["collection_id"], {})[m["use_case"]] = template
@@ -1582,10 +1714,11 @@ async def api_get_use_cases(industry_id: str, response: Response):
 @router.get("/prompt-template/{industry_id}/{use_case_id}", summary="Get prompt template")
 async def get_prompt_template(industry_id: str, use_case_id: str):
     """Returns the main prompt template for a specific industry and use case."""
-    if industry_id not in PROMPT_TEMPLATES:
+    templates = get_prompt_templates_map() or PROMPT_TEMPLATES
+    if industry_id not in templates:
         raise HTTPException(status_code=404, detail=f"Industry '{industry_id}' not found")
     
-    industry_templates = PROMPT_TEMPLATES[industry_id]
+    industry_templates = templates[industry_id]
     if use_case_id not in industry_templates:
         raise HTTPException(status_code=404, detail=f"Use case '{use_case_id}' not found for industry '{industry_id}'")
     
@@ -2647,6 +2780,7 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
     Computes next version automatically (max + 1).
     Never updates existing rows - always appends.
     """
+    reject_contributed_write(request.use_case)
     logger.info(f"[Config API] Creating new prompt config version for {request.industry}/{request.use_case}")
     
     schema = get_schema()
@@ -2797,6 +2931,7 @@ async def add_use_case(request: UseCaseCreate) -> Dict[str, Any]:
     """
     Add a new use case under an existing industry.
     """
+    reject_contributed_write(request.use_case)
     logger.info(f"[Config API] Adding new use case: {request.industry}/{request.use_case}")
     
     schema = get_schema()
@@ -2844,6 +2979,7 @@ async def toggle_usecase_active(industry: str, use_case: str) -> Dict[str, Any]:
     Toggle the is_active flag for a use case.
     This controls whether the use case appears in the workflow dropdown.
     """
+    reject_contributed_write(use_case)
     logger.info(f"[Config API] Toggling active status for {industry}/{use_case}")
     
     schema = get_schema()
@@ -2895,6 +3031,7 @@ async def toggle_usecase_certified(industry: str, use_case: str) -> Dict[str, An
     Certified use cases sort to the top of each section in the workshop flow
     and render a "Certified" badge on the card and workflow steps.
     """
+    reject_contributed_write(use_case)
     logger.info(f"[Config API] Toggling certified status for {industry}/{use_case}")
     
     schema = get_schema()
@@ -2946,6 +3083,7 @@ async def delete_usecase(industry: str, use_case: str) -> Dict[str, Any]:
     Delete a use case and all its versions.
     This is a hard delete - use toggle-active for soft disable.
     """
+    reject_contributed_write(use_case)
     logger.info(f"[Config API] Deleting use case: {industry}/{use_case}")
     
     schema = get_schema()

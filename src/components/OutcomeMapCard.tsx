@@ -3,6 +3,7 @@ import { Check, HelpCircle } from 'lucide-react';
 import type { SelectOption } from '../api/client';
 import { CertifiedBadge } from './CertifiedBadge';
 import { iconForUseCase } from './library/theme';
+import { UseCaseBadges } from './provenance/ProvenanceBadges';
 import {
   derivePills,
   deriveValueProp,
@@ -21,6 +22,8 @@ interface OutcomeMapCardProps {
   promptTemplate?: string;
   /** Position within the staggered entrance animation */
   staggerIndex: number;
+  /** Show the muted "Native" chip on native cards. */
+  showNative?: boolean;
 }
 
 /**
@@ -43,6 +46,7 @@ export function OutcomeMapCard({
   disabled,
   promptTemplate,
   staggerIndex,
+  showNative,
 }: OutcomeMapCardProps) {
   const pills = derivePills(useCase.value, promptTemplate);
   const cardRef = useRef<HTMLButtonElement>(null);
@@ -101,7 +105,7 @@ export function OutcomeMapCard({
       type="button"
       role="tab"
       aria-pressed={isSelected}
-      aria-label={`${useCase.label}, ${useCase.is_certified ? 'Certified, ' : ''}${useCase.category ?? ''}, ${pills.length} features`}
+      aria-label={`${useCase.label}, ${useCase.is_certified ? 'Certified, ' : ''}${useCase.contribution ? `contributed by ${useCase.contribution.contributor.display_name}, ` : ''}${useCase.category ?? ''}, ${pills.length} features`}
       disabled={disabled}
       onClick={() => !disabled && onSelect(useCase.value)}
       onMouseMove={handleMouseMove}
@@ -170,6 +174,12 @@ export function OutcomeMapCard({
       {useCase.home_label && (
         <p className="relative -mt-2.5 mb-3 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground/80">From {useCase.home_label}</p>
       )}
+      <UseCaseBadges
+        provenance={useCase.provenance}
+        contribution={useCase.contribution}
+        showNative={showNative}
+        className="relative -mt-1.5 mb-3"
+      />
 
       {/* Leaf-item pills — always fully visible, content over decoration */}
       {pills.length > 0 && (

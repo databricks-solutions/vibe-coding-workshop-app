@@ -17,13 +17,20 @@ from pydantic import BaseModel, Field
 
 from src.backend.api.routes import (
     SKILL_USE_CASES,
+    _community_collection_row,
+    _contrib_rows,
     _get_session_user,
     _invalidate_cache,
+    _members_with_contrib,
+    _refresh_lakebase_cache,
     ensure_library_schema,
     execute_insert,
     execute_query,
     get_schema,
 )
+from src.backend.api import routes as _routes
+from src.backend.contrib import COMMUNITY_COLLECTION_ID, is_contributed_key
+from src.backend.contrib import overrides as contrib_overrides
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -103,11 +110,18 @@ async def get_library(response: Response) -> Dict[str, Any]:
             FROM {schema}.usecase_collection_members
         """)
 
+    contributed = _library_contributed(use_cases)
+    use_cases.extend(contributed["use_cases"])
+    members.extend(contributed["members"])
+
     known = {c["collection_id"] for c in collections}
     for uc in use_cases:
         ind = uc["industry"]
         if ind not in known:
             known.add(ind)
+            if ind == COMMUNITY_COLLECTION_ID:
+                collections.append({**_community_collection_row(), "updated_at": None, "updated_by": None})
+                continue
             collections.append({
                 "collection_id": ind, "kind": "industry", "label": uc.get("industry_label") or ind,
                 "description": None, "icon": None, "color": None, "display_order": 100,
@@ -115,6 +129,44 @@ async def get_library(response: Response) -> Dict[str, Any]:
             })
 
     return {"collections": collections, "use_cases": use_cases, "members": members, "capabilities": caps}
+
+
+def _library_contributed(db_use_cases: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Contributed use cases as read-only Library rows, plus their file-declared placements."""
+    _refresh_lakebase_cache()
+    rows = _contrib_rows(db_use_cases, include_unlisted=True)
+    db_members = {
+        (m.get("collection_id"), m.get("home_industry"), m.get("use_case"))
+        for m in _routes._lakebase_cache.get("collection_members") or []
+    }
+    use_cases = []
+    for r in rows:
+        c = r["contribution"]
+        use_cases.append({
+            "industry": r["industry"], "industry_label": r["industry_label"],
+            "use_case": r["use_case"], "use_case_label": r["use_case_label"],
+            "prompt_template": r["prompt_template"], "version": 1, "version_count": 1,
+            "is_active": r["is_active"], "is_certified": False, "path_type": r["path_type"],
+            "category": r.get("category"), "category_order": r.get("category_order"), "display_order": r.get("display_order"),
+            "created_by": c["contributor"]["display_name"], "source": "contributed", "updated_at": None,
+            "read_only": True, "provenance": r["provenance"], "contribution": c,
+        })
+    members = [m for m in _members_with_contrib(rows) if m.get("locked") and (m["collection_id"], m["home_industry"], m["use_case"]) not in db_members]
+    return {"use_cases": use_cases, "members": members}
+
+
+_CONTENT_FIELDS = {"is_certified", "use_case_label"}
+
+
+def _contributed_update(schema: str, use_case: str, fields: Dict[str, Any], user: Optional[str]) -> bool:
+    blocked = _CONTENT_FIELDS & set(fields)
+    if blocked:
+        raise HTTPException(
+            status_code=409,
+            detail="Contributed use cases are read-only here: their name and certification come from the contrib/ folder. "
+                   "You can hide them or move them.",
+        )
+    return contrib_overrides.upsert(schema, use_case, fields, user)
 
 
 # ---------- Collections ----------
@@ -289,20 +341,39 @@ def _update_use_case(schema: str, industry: str, use_case: str, fields: Dict[str
 
 
 @router.patch("/config/use-cases/bulk")
-async def bulk_update_use_cases(body: BulkUpdate) -> Dict[str, Any]:
+async def bulk_update_use_cases(body: BulkUpdate, request: Request) -> Dict[str, Any]:
     schema = get_schema()
+    user = _get_session_user(request)
     fields = {k: v for k, v in _set_fields(body).items() if k in ("is_active", "is_certified")}
-    failed = [f"{i.industry}/{i.use_case}" for i in body.items if not _update_use_case(schema, i.industry, i.use_case, fields)]
+    contrib_fields = {k: v for k, v in fields.items() if k == "is_active"}
+    failed, skipped, updated = [], [], 0
+    for i in body.items:
+        if is_contributed_key(i.use_case):
+            if not contrib_fields:
+                skipped.append(i.use_case)
+                continue
+            ok = contrib_overrides.upsert(schema, i.use_case, contrib_fields, user)
+        else:
+            ok = _update_use_case(schema, i.industry, i.use_case, fields)
+        if ok:
+            updated += 1
+        else:
+            failed.append(f"{i.industry}/{i.use_case}")
     _invalidate_cache()
     if failed:
         raise HTTPException(status_code=500, detail=f"Couldn't update {len(failed)} use case(s).")
-    return {"success": True, "updated": len(body.items)}
+    return {"success": True, "updated": updated, "skipped": skipped}
 
 
 @router.patch("/config/use-cases/{industry}/{use_case}")
-async def update_use_case(industry: str, use_case: str, body: UseCaseUpdate) -> Dict[str, Any]:
+async def update_use_case(industry: str, use_case: str, body: UseCaseUpdate, request: Request) -> Dict[str, Any]:
     schema = get_schema()
-    if not _update_use_case(schema, industry, use_case, _set_fields(body)):
+    fields = _set_fields(body)
+    if is_contributed_key(use_case):
+        ok = _contributed_update(schema, use_case, fields, _get_session_user(request))
+    else:
+        ok = _update_use_case(schema, industry, use_case, fields)
+    if not ok:
         raise HTTPException(status_code=500, detail="Couldn't update the use case.")
     _invalidate_cache()
     return {"success": True}
@@ -371,8 +442,20 @@ async def set_layout(collection_id: str, body: LayoutUpdate) -> Dict[str, Any]:
     schema = get_schema()
     for item in body.items:
         fields = {"category": item.category, "category_order": item.category_order, "display_order": item.display_order}
-        if item.industry == collection_id:
+        if item.industry == collection_id and is_contributed_key(item.use_case):
+            contrib_overrides.upsert(schema, item.use_case, fields, None)
+        elif item.industry == collection_id:
             _update_use_case(schema, item.industry, item.use_case, fields)
+        elif is_contributed_key(item.use_case):
+            execute_insert(
+                f"""INSERT INTO {schema}.usecase_collection_members
+                    (collection_id, home_industry, use_case, category, category_order, display_order, added_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'library')
+                    ON CONFLICT (collection_id, home_industry, use_case) DO UPDATE
+                    SET category = EXCLUDED.category, category_order = EXCLUDED.category_order,
+                        display_order = EXCLUDED.display_order""",
+                (collection_id, item.industry, item.use_case, item.category, item.category_order, item.display_order),
+            )
         else:
             execute_insert(
                 f"""UPDATE {schema}.usecase_collection_members
@@ -386,6 +469,8 @@ async def set_layout(collection_id: str, body: LayoutUpdate) -> Dict[str, Any]:
 
 @router.post("/config/use-cases/{industry}/{use_case}/review")
 async def review_use_case(industry: str, use_case: str, body: ReviewAction) -> Dict[str, Any]:
+    if is_contributed_key(use_case):
+        raise HTTPException(status_code=409, detail="Contributed use cases are reviewed in their pull request.")
     schema = get_schema()
     caps = ensure_library_schema(schema)
     fields: Dict[str, Any] = {"is_active": True} if body.action == "approve" else {}

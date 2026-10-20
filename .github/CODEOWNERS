@@ -1,0 +1,15 @@
+# Maintainers review everything by default.
+*                                   @prashsub @varunrao
+
+# Contributed use cases (see contrib/README.md).
+# The registry decides who exists and who may certify, so only maintainers own it.
+/contrib/                           @prashsub @varunrao
+/contrib/contributors/              @prashsub @varunrao
+/contrib/certifications/            @prashsub @varunrao
+/contrib/schema/                    @prashsub @varunrao
+/src/backend/contrib/               @prashsub @varunrao
+/scripts/contrib/                   @prashsub @varunrao
+
+# Each contributor's own use cases. Add a line here when you register a
+# contributor: maintainers plus the contributor's GitHub user or team.
+/contrib/usecases/sample/           @prashsub @varunrao

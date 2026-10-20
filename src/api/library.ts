@@ -3,6 +3,8 @@
  * technical solutions), their use cases and cross-listings.
  */
 
+import type { Contribution, Provenance } from './contrib';
+
 export type CollectionKind = 'industry' | 'function' | 'solution';
 
 export interface LibraryCollection {
@@ -26,7 +28,8 @@ export type UseCaseSource =
   | 'ideate_changes'
   | 'ideate_rejected'
   | 'ideate_approved'
-  | 'ideate_dismissed';
+  | 'ideate_dismissed'
+  | 'contributed';
 
 export interface LibraryUseCase {
   industry: string;
@@ -45,6 +48,10 @@ export interface LibraryUseCase {
   created_by: string | null;
   source: UseCaseSource;
   updated_at: string | null;
+  /** Contributed use cases: content comes from contrib/ and only Live and placement can change. */
+  read_only?: boolean;
+  provenance?: Provenance;
+  contribution?: Contribution;
 }
 
 export interface LibraryMember {
@@ -54,6 +61,8 @@ export interface LibraryMember {
   category: string | null;
   category_order: number | null;
   display_order: number | null;
+  /** Placement declared by a contributed use case's file; can't be removed in the Library. */
+  locked?: boolean;
 }
 
 export interface LibraryPayload {

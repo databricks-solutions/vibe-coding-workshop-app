@@ -1,0 +1,56 @@
+name: Validate contributed use cases
+
+on:
+  pull_request:
+    paths:
+      - "contrib/**"
+      - "src/backend/contrib/**"
+      - "scripts/contrib/**"
+      - "tests/contrib/**"
+      - ".github/CODEOWNERS"
+      - ".github/workflows/contrib-validate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Validate contributions (with pull-request rules)
+        run: python scripts/contrib/validate.py --base "origin/${{ github.base_ref }}"
+
+      - name: Check generated JSON schemas are current
+        run: python scripts/contrib/gen_schema.py --check
+
+      - name: Contrib tests
+        run: python -m pytest tests/contrib -q -c /dev/null --rootdir=.
+
+  dco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every commit is signed off (git commit -s)
+        run: |
+          missing=0
+          for sha in $(git rev-list "origin/${{ github.base_ref }}..HEAD" --no-merges); do
+            if ! git log -1 --format=%B "$sha" | grep -qiE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::Commit $sha has no Signed-off-by line. Amend with: git commit --amend -s"
+              missing=1
+            fi
+          done
+          exit $missing

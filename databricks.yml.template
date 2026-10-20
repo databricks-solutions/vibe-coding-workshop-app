@@ -130,6 +130,7 @@ sync:
     - "requirements.txt"
     - "scripts/**"
     - "db/**"
+    - "contrib/**"
     - "VERSION"
   exclude:
     - "node_modules/**"

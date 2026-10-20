@@ -3,6 +3,8 @@
  * Handles all communication with the FastAPI backend
  */
 
+import type { Contribution, Provenance } from './contrib';
+
 const API_BASE_URL = '/api';
 
 // ============== Dev persona (local dev / Playwright only) ==============
@@ -71,6 +73,9 @@ export interface SelectOption {
   /** Use cases cross-listed into another collection: the collection that owns the content. */
   home_industry?: string;
   home_label?: string;
+  /** Contributed use cases only; absent means native. */
+  provenance?: Provenance;
+  contribution?: Contribution;
 }
 
 export interface GeneratedContent {

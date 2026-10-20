@@ -17,6 +17,8 @@ interface OutcomeMapColumnProps {
   promptTemplates: Record<string, string>;
   /** Index of this column among the rendered columns (0-based) for entrance stagger */
   columnIndex: number;
+  /** Label native cards too (the collection mixes native and contributed use cases). */
+  showNative?: boolean;
 }
 
 /**
@@ -46,6 +48,7 @@ export function OutcomeMapColumn({
   disabled,
   promptTemplates,
   columnIndex,
+  showNative,
 }: OutcomeMapColumnProps) {
   // Normalise card stagger so newly-revealed rows (after "Show more") still
   // cascade left-to-right within their row rather than inheriting an
@@ -103,6 +106,7 @@ export function OutcomeMapColumn({
           <OutcomeMapCard
             key={uc.value}
             useCase={uc}
+            showNative={showNative}
             theme={theme}
             isSelected={selectedUseCase === uc.value}
             hasSelection={hasSelection}

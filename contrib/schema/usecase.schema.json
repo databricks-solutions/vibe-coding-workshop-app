@@ -1,0 +1,309 @@
+{
+  "$defs": {
+    "ChangelogEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "date": {
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "notes": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Notes",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "date",
+        "notes"
+      ],
+      "title": "ChangelogEntry",
+      "type": "object"
+    },
+    "Collections": {
+      "additionalProperties": false,
+      "properties": {
+        "also": {
+          "description": "Extra collection ids to cross-list into.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Also",
+          "type": "array"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Outcome-map column in the home collection.",
+          "title": "Category"
+        },
+        "category_order": {
+          "anyOf": [
+            {
+              "maximum": 999,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category Order"
+        },
+        "display_order": {
+          "anyOf": [
+            {
+              "maximum": 999,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Order"
+        },
+        "home": {
+          "description": "Collection id, e.g. 'retail'. Falls back to Partner & Community when this install doesn't have it.",
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9_]*$",
+          "title": "Home",
+          "type": "string"
+        }
+      },
+      "required": [
+        "home"
+      ],
+      "title": "Collections",
+      "type": "object"
+    },
+    "Link": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "title": "Link",
+      "type": "object"
+    },
+    "Media": {
+      "additionalProperties": false,
+      "properties": {
+        "cover": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path relative to the use case folder, e.g. images/cover.jpg.",
+          "title": "Cover"
+        },
+        "screenshots": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 6,
+          "title": "Screenshots",
+          "type": "array"
+        }
+      },
+      "title": "Media",
+      "type": "object"
+    },
+    "Person": {
+      "additionalProperties": false,
+      "properties": {
+        "github": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:/[A-Za-z0-9_.-]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Github"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Person",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``contrib/usecases/<contributor_id>/<slug>/usecase.yaml``",
+  "properties": {
+    "authors": {
+      "items": {
+        "$ref": "#/$defs/Person"
+      },
+      "maxItems": 20,
+      "title": "Authors",
+      "type": "array"
+    },
+    "changelog": {
+      "items": {
+        "$ref": "#/$defs/ChangelogEntry"
+      },
+      "minItems": 1,
+      "title": "Changelog",
+      "type": "array"
+    },
+    "co_contributors": {
+      "description": "Other registered contributor ids.",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Co Contributors",
+      "type": "array"
+    },
+    "collections": {
+      "$ref": "#/$defs/Collections"
+    },
+    "links": {
+      "items": {
+        "$ref": "#/$defs/Link"
+      },
+      "maxItems": 10,
+      "title": "Links",
+      "type": "array"
+    },
+    "media": {
+      "$ref": "#/$defs/Media"
+    },
+    "path_type": {
+      "default": "use_case",
+      "enum": [
+        "use_case",
+        "skill"
+      ],
+      "title": "Path Type",
+      "type": "string"
+    },
+    "sample": {
+      "default": false,
+      "description": "Reserved for the 'sample' contributor.",
+      "title": "Sample",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "slug": {
+      "description": "Must match the folder name. Permanent.",
+      "maxLength": 48,
+      "pattern": "^[a-z0-9][a-z0-9_]*$",
+      "title": "Slug",
+      "type": "string"
+    },
+    "status": {
+      "default": "active",
+      "enum": [
+        "active",
+        "deprecated",
+        "withdrawn"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "description": "One line shown on cards.",
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Summary",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Tags",
+      "type": "array"
+    },
+    "title": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "version": {
+      "description": "Bump on every change; add a changelog entry.",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "slug",
+    "title",
+    "summary",
+    "version",
+    "collections",
+    "changelog"
+  ],
+  "title": "UseCaseManifest",
+  "type": "object"
+}

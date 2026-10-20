@@ -6,6 +6,7 @@ import { keyOf, placementsOf, type LibraryModel } from './model';
 import { collectionIcon, relativeTime, iconForUseCase, collectionTint, tintStyle } from './theme';
 import { Avatar, CollectionGlyph, Switch } from './ui';
 import { cx } from './cx';
+import { UseCaseBadges } from '../provenance/ProvenanceBadges';
 
 type SortKey = 'name' | 'status' | 'updated' | 'home';
 
@@ -108,6 +109,7 @@ export function UseCaseTable({ rows, model, selected, onToggleSelect, onToggleAl
                         <span className={cx('text-ui-sm font-medium truncate', uc.is_active ? 'text-foreground' : 'text-muted-foreground')}>{uc.use_case_label}</span>
                         {uc.is_certified && <BadgeCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
                         {uc.source === 'ideate' && !uc.is_active && <span className="ml-1 px-1.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300 text-ui-3xs font-semibold">IDEATE</span>}
+                        {uc.contribution && <UseCaseBadges provenance={uc.provenance} contribution={uc.contribution} compact className="ml-1 flex-nowrap" />}
                       </div>
                       <div className="text-ui-xs text-muted-foreground truncate">{deriveValueProp(uc.prompt_template, '')}</div>
                     </div>
@@ -122,13 +124,13 @@ export function UseCaseTable({ rows, model, selected, onToggleSelect, onToggleAl
                   <div className="flex items-center gap-2">
                     <Switch size="sm" checked={uc.is_active} onChange={v => onLive(uc, v)} label={uc.is_active ? 'Hide from attendees' : 'Show to attendees'} />
                     <span className={cx('text-ui-2xs font-medium w-10', uc.is_active ? 'text-emerald-600 dark:text-emerald-300' : 'text-muted-foreground')}>{uc.is_active ? 'Live' : 'Hidden'}</span>
-                    <button
+                    {!uc.read_only && <button
                       onClick={() => onCertified(uc, !uc.is_certified)}
                       aria-label={uc.is_certified ? 'Remove certification' : 'Certify'}
                       className={cx('p-0.5 rounded', uc.is_certified ? 'text-amber-500' : 'text-muted-foreground/40 hover:text-amber-500')}
                     >
                       <Star className="w-3.5 h-3.5" fill={uc.is_certified ? 'currentColor' : 'none'} />
-                    </button>
+                    </button>}
                   </div>
                 </td>
                 <td className="px-3 py-2.5">
@@ -141,7 +143,7 @@ export function UseCaseTable({ rows, model, selected, onToggleSelect, onToggleAl
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2 text-ui-xs text-muted-foreground">
                     <Avatar email={uc.created_by} size="xs" />
-                    <span className="tabular-nums">v{uc.version} · {relativeTime(uc.updated_at) || '—'}</span>
+                    <span className="tabular-nums">v{uc.contribution?.version ?? uc.version} · {relativeTime(uc.updated_at) || '—'}</span>
                   </div>
                 </td>
               </tr>

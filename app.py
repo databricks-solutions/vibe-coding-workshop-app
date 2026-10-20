@@ -29,7 +29,9 @@ from fastapi.staticfiles import StaticFiles
 
 # Import the API router
 from src.backend.api.hackathon import router as hackathon_router
+from src.backend.api.contrib import router as contrib_router
 from src.backend.api.routes import router as api_router
+from src.backend.contrib import registry as contrib_registry
 from src.backend.executor import configure_default_executor, shutdown_executor
 
 MCP_MOUNT_ENABLED = os.environ.get("MCP_MOUNT_ENABLED", "").strip().lower() in {
@@ -50,6 +52,7 @@ async def app_lifespan(_app):
     # running loop whether or not /mcp is mounted; the MCP session manager's
     # lifespan is wrapped inside it when the mount is enabled.
     configure_default_executor(asyncio.get_running_loop())
+    contrib_registry.load()
     try:
         if MCP_MOUNT_ENABLED:
             async with mcp_app.router.lifespan_context(mcp_app):
@@ -282,6 +285,7 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api", tags=["API"])
 app.include_router(hackathon_router, prefix="/api", tags=["Hackathons"])
 app.include_router(library_router, prefix="/api", tags=["Library"])
+app.include_router(contrib_router, prefix="/api", tags=["Contributed use cases"])
 if ideate_router is not None:
     app.include_router(ideate_router, prefix="/api", tags=["Ideate"])
 if ideate_ideas_router is not None:

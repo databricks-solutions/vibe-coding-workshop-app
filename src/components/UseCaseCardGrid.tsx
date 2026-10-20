@@ -1,6 +1,8 @@
 import { CheckCircle2 } from 'lucide-react';
 import type { SelectOption } from '../api/client';
 import { CertifiedBadge } from './CertifiedBadge';
+import { UseCaseBadges } from './provenance/ProvenanceBadges';
+import { hasContributions } from './provenance/provenance';
 
 interface UseCaseCardGridProps {
   useCases: SelectOption[];
@@ -17,6 +19,7 @@ export function UseCaseCardGrid({ useCases, selectedUseCase, onSelect, disabled 
     .sort((a, b) => (a.is_certified ? 0 : 1) - (b.is_certified ? 0 : 1));
 
   if (filtered.length === 0) return null;
+  const showNative = hasContributions(filtered);
 
   return (
     <div className="mb-5 animate-slide-up-fade">
@@ -51,6 +54,7 @@ export function UseCaseCardGrid({ useCases, selectedUseCase, onSelect, disabled 
               </div>
               <h4 className={`text-ui-base font-semibold text-foreground ${uc.is_certified ? 'pr-12' : 'pr-6'}`}>{uc.label}</h4>
               {uc.home_label && <p className="mt-1 text-ui-2xs font-medium uppercase tracking-wide text-muted-foreground">From {uc.home_label}</p>}
+              <UseCaseBadges provenance={uc.provenance} contribution={uc.contribution} showNative={showNative} className="mt-2" />
             </button>
           );
         })}

@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=../../schema/certification.schema.json
+#
+# SAMPLE CERTIFICATION. Certifications live in the certifier's own folder:
+#   contrib/certifications/<certifier_id>/<contributor_id>__<slug>.yaml
+# CODEOWNERS makes the certifier's team approve every file in its folder, and
+# only contributors with can_certify: true can certify. The badge shows while
+# `version` matches the use case's current version.
+
+schema_version: 1
+version: 1.0.0
+date: 2026-10-20
+notes: Ran the full workshop with this brief end to end on Databricks Apps with Lakebase.
+evidence_url: https://github.com/databricks-solutions/vibe-coding-workshop-app/blob/main/contrib/README.md
