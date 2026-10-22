@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -24,6 +25,7 @@ DEFAULT_SOURCE_BASE_URL = "https://github.com/databricks-solutions/vibe-coding-w
 
 _lock = threading.Lock()
 _catalog: Optional[ContribCatalog] = None
+_loaded_at: Optional[str] = None
 
 
 def enabled() -> bool:
@@ -41,13 +43,14 @@ def source_base_url() -> str:
 
 def load(force: bool = False) -> ContribCatalog:
     """Load (or return) the catalog. Never raises."""
-    global _catalog
+    global _catalog, _loaded_at
     with _lock:
         if _catalog is not None and not force:
             return _catalog
         root = contrib_dir()
         if not enabled():
             _catalog = ContribCatalog(root=root)
+            _loaded_at = datetime.now(timezone.utc).isoformat()
             logger.info("[Contrib] Disabled by CONTRIB_ENABLED")
             return _catalog
         try:
@@ -57,6 +60,7 @@ def load(force: bool = False) -> ContribCatalog:
             _catalog = ContribCatalog(root=root)
         for issue in _catalog.errors:
             logger.warning(f"[Contrib] Skipped {issue.path}: {issue.message}")
+        _loaded_at = datetime.now(timezone.utc).isoformat()
         logger.info(
             f"[Contrib] Loaded {len(_catalog.use_cases)} contributed use case(s) from "
             f"{len(_catalog.contributors)} contributor(s); {len(_catalog.errors)} skipped"
@@ -69,9 +73,10 @@ def get_catalog() -> ContribCatalog:
 
 
 def reset_for_tests(catalog: Optional[ContribCatalog] = None) -> None:
-    global _catalog
+    global _catalog, _loaded_at
     with _lock:
         _catalog = catalog
+        _loaded_at = None
 
 
 # ---------- Public (API-facing) shapes ----------
@@ -124,6 +129,7 @@ def contribution_public(uc: ContributedUseCase) -> Dict[str, Any]:
         "co_contributors": [_contributor_brief(c) for c in uc.co_contributors],
         "authors": [p.model_dump() for p in m.authors],
         "tags": list(m.tags),
+        "featured_resource": m.featured_resource.model_dump() if m.featured_resource else None,
         "links": [link.model_dump() for link in m.links],
         "changelog": [
             {"version": e.version, "date": e.date.isoformat(), "notes": e.notes}
@@ -178,12 +184,16 @@ def catalog_rows() -> List[Dict[str, Any]]:
 
 def status() -> Dict[str, Any]:
     catalog = get_catalog()
+    base = source_base_url()
     return {
         "enabled": enabled(),
         "root": catalog.root.name,
         "contributors": len(catalog.contributors),
         "use_cases": len(catalog.use_cases),
         "sample_present": any(uc.manifest.sample for uc in catalog.use_cases.values()),
+        "loaded_at": _loaded_at,
+        "guide_url": f"{base}/contrib/README.md" if base else None,
+        "sample_url": f"{base}/contrib/usecases/sample/contributed_usecase_starter" if base else None,
         "errors": [{"path": i.path, "message": i.message} for i in catalog.errors],
         "warnings": [{"path": i.path, "message": i.message} for i in catalog.warnings],
     }

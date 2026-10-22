@@ -19,6 +19,9 @@ import { cx } from './cx';
 import { UseCaseBadges } from '../provenance/ProvenanceBadges';
 import { ContributionPanel } from '../provenance/ContributionPanel';
 import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
+import { isRepositoryManagedCollection } from './curation';
+import { SupportingResourceCard } from './SupportingResourceCard';
+import { featuredResourceOf, resourcePresentation } from './supportingResource';
 
 type Tab = 'overview' | 'edit' | 'placement' | 'history';
 
@@ -28,11 +31,12 @@ interface Props {
   actions: LibraryActions;
   onClose: () => void;
   onNavigateCollection: (id: string) => void;
+  resourcesEnabled?: boolean;
 }
 
 const draftKey = (uc: LibraryUseCase) => `library.draft.${keyOf(uc)}`;
 
-export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollection }: Props) {
+export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollection, resourcesEnabled = false }: Props) {
   const [tab, setTab] = useState<Tab>('overview');
   const [wide, setWide] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -58,6 +62,7 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
 
   const home = uc ? model.byId[uc.industry] : undefined;
   const readOnly = !!uc?.read_only;
+  const awaitingIdeateApproval = uc?.source === 'ideate_pending' || uc?.source === 'ideate_changes' || uc?.source === 'ideate_rejected';
   const tint = home ? collectionTint(home) : { h: 172, s: 66 };
 
   return createPortal(
@@ -127,13 +132,22 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
                 </div>
               </div>
               <div className="flex items-center gap-2 px-6 pb-4">
-                <FlagPill
-                  on={uc.is_active}
-                  label={uc.is_active ? 'Live for attendees' : 'Hidden'}
-                  icon={<Eye className="w-3.5 h-3.5" />}
-                  tone="emerald"
-                  onToggle={v => void actions.setFlags([uc], { is_active: v })}
-                />
+                {awaitingIdeateApproval ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-ui-xs font-medium text-amber-700 ring-1 ring-amber-500/25 dark:text-amber-300"
+                    title="Approve this submission from the Idea review workspace before publishing it."
+                  >
+                    <Lock className="w-3.5 h-3.5" /> Hidden until approved
+                  </span>
+                ) : (
+                  <FlagPill
+                    on={uc.is_active}
+                    label={uc.is_active ? 'Live for attendees' : 'Hidden'}
+                    icon={<Eye className="w-3.5 h-3.5" />}
+                    tone="emerald"
+                    onToggle={v => void actions.setFlags([uc], { is_active: v })}
+                  />
+                )}
                 {readOnly ? (
                   <span className="inline-flex items-center gap-1.5 text-ui-xs text-muted-foreground">
                     <Lock className="w-3.5 h-3.5" />Content and certification come from the contribution's files. You control Live and placement.
@@ -171,7 +185,7 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
 
             {/* Body */}
             <div className="flex-1 min-h-0 overflow-y-auto lib-scroll">
-              {tab === 'overview' && <OverviewTab model={model} uc={uc} />}
+              {tab === 'overview' && <OverviewTab model={model} uc={uc} actions={actions} resourcesEnabled={resourcesEnabled} />}
               {tab === 'edit' && !readOnly && <EditTab uc={uc} actions={actions} onDone={() => setTab('overview')} />}
               {tab === 'placement' && <PlacementTab model={model} uc={uc} actions={actions} />}
               {tab === 'history' && !readOnly && <HistoryTab uc={uc} actions={actions} />}
@@ -243,7 +257,7 @@ function FlagPill({ on, label, icon, tone, onToggle }: { on: boolean; label: str
   );
 }
 
-function OverviewTab({ model, uc }: { model: LibraryModel; uc: LibraryUseCase }) {
+function OverviewTab({ model, uc, actions, resourcesEnabled }: { model: LibraryModel; uc: LibraryUseCase; actions: LibraryActions; resourcesEnabled: boolean }) {
   const places = placementsOf(model, uc).filter(p => p.collection);
   const visibleIn = places.filter(p => p.collection!.is_enabled && uc.is_active);
   const homeCols = columnsFor(model.entriesByCollection[uc.industry] || []);
@@ -292,6 +306,7 @@ function OverviewTab({ model, uc }: { model: LibraryModel; uc: LibraryUseCase })
           </div>
         </div>
       </section>
+      <ResourceSection key={`${keyOf(uc)}-resource`} uc={uc} actions={actions} resourcesEnabled={resourcesEnabled} />
       {uc.contribution && (
         <section>
           <h3 className="text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Contribution</h3>
@@ -305,6 +320,123 @@ function OverviewTab({ model, uc }: { model: LibraryModel; uc: LibraryUseCase })
         </article>
       </section>
     </div>
+  );
+}
+
+function ResourceSection({ uc, actions, resourcesEnabled }: { uc: LibraryUseCase; actions: LibraryActions; resourcesEnabled: boolean }) {
+  const resource = featuredResourceOf(uc);
+  const [editing, setEditing] = useState(false);
+  const [url, setUrl] = useState(uc.resource_url ?? '');
+  const [label, setLabel] = useState(uc.resource_label ?? '');
+  const [saving, setSaving] = useState(false);
+  const preview = url.trim() ? resourcePresentation({ url: url.trim(), label }) : null;
+
+  if (uc.read_only) {
+    if (!resource) return null;
+    return (
+      <section>
+        <SupportingResourceCard resource={resource} />
+      </section>
+    );
+  }
+  if (!resourcesEnabled) return null;
+
+  const save = async () => {
+    if (url.trim() && !preview) return;
+    setSaving(true);
+    const ok = await actions.updateResource(uc, {
+      resource_url: url.trim() || null,
+      resource_label: label.trim() || null,
+    });
+    setSaving(false);
+    if (ok) setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <section>
+        {resource ? (
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground">Supporting resource</h3>
+              <button type="button" onClick={() => setEditing(true)} className="text-ui-xs font-medium text-muted-foreground hover:text-primary">
+                Edit
+              </button>
+            </div>
+            <SupportingResourceCard resource={resource} />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-border bg-background/25 px-4 py-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/[0.025]"
+          >
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-secondary text-muted-foreground"><Link2 className="h-4 w-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-ui-sm font-medium text-foreground">Add a supporting resource</span>
+              <span className="block text-ui-xs text-muted-foreground">Optional recording, Google Doc, Sheet, Slides, or web link</span>
+            </span>
+          </button>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-2xl border border-primary/20 bg-primary/[0.025] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-ui-sm font-semibold text-foreground">Supporting resource</h3>
+          <p className="mt-0.5 text-ui-xs text-muted-foreground">Optional. HTTPS links only; YouTube links receive a thumbnail automatically.</p>
+        </div>
+        <button type="button" onClick={() => setEditing(false)} className="text-ui-xs font-medium text-muted-foreground hover:text-foreground">Cancel</button>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <label className="text-ui-xs font-medium text-foreground">
+          URL
+          <input
+            value={url}
+            onChange={event => setUrl(event.target.value)}
+            placeholder="https://youtu.be/… or https://docs.google.com/…"
+            className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-ui-sm outline-none focus:border-primary/50"
+          />
+        </label>
+        <label className="text-ui-xs font-medium text-foreground">
+          Display label
+          <input
+            value={label}
+            onChange={event => setLabel(event.target.value)}
+            maxLength={120}
+            placeholder="Watch the demo"
+            className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-ui-sm outline-none focus:border-primary/50"
+          />
+        </label>
+      </div>
+      {url.trim() && !preview && <p className="mt-2 text-ui-xs text-amber-600 dark:text-amber-400">Enter a valid HTTPS link.</p>}
+      {preview && <div className="mt-3"><SupportingResourceCard resource={{ url: url.trim(), label }} compact /></div>}
+      <div className="mt-3 flex justify-end gap-2">
+        {resource && (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={async () => {
+              setUrl('');
+              setLabel('');
+              setSaving(true);
+              const ok = await actions.updateResource(uc, { resource_url: null, resource_label: null });
+              setSaving(false);
+              if (ok) setEditing(false);
+            }}
+            className="px-3 py-2 text-ui-xs font-semibold text-rose-600 hover:underline dark:text-rose-400"
+          >
+            Remove
+          </button>
+        )}
+        <button type="button" disabled={saving || !url.trim() || !preview} onClick={() => void save()} className={BTN_PRIMARY}>
+          {saving ? 'Saving…' : 'Save resource'}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -430,7 +562,11 @@ function PlacementTab({ model, uc, actions }: { model: LibraryModel; uc: Library
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {KINDS.map(k => {
-                  const opts = model.byKind[k.id].filter(c => !taken.has(c.collection_id) && c.label.toLowerCase().includes(q.toLowerCase()));
+                  const opts = model.byKind[k.id].filter(c =>
+                    !taken.has(c.collection_id)
+                    && !isRepositoryManagedCollection(c.collection_id)
+                    && c.label.toLowerCase().includes(q.toLowerCase()),
+                  );
                   if (!opts.length) return null;
                   return (
                     <div key={k.id}>

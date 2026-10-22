@@ -12,6 +12,7 @@ import { MAX_NAME_LENGTH } from '../brief';
 import { BusinessCaseButton, FadeIn, GhostButton, Headline, PrimaryButton, SHAPE_KINDS, type ShapeKind } from '../../journeykit';
 import { PriorityMatrix } from '../priority/PriorityMatrix';
 import type { PriorityAssessment } from '../priorityAssessment';
+import { SupportingResourceCard } from '../../library/SupportingResourceCard';
 
 export interface IdeaRecap {
   headline: string;
@@ -47,6 +48,7 @@ interface ReadyScreenProps {
   portfolio?: PriorityAssessment[];
   onImproveValue?: () => void;
   onImproveFeasibility?: () => void;
+  onOpenPriorityIdea?: (ideaId: string) => void;
 }
 
 export function ReadyScreen({
@@ -54,6 +56,7 @@ export function ReadyScreen({
   onBack, onStart, readOnly, moments = MOMENTS, offeredAddOns = [], requiredAddOns = [], addOns = [],
   onToggleAddOn, buildChecking = false, buildBlocker = null,
   priority = null, portfolio = [], onImproveValue, onImproveFeasibility,
+  onOpenPriorityIdea,
 }: ReadyScreenProps) {
   const genie = { icon: MessagesSquare, title: 'A Genie your team can chat with', body: 'Ask in plain English, get an answer in seconds.' };
   const trusted = { icon: ShieldCheck, title: `Trusted answers to your ${questionCount} question${questionCount === 1 ? '' : 's'}`, body: 'Tested and tuned until they come back right.' };
@@ -114,7 +117,8 @@ export function ReadyScreen({
       )}
 
       {useCase && (
-        <FadeIn delay={0.11} className="flex items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4">
+        <FadeIn delay={0.11} className="space-y-3 rounded-2xl border border-border bg-card px-5 py-4">
+          <div className="flex items-center gap-4">
           <span className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 shrink-0">
             {useCase.certified ? <CertifiedBadge size="md" /> : <BadgeCheck className="w-6 h-6 text-primary" />}
           </span>
@@ -125,6 +129,10 @@ export function ReadyScreen({
             </p>
             <p className="text-ui-sm text-muted-foreground">The Technical view opens this same use case, so you can switch any time.</p>
           </div>
+          </div>
+          {useCase.resourceUrl && (
+            <SupportingResourceCard resource={{ url: useCase.resourceUrl, label: useCase.resourceLabel }} compact />
+          )}
         </FadeIn>
       )}
 
@@ -163,6 +171,8 @@ export function ReadyScreen({
             portfolio={portfolio}
             onImproveValue={onImproveValue}
             onImproveFeasibility={onImproveFeasibility}
+            onSelectIdea={onOpenPriorityIdea}
+            onOpenIdea={onOpenPriorityIdea}
           />
         </FadeIn>
       )}

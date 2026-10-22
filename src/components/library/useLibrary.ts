@@ -23,7 +23,8 @@ export interface LibraryActions {
   setLayout: (collectionId: string, items: LayoutItem[]) => Promise<void>;
   review: (uc: LibraryUseCase, action: 'approve' | 'dismiss') => Promise<void>;
   publish: (uc: LibraryUseCase, template: string) => Promise<number | null>;
-  createUseCase: (body: { industry: string; use_case: string; use_case_label: string; prompt_template: string; category?: string | null; category_order?: number | null; alsoIn?: string[] }) => Promise<boolean>;
+  updateResource: (uc: LibraryUseCase, resource: { resource_url: string | null; resource_label: string | null }) => Promise<boolean>;
+  createUseCase: (body: { industry: string; use_case: string; use_case_label: string; prompt_template: string; category?: string | null; category_order?: number | null; alsoIn?: string[]; resource_url?: string | null; resource_label?: string | null }) => Promise<boolean>;
   deleteUseCase: (uc: LibraryUseCase) => Promise<void>;
 }
 
@@ -212,9 +213,27 @@ export function useLibrary(notify: Notify) {
     }
   }, [patchUseCases, notify]);
 
+  const updateResource: LibraryActions['updateResource'] = useCallback(async (uc, resource) => {
+    try {
+      await libraryApi.updateUseCase(uc.industry, uc.use_case, resource);
+      patchUseCases(new Set([keyOf(uc)]), () => resource);
+      notify({ tone: 'success', message: resource.resource_url ? 'Supporting resource saved' : 'Supporting resource removed' });
+      return true;
+    } catch (e) {
+      fail(e, 'Couldn’t save the supporting resource');
+      return false;
+    }
+  }, [patchUseCases, notify, fail]);
+
   const createUseCase: LibraryActions['createUseCase'] = useCallback(async body => {
     try {
       await libraryApi.createUseCase(body);
+      if (body.resource_url) {
+        await libraryApi.updateUseCase(body.industry, body.use_case, {
+          resource_url: body.resource_url,
+          resource_label: body.resource_label ?? null,
+        });
+      }
       if (body.category) {
         await libraryApi.setLayout(body.industry, [{
           industry: body.industry, use_case: body.use_case, category: body.category,
@@ -245,7 +264,7 @@ export function useLibrary(notify: Notify) {
 
   const actions: LibraryActions = {
     reload, setFlags, renameUseCase, updateCollection, createCollection, deleteCollection, reorderCollections,
-    setPlacements, setLayout, review, publish, createUseCase, deleteUseCase,
+    setPlacements, setLayout, review, publish, updateResource, createUseCase, deleteUseCase,
   };
 
   return { model, loading, error, capabilities: payload?.capabilities, actions };

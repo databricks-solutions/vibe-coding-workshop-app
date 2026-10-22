@@ -6,6 +6,7 @@ import type { LibraryActions } from './useLibrary';
 import { KINDS, collectionTint, tintStyle } from './theme';
 import { CollectionGlyph, Kbd, RowMenu, Switch } from './ui';
 import { cx } from './cx';
+import { isRepositoryManagedCollection } from './curation';
 
 export type LibraryView = { name: 'home' } | { name: 'all' } | { name: 'contributed' } | { name: 'review' } | { name: 'skills' } | { name: 'collection'; id: string };
 
@@ -192,9 +193,13 @@ export function CollectionNavigator({ model, view, actions, onNavigate, onSearch
                         <RowMenu
                           className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
                           items={[
-                            { label: 'Edit details', icon: <Pencil className="w-3.5 h-3.5" />, onSelect: () => onEditCollection(c) },
+                            ...(!isRepositoryManagedCollection(c.collection_id)
+                              ? [{ label: 'Edit details', icon: <Pencil className="w-3.5 h-3.5" />, onSelect: () => onEditCollection(c) }]
+                              : []),
                             { label: c.is_enabled ? 'Hide from attendees' : 'Show to attendees', icon: <ToggleLeft className="w-3.5 h-3.5" />, onSelect: () => void actions.updateCollection(c.collection_id, { is_enabled: !c.is_enabled }) },
-                            { label: 'Delete…', icon: <Trash2 className="w-3.5 h-3.5" />, danger: true, onSelect: () => onDeleteCollection(c) },
+                            ...(!isRepositoryManagedCollection(c.collection_id)
+                              ? [{ label: 'Delete…', icon: <Trash2 className="w-3.5 h-3.5" />, danger: true, onSelect: () => onDeleteCollection(c) }]
+                              : []),
                           ]}
                         />
                         <Switch size="sm" checked={c.is_enabled} tint={collectionTint(c)} label={`${c.label}: ${c.is_enabled ? 'visible' : 'hidden'} for attendees`} onChange={v => void actions.updateCollection(c.collection_id, { is_enabled: v })} />

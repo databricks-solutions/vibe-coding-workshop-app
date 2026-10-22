@@ -73,6 +73,9 @@ export interface SelectOption {
   /** Use cases cross-listed into another collection: the collection that owns the content. */
   home_industry?: string;
   home_label?: string;
+  /** Optional featured recording, document, presentation, or other supporting link. */
+  resource_url?: string | null;
+  resource_label?: string | null;
   /** Contributed use cases only; absent means native. */
   provenance?: Provenance;
   contribution?: Contribution;

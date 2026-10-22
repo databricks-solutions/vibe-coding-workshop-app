@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { FadeIn, GhostButton, Headline, PrimaryButton } from '../../journeykit';
 import { CatalogSchemaPicker } from '../sources/CatalogSchemaPicker';
 
-type Option = { id: DataSource; icon: typeof Database | null; title: string; body: string; tag?: string; footnote?: string; slug?: string };
+type Option = { id: DataSource; icon: typeof Database | null; title: string; body: string; tag?: string; footnote?: string; slug?: string; loading?: boolean };
 
 const OPTIONS: Option[] = [
   {
@@ -58,7 +58,8 @@ function useBlueprintOption(hint: ModelHint): Option | null {
     return loading ? {
       id: 'blueprint',
       icon: null,
-      tag: 'New',
+      loading: true,
+      tag: 'Loading',
       title: 'Start from an industry data model',
       body: 'Loading the ready-made industry models that best fit your idea…',
       footnote: 'From Databricks Industry Solutions · lakehouse-industry-data-models',
@@ -187,11 +188,12 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
       const t = e.target as HTMLElement | null;
       if ((t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = Number(e.key);
-      if (n >= 1 && n <= options.length) onChange(options[n - 1].id);
-      else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
+      if (n >= 1 && n <= options.length) {
+        if (!options[n - 1].loading) onChange(options[n - 1].id);
+      } else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
         e.preventDefault();
         if (value) onNext();
-        else onChange(recommended.id);
+        else if (!catalogLoading) onChange(recommended.id);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -217,16 +219,15 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
           <Info className="w-3 h-3 shrink-0" /> Decides what Genie Code sets up first. You can change it later.
           <span className="hidden md:inline text-muted-foreground/70"> Press 1 to {options.length}, Enter to {value ? 'continue' : 'take the recommendation'}.</span>
         </p>
+        {catalogLoading && (
+          <p role="status" className="flex items-center gap-1.5 text-ui-xs text-muted-foreground mt-1.5 animate-fade-in">
+            <Loader2 className="w-3 h-3 animate-spin text-primary" /> Matching your idea to ready-made industry models…
+          </p>
+        )}
       </FadeIn>
 
       <div role="radiogroup" className="grid gap-3">
-        {catalogLoading ? (
-          <div className="grid gap-3" aria-label="Loading data choices">
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className="h-[106px] rounded-2xl border border-border bg-card animate-pulse" />
-            ))}
-          </div>
-        ) : options.map((opt, i) => {
+        {options.map((opt, i) => {
           const selected = value === opt.id;
           const isRec = opt.id === recommended.id;
           const Icon = opt.icon;
@@ -240,11 +241,12 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
                 <button
                   role="radio"
                   aria-checked={selected}
-                  onClick={() => onChange(opt.id)}
-                  className="w-full flex items-start gap-4 p-5 text-left"
+                  aria-disabled={opt.loading || undefined}
+                  onClick={() => !opt.loading && onChange(opt.id)}
+                  className={`w-full flex items-start gap-4 p-5 text-left ${opt.loading ? 'cursor-progress' : ''}`}
                 >
                   <span className={`flex items-center justify-center w-11 h-11 rounded-xl shrink-0 transition-colors ${selected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
-                    {Icon ? <Icon className="w-5 h-5" /> : <MiniConstellation nodes={8} size={30} active={selected} />}
+                    {opt.loading ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : Icon ? <Icon className="w-5 h-5" /> : <MiniConstellation nodes={8} size={30} active={selected} />}
                   </span>
                   <span className="flex-1 min-w-0">
                     <span className="flex items-center gap-2">
@@ -254,7 +256,7 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
                           <Sparkles className="w-3 h-3" /> Recommended
                         </span>
                       ) : opt.tag && (
-                        <span className={`px-2 py-0.5 rounded-full text-ui-xs font-medium ${opt.id === 'blueprint' ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground'}`}>{opt.tag}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-ui-xs font-medium ${opt.id === 'blueprint' && !opt.loading ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground'}`}>{opt.tag}</span>
                       )}
                       <kbd className="hidden md:flex ml-auto w-6 h-6 rounded-md bg-secondary text-ui-2xs font-semibold text-muted-foreground items-center justify-center">{i + 1}</kbd>
                     </span>

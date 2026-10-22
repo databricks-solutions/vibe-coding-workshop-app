@@ -27,6 +27,7 @@ import { buildContext } from './components/journeykit/engine/ideaContext';
 import { buildDescription, buildTargetFor, slugOf, useLinkedIdea } from './components/journeykit/engine/handoff';
 import type { Idea, QuestionSource } from './components/journeykit/engine/types';
 import { BuildLinkBar } from './components/journeykit/stage/BuildLinkBar';
+import { PageLoader } from './components/journeykit/ui/primitives';
 import { 
   HeaderSessionMenu,
   SaveSessionDialog, 
@@ -341,6 +342,7 @@ export default function App() {
 
   // Session loading state - for professional loading overlay
   const [isSessionLoading, setIsSessionLoading] = useState(true);
+  const [sessionLoadingLabel, setSessionLoadingLabel] = useState('Restoring your session');
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isCreatingNewSession, setIsCreatingNewSession] = useState(false);
   const [isCreatingFadingOut, setIsCreatingFadingOut] = useState(false);
@@ -1246,6 +1248,9 @@ export default function App() {
 
   const handleLoadSession = (id: string) => {
     window.history.replaceState({}, '', `?sessionId=${id}`);
+    setSessionLoadingLabel('Opening your project');
+    setIsFadingOut(false);
+    setIsSessionLoading(true);
     loadSession(id);
     setShowSessionList(false);
   };
@@ -1714,7 +1719,7 @@ export default function App() {
   }, [isSessionLoading]);
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-dvh flex bg-background">
       {/* Mobile navigation drawer */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-40 md:hidden animate-backdrop-fade-in">
@@ -1771,7 +1776,7 @@ export default function App() {
                         <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                       </div>
                       <p className="text-ui-md font-medium text-foreground">
-                        Restoring your session<span className="loading-dots-inline">...</span>
+                        {sessionLoadingLabel}<span className="loading-dots-inline">...</span>
                       </p>
                     </div>
                   </div>
@@ -1860,7 +1865,7 @@ export default function App() {
                 <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto">
                   {linkedIdea && !isSessionLoading && <BuildLinkBar idea={linkedIdea} readOnly={readOnly} />}
                   {viewMode === 'insights' ? (
-                    <Suspense fallback={<div className="min-h-[50vh]" />}>
+                    <Suspense fallback={<PageLoader label="Loading Insights…" />}>
                       <InsightsFlow
                         sessionId={sessionId}
                         isSessionLoaded={!isSessionLoading}
@@ -2037,7 +2042,7 @@ export default function App() {
           <Route
             path="/ideate/*"
             element={
-              <Suspense fallback={<div className="flex-1 bg-background" />}>
+              <Suspense fallback={<PageLoader label="Loading Ideate…" className="flex-1 bg-background" />}>
                 <IdeateApp onOpenMobileNav={() => setMobileSidebarOpen(true)} />
               </Suspense>
             }

@@ -6,7 +6,7 @@ import { apiClient } from '../../api/client';
 import { calculateIdeaScore } from '../../constants/scoring';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent.utils';
 import {
-  IndustryBadge, MakeItMineButton, Scorecard, SummitTrail, TierBadge, caseFigures, ideaProgressSteps, ideaTrail, money, normalizeIdea, stepMeta,
+  ClimbRoute, IndustryBadge, MakeItMineButton, Scorecard, TierBadge, caseFigures, ideaProgressSteps, ideaTrail, money, normalizeIdea, stepMeta,
   type Idea,
 } from '../journeykit';
 
@@ -118,12 +118,12 @@ function IdeaView({ ideaId, onOpenMobileNav }: { ideaId: string; onOpenMobileNav
           </div>
         </section>
 
-        <section className="rounded-3xl border border-border bg-card p-5 sm:p-6" aria-label="Where they are">
-          <div className="flex items-center justify-between mb-2">
+        <section aria-label="Where they are">
+          <div className="flex items-center justify-between mb-2 px-1">
             <p className="text-ui-xs font-semibold uppercase tracking-wider text-muted-foreground">The climb</p>
             <p className="text-ui-xs text-muted-foreground">{atStep}</p>
           </div>
-          <SummitTrail steps={ideaProgressSteps(idea, null)} size="lg" {...ideaTrail(idea)} />
+          <ClimbRoute steps={ideaProgressSteps(idea, idea.approved.includes(idea.step) ? null : idea.step)} {...ideaTrail(idea)} />
         </section>
 
         <section className="rounded-3xl border border-border bg-card p-5 sm:p-6" aria-label="Scorecard">

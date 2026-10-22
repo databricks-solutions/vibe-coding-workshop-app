@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   Clock,
-  Database,
   DollarSign,
   History,
   Inbox,
@@ -14,7 +13,6 @@ import {
   RotateCcw,
   Search,
   Sparkles,
-  TrendingUp,
   X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -29,8 +27,9 @@ import {
 import { normalizeIdea } from '../journeykit/engine/useIdeas';
 import { caseFigures } from '../journeykit/engine/ideaContext';
 import { money } from '../journeykit/engine/businessCase';
-import { assessPriority, type PriorityAssessment } from '../insights/priorityAssessment';
+import { assessPortfolioPriority, type PriorityAssessment } from '../insights/priorityAssessment';
 import { PriorityMatrix } from '../insights/priority/PriorityMatrix';
+import { PriorityScoreDetails } from '../insights/priority/PriorityScoreDetails';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent.utils';
 import type { LibraryUseCase } from '../../api/library';
 import type { LibraryModel } from './model';
@@ -97,7 +96,7 @@ function annualValueOf(item: IdeaReviewItem): number | null {
 export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
   const navigate = useNavigate();
   const [items, setItems] = useState<IdeaReviewItem[]>([]);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const linkedId = searchParams.get('id') ?? '';
   const [selectedId, setSelectedId] = useState(linkedId);
   const [detail, setDetail] = useState<IdeaReviewDetail | null>(null);
@@ -163,6 +162,10 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (linkedId && items.some(item => item.id === linkedId)) setSelectedId(linkedId);
+  }, [items, linkedId]);
+
+  useEffect(() => {
     if (!selectedId) { setDetail(null); return; }
     let cancelled = false;
     setDetailLoading(true);
@@ -180,7 +183,7 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
       const idea = normalizeIdea(item.idea);
       if (!idea) continue;
       const annual = annualValueOf(item);
-      const assessment = assessPriority(idea, {
+      const assessment = assessPortfolioPriority(idea, {
         status: item.review.status,
         industry: item.industry || idea.spark?.industry || idea.industry,
         owner: item.owner?.displayName || item.owner?.email,
@@ -252,7 +255,7 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
     }
     if (selectedIdea && detail) {
       return {
-        ...assessPriority(selectedIdea, {
+        ...assessPortfolioPriority(selectedIdea, {
           status: detail.review.status,
           industry: detail.industry,
           owner: detail.owner?.displayName || detail.owner?.email,
@@ -273,10 +276,26 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
 
   const handleSelectFromMap = (ideaId: string) => {
     setSelectedId(ideaId);
+    const next = new URLSearchParams(searchParams);
+    next.set('id', ideaId);
+    setSearchParams(next, { replace: true });
     // If the clicked point is hidden by the current tab filter, switch to 'all' so it highlights in the queue rail
     if (!filtered.some(i => i.id === ideaId)) {
       setStatusFilter('all');
     }
+  };
+
+  const handleOpenIdea = (ideaId: string) => {
+    handleSelectFromMap(ideaId);
+    const item = items.find(candidate => candidate.id === ideaId);
+    const normalized = normalizeIdea(item?.idea);
+    const ref = normalized?.catalogRef;
+    const libraryUseCase = ref && model ? model.ucByKey[`${ref.industry}.${ref.useCase}`] : null;
+    if (libraryUseCase && onOpenUseCase) {
+      onOpenUseCase(libraryUseCase);
+      return;
+    }
+    if (!ideaId.startsWith('catalog:')) navigate(`/ideate/view/${encodeURIComponent(ideaId)}`);
   };
 
   const decide = async (action: IdeaReviewDecision) => {
@@ -486,6 +505,7 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
               highlightedIds={highlightedIds}
               hideSummaryCards
               onSelectIdea={handleSelectFromMap}
+              onOpenIdea={handleOpenIdea}
               subtitle="All submitted use cases are plotted with their names and review status. Click any use case on the map to inspect its details and take action below."
             />
           )}
@@ -567,7 +587,7 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => setSelectedId(item.id)}
+                        onClick={() => handleSelectFromMap(item.id)}
                         className={cx(
                           'w-full text-left rounded-xl p-3 transition-all border',
                           isSelected
@@ -791,26 +811,7 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
 
                     {/* Value & Feasibility Evidence Breakdown */}
                     {selectedAssessment && (
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <EvidenceCard
-                          icon={<TrendingUp className="w-4 h-4 text-emerald-500" />}
-                          title="Business Value"
-                          score={selectedAssessment.value}
-                          band={selectedAssessment.valueBand}
-                          barColor="bg-emerald-500"
-                          items={selectedAssessment.valueEvidence}
-                          actions={selectedAssessment.valueActions}
-                        />
-                        <EvidenceCard
-                          icon={<Database className="w-4 h-4 text-sky-500" />}
-                          title="Technical Feasibility"
-                          score={selectedAssessment.feasibility}
-                          band={`${selectedAssessment.feasibilityBand} · ${selectedAssessment.confidence} confidence`}
-                          barColor="bg-sky-500"
-                          items={selectedAssessment.feasibilityEvidence}
-                          actions={selectedAssessment.feasibilityActions}
-                        />
-                      </div>
+                      <PriorityScoreDetails assessment={selectedAssessment} />
                     )}
 
                     {/* Submitted One-Pager Brief */}
@@ -849,57 +850,6 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
               ) : null}
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EvidenceCard({
-  icon,
-  title,
-  score,
-  band,
-  barColor,
-  items,
-  actions,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  score: number;
-  band: string;
-  barColor: string;
-  items: string[];
-  actions?: string[];
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-background/40 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        {icon}
-        <p className="text-ui-sm font-semibold text-foreground">{title}</p>
-        <span className="ml-auto text-ui-sm font-bold tabular-nums text-foreground">{score}/100</span>
-      </div>
-      <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
-        <div className={cx('h-full rounded-full transition-all', barColor)} style={{ width: `${Math.max(6, Math.min(100, score))}%` }} />
-      </div>
-      <p className="text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">{band}</p>
-      {items.length ? (
-        <ul className="space-y-1.5 text-ui-xs text-foreground/90">
-          {items.map(item => (
-            <li key={item} className="flex items-start gap-2">
-              <span className="text-primary mt-0.5">•</span>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-ui-xs text-muted-foreground">No supporting evidence recorded yet.</p>
-      )}
-      {actions && actions.length > 0 && (
-        <div className="pt-2 border-t border-border/50">
-          <p className="text-ui-2xs text-muted-foreground">
-            <strong className="text-foreground">Next to strengthen:</strong> {actions[0]}
-          </p>
         </div>
       )}
     </div>

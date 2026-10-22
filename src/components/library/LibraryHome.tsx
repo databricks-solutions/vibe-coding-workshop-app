@@ -7,6 +7,7 @@ import { KINDS, KIND_BY_ID, collectionIcon, collectionTint, relativeTime, tintSt
 import { Avatar, CollectionGlyph } from './ui';
 import { cx } from './cx';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
+import { isRepositoryManagedCollection } from './curation';
 
 interface Props {
   model: LibraryModel;
@@ -43,7 +44,10 @@ function Kpi({ icon, label, value, sub, tint, onClick, delay }: { icon: React.Re
 
 function CoverageMap({ model, onNavigate, onCreateIn, onCreateCollection }: Pick<Props, 'model' | 'onNavigate' | 'onCreateIn' | 'onCreateCollection'>) {
   const rows = model.byKind.industry;
-  const cols = useMemo(() => [...model.byKind.function, ...model.byKind.solution], [model]);
+  const cols = useMemo(
+    () => [...model.byKind.function, ...model.byKind.solution].filter(c => !isRepositoryManagedCollection(c.collection_id)),
+    [model],
+  );
   const industryIds = useMemo(() => new Set(rows.map(r => r.collection_id)), [rows]);
 
   const cross = useMemo(() => {

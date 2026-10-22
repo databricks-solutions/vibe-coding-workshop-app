@@ -48,3 +48,10 @@ async def contrib_contributors() -> List[Dict[str, Any]]:
 @router.get("/contrib/status", summary="Contributed use cases load status")
 async def contrib_status() -> Dict[str, Any]:
     return registry.status()
+
+
+@router.post("/contrib/reload", summary="Reload contributed use cases from deployed files")
+async def reload_contributions() -> Dict[str, Any]:
+    """Re-read the deployed contrib/ directory; this intentionally does not fetch source control."""
+    registry.load(force=True)
+    return registry.status()

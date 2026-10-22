@@ -2,6 +2,13 @@ import type { LibraryUseCase } from '../../api/library';
 
 type UseCaseLike = Pick<LibraryUseCase, 'source' | 'created_by' | 'contribution'>;
 
+export const COMMUNITY_COLLECTION_ID = 'community_contributions';
+
+/** Partner & Community is populated only by validated files under contrib/. */
+export function isRepositoryManagedCollection(collectionId: string): boolean {
+  return collectionId === COMMUNITY_COLLECTION_ID;
+}
+
 /** Contributed: from the contrib/ folder (partners, community) or submitted by a person through Ideate. */
 export function isContributed(uc: Pick<LibraryUseCase, 'source'>): boolean {
   return uc.source === 'contributed' || uc.source.startsWith('ideate');

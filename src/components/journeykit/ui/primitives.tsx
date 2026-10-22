@@ -76,6 +76,26 @@ export function FadeIn({ children, delay = 0, className = '' }: { children: Reac
   );
 }
 
+/**
+ * What a screen shows while it loads, instead of an empty area. Waits a moment before
+ * appearing so fast loads don't flash a spinner.
+ */
+export function PageLoader({ label, className = 'min-h-[50vh]' }: { label: string; className?: string }) {
+  return (
+    <div role="status" aria-live="polite" className={`flex items-center justify-center ${className}`}>
+      <motion.div
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: DURATION.base, delay: 0.15, ease: EASE }}
+        className="inline-flex items-center gap-3 rounded-full border border-border/70 bg-card/90 px-4 py-2.5 shadow-sm backdrop-blur"
+      >
+        <span className="w-4 h-4 rounded-full border-2 border-primary/25 border-t-primary animate-spin" aria-hidden />
+        <span className="text-ui-sm font-medium text-foreground">{label}</span>
+      </motion.div>
+    </div>
+  );
+}
+
 export function ProgressRing({ value, size = 56, stroke = 5, children }: { value: number; size?: number; stroke?: number; children?: ReactNode }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;

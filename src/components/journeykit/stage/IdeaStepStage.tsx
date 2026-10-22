@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, History, RefreshCw, SkipForward } from 'lucide-react';
+import { ArrowRight, History, Loader2, RefreshCw, SkipForward } from 'lucide-react';
 import { ExpandableErrorBanner } from '../../ExpandableErrorBanner';
 import { STEP_ART } from '../art';
 import { stepIndex, stepMeta, stepsOf } from '../engine/ideaContext';
@@ -19,9 +19,11 @@ import { SparkStep } from '../steps/SparkStep';
 import { Thinking } from '../ui/Thinking';
 import { JourneyThinkingArt } from '../ui/JourneyThinkingArt';
 import { UseCaseBadge } from '../ui/UseCaseBadge';
-import { GhostButton, Headline, PrimaryButton, SecondaryButton } from '../ui/primitives';
+import { GhostButton, Headline, PrimaryButton } from '../ui/primitives';
 import { ActionBar, StepActions } from './ActionBar';
-import { NextUpCard, WelcomeBack } from './NextUpCard';
+import { ideaProgressSteps, showsTrailhead } from './ideaProgress';
+import { WelcomeBack } from './NextUpCard';
+import { StepDock, type DockProgress } from './StepDock';
 import { TrailheadIntro } from './TrailheadIntro';
 
 const STEP_VIEWS: Record<StepKey, (p: { flow: IdeaFlow }) => ReactNode> = {
@@ -80,7 +82,7 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
 
   if (!idea) return null;
 
-  if (!idea.trailSeenAt && idea.approved.length === 0 && !flow.readOnly && !idea.sample) {
+  if (showsTrailhead(idea, flow.readOnly)) {
     return <TrailheadIntro idea={idea} onStart={() => flow.patch({ trailSeenAt: new Date().toISOString() })} />;
   }
 
@@ -112,7 +114,11 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
   const prevLabel = index > 0 ? steps[index - 1].label : 'Start';
   const backLabel = `Back: ${prevLabel}`;
   const nextStep = index < steps.length - 1 ? steps[index + 1] : null;
-  const nextUnlocked = !!nextStep && (flow.readOnly || stepIndex(idea.step, idea.mode) > index);
+  const dock: DockProgress = {
+    steps: ideaProgressSteps(idea, viewStep),
+    onSelectStep: k => flow.setViewStep(k as StepKey),
+    beyondLabel: config.trail.beyond?.label,
+  };
   const revising = idea.revisingFrom && !idea.approved.includes('brief') ? stepMeta(idea, idea.revisingFrom) : null;
 
   const retry = () => {
@@ -130,20 +136,6 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
 
   return (
     <div className="space-y-6">
-      {(onBack || nextUnlocked) && (
-        <nav className="flex items-center gap-2" aria-label="Steps">
-          {onBack && (
-            <SecondaryButton onClick={onBack} className="min-w-0 max-w-[48%]" title={index > 0 ? `Go back to step ${index}: ${prevLabel}` : 'Go back to start'}>
-              <ArrowLeft className="w-4 h-4 shrink-0" /> <span className="truncate">{prevLabel}</span>
-            </SecondaryButton>
-          )}
-          {nextUnlocked && nextStep && (
-            <SecondaryButton onClick={() => flow.setViewStep(nextStep.key)} className="ml-auto min-w-0 max-w-[48%]" title={`Go to step ${index + 2}: ${nextStep.label}`}>
-              <span className="truncate">{nextStep.label}</span> <ArrowRight className="w-4 h-4 shrink-0" />
-            </SecondaryButton>
-          )}
-        </nav>
-      )}
       {!flow.readOnly && <WelcomeBack idea={idea} />}
       <Headline
         art={STEP_ART[viewStep].image}
@@ -186,11 +178,21 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
       {!canReach(idea, viewStep) && !hasOutput(idea, viewStep) ? (
         <p className="text-ui-base text-muted-foreground">Confirm the previous step first.</p>
       ) : stepLoading || (!showContent && !error) ? (
-        <Thinking
-          label={config.thinking[viewStep]}
-          art={<JourneyThinkingArt step={viewStep} />}
-          helper={THINKING_HELPER[viewStep]}
-        />
+        <>
+          <Thinking
+            label={config.thinking[viewStep]}
+            art={<JourneyThinkingArt step={viewStep} />}
+            helper={THINKING_HELPER[viewStep]}
+          />
+          <StepDock
+            {...dock}
+            actions={
+              <PrimaryButton size="lg" disabled>
+                <Loader2 className="w-4 h-4 animate-spin" /> Working…
+              </PrimaryButton>
+            }
+          />
+        </>
       ) : showContent ? (
         <motion.div
           key={`${viewStep}-view`}
@@ -203,13 +205,14 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
             <ActionBar
               onBack={onBack}
               backLabel={backLabel}
+              dock={dock}
               primary={index < steps.length - 1 && (
                 <PrimaryButton size="lg" onClick={() => flow.setViewStep(next)}>
                   Next: {steps[index + 1].label} <ArrowRight className="w-4 h-4" />
                 </PrimaryButton>
               )}
             />
-          ) : !(viewStep === 'brief' && approved) && <StepActions
+          ) : viewStep === 'brief' && approved ? <StepDock {...dock} /> : <StepActions
             canApprove={canApprove}
             approveLabel={approved && viewStep === 'brief' ? 'Approved' : config.approveLabel(viewStep, prefilled)}
             onApprove={() => flow.approve(viewStep)}
@@ -226,15 +229,13 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
             onBack={onBack}
             backLabel={backLabel}
             showKeyHint={idea.approved.length === 0}
+            dock={dock}
             extra={canSkip && (
               <GhostButton onClick={flow.skipImpact}>
                 Skip this step <SkipForward className="w-3.5 h-3.5" />
               </GhostButton>
             )}
           />}
-          {!flow.readOnly && !loading && !(viewStep === 'brief' && approved) && (
-            <div className="mt-6"><NextUpCard idea={idea} viewStep={viewStep} onGo={flow.setViewStep} /></div>
-          )}
         </motion.div>
       ) : null}
     </div>

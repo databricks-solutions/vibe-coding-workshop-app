@@ -47,6 +47,8 @@ export interface LibraryUseCase {
   display_order: number | null;
   created_by: string | null;
   source: UseCaseSource;
+  resource_url?: string | null;
+  resource_label?: string | null;
   updated_at: string | null;
   /** Contributed use cases: content comes from contrib/ and only Live and placement can change. */
   read_only?: boolean;
@@ -69,7 +71,7 @@ export interface LibraryPayload {
   collections: LibraryCollection[];
   use_cases: LibraryUseCase[];
   members: LibraryMember[];
-  capabilities: { tables: boolean; source: boolean };
+  capabilities: { tables: boolean; source: boolean; resources?: boolean };
 }
 
 export interface UseCaseFlags {
@@ -79,6 +81,8 @@ export interface UseCaseFlags {
   category?: string | null;
   category_order?: number | null;
   display_order?: number | null;
+  resource_url?: string | null;
+  resource_label?: string | null;
 }
 
 export interface LayoutItem {
@@ -140,7 +144,7 @@ export const libraryApi = {
   review: (industry: string, useCase: string, action: 'approve' | 'dismiss') =>
     request<{ success: boolean }>(`/config/use-cases/${enc(industry)}/${enc(useCase)}/review`, json('POST', { action })),
 
-  createUseCase: (body: { industry: string; use_case: string; use_case_label: string; prompt_template: string }) =>
+  createUseCase: (body: { industry: string; use_case: string; use_case_label: string; prompt_template: string; resource_url?: string | null; resource_label?: string | null }) =>
     request<{ success: boolean }>('/config/use-cases', json('POST', body)),
 
   publishVersion: (body: { industry: string; industry_label: string; use_case: string; use_case_label: string; prompt_template: string }) =>

@@ -47,6 +47,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.3',
+    date: '2026-10-21',
+    title: 'Subtle flow polish across Ideate and the Use Case Library',
+    items: [
+      {
+        title: 'Cleaner Ideate and use-case interactions',
+        description: 'Small UI refinements make answers easier to revisit, priority maps easier to understand, and optional recordings or supporting links easy to open without adding clutter.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'palette',
+      },
+    ],
+  },
+  {
     version: '2.8.2',
     date: '2026-10-19',
     title: 'Contributed use cases, certified assets by default and sharper table matching',

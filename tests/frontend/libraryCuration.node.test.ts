@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { contributorName, focusPlan, isContributed, nameFromEmail } from '../../src/components/library/curation.ts';
+import { contributorName, focusPlan, isContributed, isRepositoryManagedCollection, nameFromEmail } from '../../src/components/library/curation.ts';
 
 const entry = (label: string, category: string | null, opts: { live?: boolean; cert?: boolean; order?: number; home?: boolean } = {}) => ({
   uc: { use_case_label: label, is_active: opts.live ?? true, is_certified: opts.cert ?? false },
@@ -17,6 +17,12 @@ const labels = (list: { uc: { use_case_label: string } }[]) => list.map(e => e.u
 test('contributed covers contrib/ and every Ideate state, not seed or admin', () => {
   for (const s of ['contributed', 'ideate', 'ideate_pending', 'ideate_approved']) assert.equal(isContributed({ source: s } as never), true, s);
   for (const s of ['seed', 'admin']) assert.equal(isContributed({ source: s } as never), false, s);
+});
+
+test('only Partner & Community is repository-managed', () => {
+  assert.equal(isRepositoryManagedCollection('community_contributions'), true);
+  assert.equal(isRepositoryManagedCollection('retail'), false);
+  assert.equal(isRepositoryManagedCollection('sample'), false);
 });
 
 test('contributor name comes from the contribution, else the email', () => {

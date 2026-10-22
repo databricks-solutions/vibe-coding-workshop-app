@@ -58,6 +58,12 @@ media:
   screenshots:
     - images/screenshot-1.jpg
 
+# Optional featured recording or document. YouTube links render a thumbnail;
+# Google Docs/Sheets/Slides and other HTTPS links render a compact provider card.
+featured_resource:
+  label: Watch the workshop walkthrough
+  url: https://www.youtube.com/watch?v=MUa5kbIV1Lc
+
 # https only.
 links:
   - label: How to contribute

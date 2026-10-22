@@ -13,6 +13,8 @@ import { OutcomeMapGrid } from './OutcomeMapGrid';
 import { SkillPathPanel } from './SkillPathPanel';
 import { UseCaseDescriptionBox } from './UseCaseDescriptionBox';
 import { ContributionPanel } from './provenance/ContributionPanel';
+import { SupportingResourceCard } from './library/SupportingResourceCard';
+import { featuredResourceOf } from './library/supportingResource';
 import { SourceFilter } from './provenance/SourceFilter';
 import { filterBySource, hasContributions, type SourceFilterValue } from './provenance/provenance';
 import { BorderBeamButton } from './BorderBeamButton';
@@ -409,7 +411,9 @@ export function PromptGenerator({
   useEffect(() => setSourceFilter('all'), [selectedIndustry]);
   const showSourceFilter = hasContributions(availableUsecases);
   const pickerUsecases = showSourceFilter ? filterBySource(availableUsecases, sourceFilter) : availableUsecases;
-  const selectedContribution = availableUsecases.find(u => u.value === selectedUsecase)?.contribution;
+  const activeUseCase = availableUsecases.find(u => u.value === selectedUsecase);
+  const selectedContribution = activeUseCase?.contribution;
+  const selectedResource = activeUseCase ? featuredResourceOf(activeUseCase) : null;
 
   const canStart = mode === 'library'
     ? prerequisitesCompleted && !!selectedIndustry && !!selectedUsecase && !hasStarted && !isGenerating
@@ -627,6 +631,7 @@ export function PromptGenerator({
                           onEdit={!hasStarted ? handleEnterEditMode : undefined}
                           onContentChange={!hasStarted ? (text) => setEditedDescription(text) : undefined}
                         />
+                        {selectedResource && <SupportingResourceCard resource={selectedResource} />}
                         {selectedContribution && <ContributionPanel key={selectedContribution.key} contribution={selectedContribution} />}
                       </div>
                     )

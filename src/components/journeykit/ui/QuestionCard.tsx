@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowRight, Check, Info, Sparkles } from 'lucide-react';
 import { VoiceTextarea } from './VoiceTextarea';
 import { NOT_SURE } from '../engine/types';
+import { MULTI_SEPARATOR, NOT_SURE_PICK, restoreQuestionSelection } from './questionSelection';
 
-/** Multi-select answers are stored as one string with this separator. */
-export const MULTI_SEPARATOR = '; ';
+export { MULTI_SEPARATOR } from './questionSelection';
 
 interface QuestionCardProps {
   question: string;
@@ -42,8 +42,6 @@ const isTyping = (el: EventTarget | null) => {
   return !!t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable);
 };
 
-const NOT_SURE_PICK = '\u0000not-sure';
-
 /**
  * One decision. Picking only highlights an answer; nothing is saved until the
  * user presses the confirm button or Enter, so they can see and change what
@@ -69,13 +67,11 @@ export function QuestionCard({
   onNotSure,
   validateOther,
 }: QuestionCardProps) {
-  const [other, setOther] = useState('');
+  const restored = () => restoreQuestionSelection(selected, options, multi, [NOT_SURE, notSureLabel]);
+  const initial = restored();
+  const [other, setOther] = useState(initial.custom.join(MULTI_SEPARATOR));
   const [showOther, setShowOther] = useState(false);
-  const [picks, setPicks] = useState<string[]>(() => {
-    if (!selected) return [];
-    if (selected === NOT_SURE || selected === notSureLabel) return [NOT_SURE_PICK];
-    return multi ? selected.split(MULTI_SEPARATOR).filter(p => options.includes(p)) : options.includes(selected) ? [selected] : [];
-  });
+  const [picks, setPicks] = useState<string[]>(initial.picks);
   const otherError = other.trim() && validateOther ? validateOther(other) : null;
 
   const rec = recommended >= 0 && recommended < options.length ? options[recommended] : null;
@@ -85,6 +81,16 @@ export function QuestionCard({
   );
   const notSurePicked = picks.includes(NOT_SURE_PICK);
   const atCap = !!multi && !!maxPicks && picks.filter(p => p !== NOT_SURE_PICK).length >= maxPicks;
+  const customPicks = picks.filter(p => p !== NOT_SURE_PICK && !options.includes(p));
+
+  useEffect(() => {
+    const next = restoreQuestionSelection(selected, options, multi, [NOT_SURE, notSureLabel]);
+    setPicks(next.picks);
+    setOther(next.custom.join(MULTI_SEPARATOR));
+    setShowOther(false);
+    // optionsKey intentionally tracks option content rather than array identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, multi, notSureLabel, options.join('\u0001')]);
 
   const choose = (opt: string) => setPicks(p => {
     if (!multi) return [opt];
@@ -98,12 +104,13 @@ export function QuestionCard({
   const confirm = () => {
     if (!picks.length) return;
     if (notSurePicked) onNotSure();
-    else onPick(ordered.filter(o => picks.includes(o)).join(MULTI_SEPARATOR));
+    else if (multi) onPick(picks.filter(p => p !== NOT_SURE_PICK).join(MULTI_SEPARATOR));
+    else onPick(picks[0]);
   };
 
   const pickOther = () => {
     if (!other.trim() || otherError) return;
-    const kept = ordered.filter(o => picks.includes(o));
+    const kept = picks.filter(p => options.includes(p));
     if (multi && maxPicks && kept.length >= maxPicks) return;
     onPick(multi && kept.length ? [...kept, other.trim()].join(MULTI_SEPARATOR) : other.trim());
   };
@@ -142,6 +149,28 @@ export function QuestionCard({
       <p className="text-ui-2xs uppercase tracking-wider font-semibold text-muted-foreground mt-4">
         {multi ? (maxPicks ? `Pick up to ${maxPicks}` : 'Pick all that apply') : 'Choose one'}
       </p>
+      {customPicks.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {customPicks.map(custom => (
+            <button
+              key={custom}
+              type="button"
+              onClick={() => { setOther(custom); setShowOther(true); }}
+              aria-pressed="true"
+              className="group w-full flex items-center gap-3 text-left rounded-xl border border-primary bg-primary/10 ring-1 ring-primary/40 px-3.5 py-3 transition-all"
+            >
+              <span className="w-6 h-6 shrink-0 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
+                <Check className="w-3.5 h-3.5" />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-ui-2xs uppercase tracking-wider font-semibold text-primary">Your answer</span>
+                <span className="block text-ui-base text-foreground">{custom}</span>
+              </span>
+              <span className="text-ui-xs text-muted-foreground group-hover:text-foreground">Edit</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-2 mt-2">
         {ordered.map((opt, i) => {
           const on = picks.includes(opt);

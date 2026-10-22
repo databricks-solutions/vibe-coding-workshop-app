@@ -19,6 +19,8 @@ export interface ApprovedUseCase {
   label: string;
   certified: boolean;
   category: string;
+  resourceUrl?: string | null;
+  resourceLabel?: string | null;
 }
 
 export type QuestionSource = 'use_case_genie' | 'use_case_text' | 'suggested' | 'none';
@@ -84,6 +86,8 @@ function fetchUseCases(ind: ApprovedIndustry): Promise<ApprovedUseCase[]> {
           label: u.label,
           certified: !!u.is_certified,
           category: u.category ?? '',
+          resourceUrl: u.resource_url,
+          resourceLabel: u.resource_label,
         }))
         .sort((a, b) => Number(b.certified) - Number(a.certified)))
       .catch(err => { useCasePromises.delete(ind.id); throw err; });

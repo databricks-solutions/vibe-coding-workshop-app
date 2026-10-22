@@ -1,26 +1,8 @@
-import { ArrowRight, CloudOff, Compass, Loader2, X } from 'lucide-react';
+import { CloudOff, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
-import { nextNudge, welcomeBack } from '../engine/encouragement';
+import { welcomeBack } from '../engine/encouragement';
 import { useSyncState } from '../engine/useIdeas';
-import type { Idea, StepKey } from '../engine/types';
-
-/** One quiet line under the step: what's next and what it's worth. */
-export function NextUpCard({ idea, viewStep, onGo }: { idea: Idea; viewStep: StepKey; onGo: (step: StepKey) => void }) {
-  const nudge = nextNudge(idea, viewStep);
-  if (!nudge) return null;
-  const go = nudge.step && nudge.step !== viewStep ? nudge.step : null;
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-secondary/30 px-4 py-2.5 animate-fade-in" role="status">
-      <Compass className="w-4 h-4 shrink-0 text-primary" />
-      <p className="flex-1 text-ui-sm text-muted-foreground">{nudge.text}</p>
-      {go && (
-        <button onClick={() => onGo(go)} className="shrink-0 inline-flex items-center gap-1 text-ui-sm font-medium text-primary hover:underline">
-          Go <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      )}
-    </div>
-  );
-}
+import type { Idea } from '../engine/types';
 
 /** A one-line welcome for someone reopening an idea partway up. */
 export function WelcomeBack({ idea }: { idea: Idea }) {

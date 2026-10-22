@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from src.backend.contrib import registry
 from src.backend.contrib.loader import load_catalog, make_key
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +28,19 @@ def test_sample_is_present_flagged_and_certified():
     assert sample.manifest.collections.home == "sample"
     assert [c.certifier.manifest.id for c in sample.current_certifications] == ["sample"]
     assert set(sample.assets) == {"images/cover.jpg", "images/screenshot-1.jpg"}
+
+
+def test_registry_status_reports_reload_metadata(monkeypatch):
+    monkeypatch.setenv("CONTRIB_DIR", str(CONTRIB))
+    registry.reset_for_tests()
+    try:
+        registry.load(force=True)
+        status = registry.status()
+        assert status["loaded_at"]
+        assert status["guide_url"].endswith("/contrib/README.md")
+        assert status["sample_url"].endswith("/contrib/usecases/sample/contributed_usecase_starter")
+    finally:
+        registry.reset_for_tests()
 
 
 def test_schemas_are_current():

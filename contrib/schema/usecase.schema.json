@@ -219,6 +219,18 @@
     "collections": {
       "$ref": "#/$defs/Collections"
     },
+    "featured_resource": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Link"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional recording, document, presentation, spreadsheet, or other featured link."
+    },
     "links": {
       "items": {
         "$ref": "#/$defs/Link"

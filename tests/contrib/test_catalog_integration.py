@@ -1,9 +1,12 @@
 """Contributed use cases flow through the same catalog functions as native ones."""
 
+import asyncio
+
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from src.backend.api import library as library_api
 from src.backend.api import routes
 from src.backend.api.contrib import router as contrib_router
 from src.backend.contrib import COMMUNITY_COLLECTION_ID, registry
@@ -126,6 +129,44 @@ def test_db_writes_on_contributed_keys_are_rejected():
         routes.reject_contributed_write(KEY)
     assert exc.value.status_code == 409
     routes.reject_contributed_write("customer_360")
+
+
+def test_repository_managed_collection_rejects_native_content():
+    with pytest.raises(HTTPException) as exc:
+        routes.reject_repository_managed_home(COMMUNITY_COLLECTION_ID, "native_use_case")
+    assert exc.value.status_code == 409
+    routes.reject_repository_managed_home("retail", "native_use_case")
+
+    placements = library_api.PlacementsUpdate(
+        placements=[library_api.Placement(collection_id=COMMUNITY_COLLECTION_ID)]
+    )
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(library_api.set_placements("retail", "native_use_case", placements, None))
+    assert exc.value.status_code == 409
+
+    layout = library_api.LayoutUpdate(items=[
+        library_api.LayoutItem(industry="retail", use_case="native_use_case")
+    ])
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(library_api.set_layout(COMMUNITY_COLLECTION_ID, layout))
+    assert exc.value.status_code == 409
+
+
+def test_reload_endpoint_forces_registry_reload(monkeypatch):
+    called = []
+    monkeypatch.setattr(registry, "load", lambda force=False: called.append(force))
+    monkeypatch.setattr(registry, "status", lambda: {
+        "enabled": True, "root": "contrib", "contributors": 2, "use_cases": 3,
+        "sample_present": True, "loaded_at": "2026-10-22T01:00:00+00:00",
+        "guide_url": "https://example.com/guide", "sample_url": "https://example.com/sample",
+        "errors": [], "warnings": [],
+    })
+    app = FastAPI()
+    app.include_router(contrib_router, prefix="/api")
+    response = TestClient(app).post("/api/contrib/reload")
+    assert response.status_code == 200
+    assert response.json()["use_cases"] == 3
+    assert called == [True]
 
 
 def test_assets_are_served_only_when_listed(contrib):

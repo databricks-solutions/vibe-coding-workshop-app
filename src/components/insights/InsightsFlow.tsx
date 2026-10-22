@@ -1,12 +1,13 @@
 import { Component, Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { Hammer, Route } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import { ASSISTANT_CATALOG } from '../../constants/codingAssistants';
 import { WORKSHOP_LEVELS } from '../../constants/workflowSections';
 import {
   BusinessCaseSheet, JourneyProgress, JourneyScreen, REVIEW_IDEA_EVENT, SHAPE_KINDS, answerFor, buildLines, caseFigures, chosenShape, matchingContext, money,
-  needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeaCelebrations, useIdeas,
+  PageLoader, needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeaCelebrations, useIdeas,
   type Idea, type ReviewIdeaDetail, type StepKey,
 } from '../journeykit';
 import { composeBrief, fitName, parseBrief, toSlug, type DataSource, type IdeaBrief } from './brief';
@@ -15,7 +16,7 @@ import type { BlueprintChoice, SourceChoice } from './blueprint/types';
 import { sourceKey, sourcesIn } from './sources/sourcesApi';
 import { INDUSTRY_IDEAS } from './journey';
 import { openPathComparison } from './pathEvents';
-import { assessPriority } from './priorityAssessment';
+import { assessPortfolioPriority } from './priorityAssessment';
 import { ADD_ON_LABEL, addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, requiredAddOns, tagsFor, useTagAvailability, type AddOn } from './recipes';
 import { insightsPhases, type InsightsStage } from './progress';
 import { reviewTarget } from './reviewTarget';
@@ -136,6 +137,7 @@ function industryIdOf(idea: Idea | undefined, fallback: string): string {
 }
 
 function InsightsFlowInner(props: InsightsFlowProps) {
+  const navigate = useNavigate();
   const {
     sessionId, isSessionLoaded, readOnly, currentUser, workshopLevel, codingAssistant,
     selectedIndustry, selectedIndustryLabel, selectedUseCase, selectedUseCaseLabel, customUseCaseLabel, customDescription,
@@ -280,8 +282,8 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const toggleAddOn = (a: AddOn) => setAddOnChoice(chosenAddOns.includes(a) ? chosenAddOns.filter(x => x !== a) : [...chosenAddOns, a]);
   const effectiveBuiltAddOns = normalizeAddOns([...required, ...parsed.addOns]);
   const builtMoments = momentsFor(effectiveBuiltAddOns);
-  const priority = idea ? assessPriority(idea, { dataSource, dataLocation, blueprint, addOns: chosenAddOns }) : null;
-  const portfolio = ideas.map(other => other.id === idea?.id && priority ? priority : assessPriority(other));
+  const priority = idea ? assessPortfolioPriority(idea) : null;
+  const portfolio = ideas.map(other => other.id === idea?.id && priority ? priority : assessPortfolioPriority(other));
 
   const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint, tables: exploringTables });
   const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
@@ -395,6 +397,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
 
   if (!isSessionLoaded) {
     key = 'loading';
+    // App's session overlay is the loading indicator here.
     content = <div className="min-h-[50vh]" />;
   } else if (launching) {
     key = 'launch';
@@ -533,7 +536,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     key = 'source';
     content = (
       <BlueprintBoundary onBack={() => setStage('data')} onSwitchToTechnical={onSwitchToTechnical}>
-        <Suspense fallback={<div className="min-h-[50vh]" />}>
+        <Suspense fallback={<PageLoader label="Loading your tables…" />}>
           <SourceScreen
             questions={questions}
             context={ideaText}
@@ -557,7 +560,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     key = 'blueprint';
     content = (
       <BlueprintBoundary onBack={() => setStage('data')} onSwitchToTechnical={onSwitchToTechnical}>
-        <Suspense fallback={<div className="min-h-[50vh]" />}>
+        <Suspense fallback={<PageLoader label="Loading the industry model…" />}>
           <BlueprintScreen
             questions={questions}
             initialSlug={preferredSlug}
@@ -608,6 +611,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         portfolio={portfolio}
         onImproveValue={editIdea}
         onImproveFeasibility={() => setStage(usingBlueprint ? 'blueprint' : exploringTables ? 'source' : 'data')}
+        onOpenPriorityIdea={targetId => navigate(`/ideate/view/${encodeURIComponent(targetId)}`)}
       />
     );
   }

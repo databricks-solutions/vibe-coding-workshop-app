@@ -1,6 +1,9 @@
-import { ArrowRight, Database, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowUpRight, Info, Maximize2, Tags, X } from 'lucide-react';
 import type { PriorityAssessment } from '../priorityAssessment';
 import type { IdeaReviewStatus } from '../../journeykit';
+import { PriorityScoreDetails } from './PriorityScoreDetails';
 
 interface PriorityMatrixProps {
   current: PriorityAssessment;
@@ -8,12 +11,16 @@ interface PriorityMatrixProps {
   onImproveValue?: () => void;
   onImproveFeasibility?: () => void;
   onSelectIdea?: (ideaId: string) => void;
+  onOpenIdea?: (ideaId: string) => void;
   portfolioLimit?: number | null;
   subtitle?: string;
   /** Optional set of ideaIds that match the current queue filter; non-matching points render slightly dimmed on the map. */
   highlightedIds?: Set<string> | null;
   /** When true, hides the bottom 2-column Value/Feasibility cards (useful when the inspector already shows full breakdown). */
   hideSummaryCards?: boolean;
+  /** Internal full-screen presentation used by the expand control. */
+  expandedView?: boolean;
+  onCloseExpanded?: () => void;
 }
 
 const x = (n: number) => 11 + n * 0.82;
@@ -145,11 +152,18 @@ export function PriorityMatrix({
   onImproveValue,
   onImproveFeasibility,
   onSelectIdea,
+  onOpenIdea,
   portfolioLimit = 10,
   subtitle,
   highlightedIds = null,
   hideSummaryCards = false,
+  expandedView = false,
+  onCloseExpanded,
 }: PriorityMatrixProps) {
+  const [showGuide, setShowGuide] = useState(false);
+  const [showAllLabels, setShowAllLabels] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const allOthers = portfolio.filter(p => p.ideaId !== current.ideaId);
   const others = portfolioLimit == null ? allOthers : allOthers.slice(0, portfolioLimit);
   const allPoints = [current, ...others];
@@ -159,14 +173,35 @@ export function PriorityMatrix({
 
   const hasStatuses = allPoints.some(p => p.status && p.status !== 'draft');
   const currentStatusMeta = current.status ? STATUS_META[current.status] : null;
+  const hoveredPoint = hoveredId ? laidOut.find(point => point.item.ideaId === hoveredId) : null;
 
-  return (
-    <section className="rounded-3xl border border-border bg-card overflow-hidden shadow-sm" aria-labelledby="priority-heading">
+  useEffect(() => {
+    if (!expanded && !expandedView) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (expandedView) onCloseExpanded?.();
+        else setExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded, expandedView, onCloseExpanded]);
+
+  useEffect(() => {
+    if (!expanded || typeof document === 'undefined') return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [expanded]);
+
+  const headingId = expandedView ? 'priority-heading-expanded' : 'priority-heading';
+  const content = (
+    <section className={`rounded-3xl border border-border bg-card overflow-hidden shadow-sm ${expandedView ? 'h-full flex flex-col' : ''}`} aria-labelledby={headingId}>
       <div className="px-5 sm:px-6 py-5 border-b border-border/70">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <p id="priority-heading" className="text-ui-xl font-semibold text-foreground">Value vs. feasibility</p>
+              <p id={headingId} className="text-ui-xl font-semibold text-foreground">Value vs. feasibility</p>
               <span className="rounded-full bg-secondary px-2.5 py-0.5 text-ui-2xs font-semibold text-muted-foreground tabular-nums">
                 {allPoints.length} {allPoints.length === 1 ? 'use case' : 'use cases'} on map
               </span>
@@ -187,8 +222,64 @@ export function PriorityMatrix({
             <span className="rounded-full bg-secondary px-2.5 py-1 text-ui-xs text-muted-foreground">
               {current.confidence} confidence
             </span>
+            <button
+              type="button"
+              onClick={() => setShowGuide(value => !value)}
+              aria-pressed={showGuide}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-ui-xs font-medium transition-colors ${
+                showGuide ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background/60 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Info className="h-3.5 w-3.5" /> How to read
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAllLabels(value => !value)}
+              aria-pressed={showAllLabels}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-ui-xs font-medium transition-colors ${
+                showAllLabels ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background/60 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Tags className="h-3.5 w-3.5" /> {showAllLabels ? 'Hide labels' : 'Show labels'}
+            </button>
+            {expandedView ? (
+              <button
+                type="button"
+                onClick={onCloseExpanded}
+                aria-label="Close expanded map"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-background/60 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                aria-label="Expand value versus feasibility map"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background/60 px-2.5 text-ui-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                <Maximize2 className="h-3.5 w-3.5" /> Expand
+              </button>
+            )}
           </div>
         </div>
+
+        {showGuide && (
+          <div className="mt-4 grid gap-3 rounded-2xl border border-primary/15 bg-primary/[0.035] p-3.5 text-ui-xs sm:grid-cols-3">
+            <div>
+              <p className="font-semibold text-foreground">Business value ↑</p>
+              <p className="mt-1 leading-relaxed text-muted-foreground">ROI, hard-dollar impact, rollout scale, urgency, and people reached.</p>
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Technical feasibility →</p>
+              <p className="mt-1 leading-relaxed text-muted-foreground">Data readiness, coverage, complexity, workflow alignment, and build scope.</p>
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Quadrants split at 60</p>
+              <p className="mt-1 leading-relaxed text-muted-foreground">Missing evidence widens confidence; it does not silently count as zero.</p>
+            </div>
+          </div>
+        )}
 
         {/* Status legend when reviewing multi-status portfolio */}
         {hasStatuses && (
@@ -223,12 +314,13 @@ export function PriorityMatrix({
         )}
       </div>
 
-      <div className="p-4 sm:p-6">
-        <div className="rounded-2xl border border-border/70 bg-background/60 p-2 sm:p-4">
+      <div className={`p-4 sm:p-6 ${expandedView ? 'min-h-0 flex-1 overflow-y-auto' : ''}`}>
+        <div className={expandedView ? 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]' : ''}>
+        <div className="relative rounded-2xl border border-border/70 bg-background/60 p-2 sm:p-4">
           <svg
             viewBox="0 0 100 100"
-            className="w-full aspect-[16/9] min-h-[20rem] select-none"
-            role="img"
+            className={`w-full aspect-[16/9] select-none ${expandedView ? 'min-h-[32rem]' : 'min-h-[20rem]'}`}
+            role="group"
             aria-label={`Priority matrix. ${current.title}: value ${current.value}, feasibility ${current.feasibility}, ${current.quadrant}.`}
           >
             {/* Quadrant backgrounds */}
@@ -251,6 +343,10 @@ export function PriorityMatrix({
 
             <text x="52" y="98" textAnchor="middle" className="fill-muted-foreground text-[2.9px] font-semibold">Feasibility →</text>
             <text x="3.5" y="53" textAnchor="middle" transform="rotate(-90 3.5 53)" className="fill-muted-foreground text-[2.9px] font-semibold">Value →</text>
+            <text x="11" y="95" className="fill-muted-foreground/65 text-[1.9px] font-medium">Low · 0</text>
+            <text x="94" y="95" textAnchor="end" className="fill-muted-foreground/65 text-[1.9px] font-medium">100 · High</text>
+            <text x="7.5" y="90" textAnchor="end" className="fill-muted-foreground/65 text-[1.9px] font-medium">0</text>
+            <text x="7.5" y="14" textAnchor="end" className="fill-muted-foreground/65 text-[1.9px] font-medium">100</text>
 
             {/* Provisional uncertainty box for currently selected idea */}
             {current.provisional && (
@@ -271,29 +367,47 @@ export function PriorityMatrix({
               const st = item.status ?? 'draft';
               const meta = STATUS_META[st] ?? STATUS_META.draft;
               const isDimmed = highlightedIds && !highlightedIds.has(item.ideaId) && !isSelected;
+              const isActive = hoveredId === item.ideaId;
+              const showLabel = showAllLabels || isSelected || isActive;
+              const activate = () => onSelectIdea?.(item.ideaId);
 
               return (
                 <g
                   key={item.ideaId}
-                  onClick={() => onSelectIdea?.(item.ideaId)}
-                  className={`${onSelectIdea ? 'cursor-pointer' : ''} transition-opacity ${isDimmed ? 'opacity-45 hover:opacity-100' : 'opacity-100'}`}
+                  role={onSelectIdea ? 'button' : undefined}
+                  tabIndex={onSelectIdea ? 0 : undefined}
+                  aria-label={`${item.title}. Value ${item.value} out of 100. Feasibility ${item.feasibility} out of 100. ${item.quadrant}. ${meta.label}.`}
+                  onClick={activate}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      activate();
+                    }
+                  }}
+                  onMouseEnter={() => setHoveredId(item.ideaId)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  onFocus={() => setHoveredId(item.ideaId)}
+                  onBlur={() => setHoveredId(null)}
+                  className={`${onSelectIdea ? 'cursor-pointer outline-none' : ''} transition-opacity ${isDimmed ? 'opacity-45 hover:opacity-100' : 'opacity-100'}`}
                 >
                   <title>{`${item.title} — Value ${item.value}/100, Feasibility ${item.feasibility}/100 (${meta.label})`}</title>
 
                   {/* Connector tick between node and its name pill */}
-                  <line
-                    x1={cx}
-                    y1={cy}
-                    x2={labelX}
-                    y2={labelY}
-                    className={isSelected ? 'stroke-primary/60' : 'stroke-border'}
-                    strokeWidth={isSelected ? '.4' : '.25'}
-                  />
+                  {showLabel && (
+                    <line
+                      x1={cx}
+                      y1={cy}
+                      x2={labelX}
+                      y2={labelY}
+                      className={isSelected ? 'stroke-primary/60' : 'stroke-border'}
+                      strokeWidth={isSelected ? '.4' : '.25'}
+                    />
+                  )}
 
                   {/* Outer pulse / halo */}
-                  {isSelected ? (
+                  {isSelected || isActive ? (
                     <>
-                      <circle cx={cx} cy={cy} r="4.6" className={`${meta.haloFill} ${meta.stroke}`} strokeWidth=".55" strokeDasharray="1.2 0.8" />
+                      <circle cx={cx} cy={cy} r="4.6" className={`${meta.haloFill} ${meta.stroke}`} strokeWidth=".55" strokeDasharray={isSelected ? '1.2 0.8' : undefined} />
                       <circle cx={cx} cy={cy} r="3.1" className={`${meta.haloFill} ${meta.stroke}`} strokeWidth=".8" />
                       <circle cx={cx} cy={cy} r="1.45" className={meta.dotFill} />
                     </>
@@ -305,7 +419,7 @@ export function PriorityMatrix({
                   )}
 
                   {/* Name pill on top of each node */}
-                  <g transform={`translate(${labelX} ${labelY})`}>
+                  {showLabel && <g transform={`translate(${labelX} ${labelY})`}>
                     <rect
                       x={-pillWidth / 2}
                       y="-2.8"
@@ -327,7 +441,7 @@ export function PriorityMatrix({
                     >
                       {labelText}
                     </text>
-                  </g>
+                  </g>}
 
                   {/* Score badge beside the selected node */}
                   {isSelected && (
@@ -342,36 +456,79 @@ export function PriorityMatrix({
               );
             })}
           </svg>
+          {hoveredPoint && hoveredPoint.item.ideaId !== current.ideaId && (
+            <div
+              className="pointer-events-none absolute z-10 w-56 -translate-x-1/2 -translate-y-[calc(100%+0.75rem)] rounded-xl border border-border bg-popover/95 px-3 py-2.5 shadow-xl backdrop-blur"
+              style={{ left: `${hoveredPoint.cx}%`, top: `${hoveredPoint.cy}%` }}
+              role="tooltip"
+            >
+              <p className="truncate text-ui-xs font-semibold text-foreground">{hoveredPoint.item.title}</p>
+              <div className="mt-1 flex items-center gap-2 text-ui-2xs text-muted-foreground">
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">{hoveredPoint.item.value} value</span>
+                <span>·</span>
+                <span className="font-semibold text-sky-600 dark:text-sky-400">{hoveredPoint.item.feasibility} feasibility</span>
+              </div>
+              <p className="mt-1 text-ui-2xs text-muted-foreground">{hoveredPoint.item.quadrant} · {hoveredPoint.item.confidence} confidence</p>
+            </div>
+          )}
         </div>
 
-        {!hideSummaryCards && (
-          <div className="grid sm:grid-cols-2 gap-3 mt-4">
-            <div className="rounded-2xl border border-border bg-card p-4">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-500" />
-                <p className="text-ui-md font-semibold text-foreground">Value · {current.value}/100</p>
-                <span className="ml-auto text-ui-xs text-muted-foreground">{current.valueBand}</span>
-              </div>
-              {current.valueEvidence[0] && <p className="text-ui-xs text-muted-foreground mt-2">{current.valueEvidence[0]}</p>}
-              {current.valueActions[0] && (
-                <button onClick={onImproveValue} disabled={!onImproveValue} className="mt-3 inline-flex items-center gap-1 text-ui-xs font-medium text-primary hover:underline disabled:pointer-events-none">
-                  {current.valueActions[0]} <ArrowRight className="w-3 h-3" />
+        {expandedView && (
+          <aside className="space-y-3">
+            <div className="rounded-2xl border border-border bg-background/45 p-4">
+              <p className="text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground">Selected use case</p>
+              <p className="mt-1 text-ui-base font-semibold leading-snug text-foreground">{current.title}</p>
+              <p className="mt-1 text-ui-xs text-muted-foreground">{current.quadrant} · {current.confidence} confidence</p>
+              {onOpenIdea && (
+                <button
+                  type="button"
+                  onClick={() => onOpenIdea(current.ideaId)}
+                  className="mt-3 inline-flex items-center gap-1.5 text-ui-xs font-semibold text-primary hover:underline"
+                >
+                  Open full use case <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
-            <div className="rounded-2xl border border-border bg-card p-4">
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-sky-500" />
-                <p className="text-ui-md font-semibold text-foreground">Feasibility · {current.feasibility}/100</p>
-                <span className="ml-auto text-ui-xs text-muted-foreground">{current.feasibilityBand}</span>
-              </div>
-              {current.feasibilityEvidence[0] && <p className="text-ui-xs text-muted-foreground mt-2">{current.feasibilityEvidence[0]}</p>}
-              {current.feasibilityActions[0] && (
-                <button onClick={onImproveFeasibility} disabled={!onImproveFeasibility} className="mt-3 inline-flex items-center gap-1 text-ui-xs font-medium text-primary hover:underline disabled:pointer-events-none">
-                  {current.feasibilityActions[0]} <ArrowRight className="w-3 h-3" />
-                </button>
-              )}
+            <PriorityScoreDetails
+              assessment={current}
+              compact
+              onImproveValue={onImproveValue}
+              onImproveFeasibility={onImproveFeasibility}
+            />
+          </aside>
+        )}
+        </div>
+
+        {!expandedView && !hideSummaryCards && (
+          <div className="mt-4">
+            <PriorityScoreDetails
+              assessment={current}
+              onImproveValue={onImproveValue}
+              onImproveFeasibility={onImproveFeasibility}
+            />
+          </div>
+        )}
+
+        {!expandedView && hideSummaryCards && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-border bg-background/45 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-ui-sm font-semibold text-foreground">{current.title}</p>
+              <p className="mt-0.5 text-ui-xs text-muted-foreground">
+                {current.quadrant} · {current.confidence} confidence
+                {current.valueActions[0] ? ` · Best next move: ${current.valueActions[0]}` : ''}
+              </p>
             </div>
+            <span className="text-ui-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{current.value} value</span>
+            <span className="text-ui-xs font-semibold tabular-nums text-sky-600 dark:text-sky-400">{current.feasibility} feasibility</span>
+            {onOpenIdea && (
+              <button
+                type="button"
+                onClick={() => onOpenIdea(current.ideaId)}
+                className="inline-flex items-center gap-1 text-ui-xs font-semibold text-primary hover:underline"
+              >
+                Open use case <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         )}
 
@@ -381,5 +538,30 @@ export function PriorityMatrix({
         </ul>
       </div>
     </section>
+  );
+
+  return (
+    <>
+      {content}
+      {expanded && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[1200] bg-background/92 p-3 backdrop-blur-md sm:p-6">
+          <PriorityMatrix
+            current={current}
+            portfolio={portfolio}
+            onImproveValue={onImproveValue}
+            onImproveFeasibility={onImproveFeasibility}
+            onSelectIdea={onSelectIdea}
+            onOpenIdea={onOpenIdea}
+            portfolioLimit={portfolioLimit}
+            subtitle={subtitle}
+            highlightedIds={highlightedIds}
+            hideSummaryCards
+            expandedView
+            onCloseExpanded={() => setExpanded(false)}
+          />
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

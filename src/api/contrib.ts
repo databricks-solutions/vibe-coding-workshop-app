@@ -31,6 +31,7 @@ export interface Contribution {
   co_contributors: ContributorBrief[];
   authors: { name: string; github?: string | null; url?: string | null }[];
   tags: string[];
+  featured_resource: { label: string; url: string } | null;
   links: { label: string; url: string }[];
   changelog: { version: string; date: string; notes: string }[];
   media: { cover_url: string | null; screenshot_urls: string[] };
@@ -46,6 +47,29 @@ export interface ContribStatus {
   contributors: number;
   use_cases: number;
   sample_present: boolean;
+  loaded_at: string | null;
+  guide_url: string | null;
+  sample_url: string | null;
   errors: { path: string; message: string }[];
   warnings: { path: string; message: string }[];
 }
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`/api${path}`, init);
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      detail = body?.detail || body?.error || detail;
+    } catch {
+      /* keep status text */
+    }
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+  }
+  return res.json();
+}
+
+export const contribApi = {
+  status: () => request<ContribStatus>('/contrib/status'),
+  reload: () => request<ContribStatus>('/contrib/reload', { method: 'POST' }),
+};

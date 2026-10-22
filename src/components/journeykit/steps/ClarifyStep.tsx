@@ -17,7 +17,7 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
   const lastOpen = questions.filter(x => !idea.answers[x.id]).length <= 1;
   const trail = questions
     .map((x, index) => ({ key: x.id, index, question: x.question, answer: idea.answers[x.id], soft: idea.answers[x.id] === NOT_SURE }))
-    .filter(x => x.answer && x.index !== active);
+    .filter(x => x.answer);
 
   const pick = (value: string) => {
     if (!q || !value.trim()) return;
@@ -41,6 +41,8 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
         <span className="ml-2 text-ui-xs text-muted-foreground">{answeredCount} of {questions.length}</span>
       </div>
 
+      {q && <AnswerTrail items={trail} activeIndex={editing} onEdit={setEditing} />}
+
       {q && (
         <QuestionCard
           key={q.id}
@@ -57,8 +59,6 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
           onNotSure={() => pick(NOT_SURE)}
         />
       )}
-
-      {q && <AnswerTrail items={trail} onEdit={setEditing} />}
 
       {!q && flow.loading === 'followup' && (
         <p className="flex items-center gap-2 text-ui-sm text-muted-foreground animate-fade-in">

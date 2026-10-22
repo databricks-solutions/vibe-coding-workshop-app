@@ -7,6 +7,14 @@ export type PriorityBand = 'Low' | 'Medium' | 'High';
 export type PriorityConfidence = 'Low' | 'Medium' | 'High';
 export type PriorityQuadrant = 'Invest now' | 'Strategic bet' | 'Quick win' | 'Rework or park';
 
+export interface PriorityFactor {
+  label: string;
+  weight: number;
+  score: number | null;
+  evidence?: string;
+  action?: string;
+}
+
 export interface PriorityAssessment {
   ideaId: string;
   title: string;
@@ -23,6 +31,10 @@ export interface PriorityAssessment {
   feasibilityEvidence: string[];
   valueActions: string[];
   feasibilityActions: string[];
+  valueFactors: PriorityFactor[];
+  feasibilityFactors: PriorityFactor[];
+  valueEvidenceWeight: number;
+  feasibilityEvidenceWeight: number;
   status?: IdeaReviewStatus;
   industry?: string;
   owner?: string;
@@ -40,7 +52,7 @@ interface PriorityContext {
   annualValue?: number | null;
 }
 
-interface Term { weight: number; score?: number; evidence?: string; action?: string }
+interface Term { label: string; weight: number; score?: number; evidence?: string; action?: string }
 
 const clamp = (n: number) => Math.round(Math.max(0, Math.min(100, n)));
 const band = (n: number): PriorityBand => n >= 70 ? 'High' : n >= 40 ? 'Medium' : 'Low';
@@ -56,6 +68,13 @@ function weighted(terms: Term[]) {
     weight,
     evidence: known.flatMap(t => t.evidence ? [t.evidence] : []),
     actions: terms.flatMap(t => t.action && typeof t.score !== 'number' || (t.action && (t.score ?? 100) < 65) ? [t.action!] : []),
+    factors: terms.map(({ label, weight: factorWeight, score, evidence, action }) => ({
+      label,
+      weight: factorWeight,
+      score: typeof score === 'number' ? clamp(score) : null,
+      evidence,
+      action,
+    })),
   };
 }
 
@@ -95,6 +114,7 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
     : vpMid >= 2_000_000 ? 88 : vpMid >= 750_000 ? 76 : vpMid >= 250_000 ? 64 : 52;
   const valueTerms: Term[] = [
     {
+      label: 'Return on investment',
       weight: 30,
       score: roi !== undefined
         ? (roi >= 5 ? 95 : roi >= 3 ? 82 : roi >= 1.5 ? 66 : roi >= 1 ? 48 : 25)
@@ -107,12 +127,14 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
       action: roi === undefined && vpMid == null ? 'Complete the value inputs to estimate ROI and payback.' : roi !== undefined && roi < 1.5 ? 'Target a more valuable decision or reduce first-year cost.' : undefined,
     },
     {
+      label: 'Hard-dollar impact',
       weight: 20,
       score: hardShare === undefined ? undefined : 35 + hardShare * 65,
       evidence: hardShare === undefined ? undefined : `${Math.round(hardShare * 100)}% of estimated value is hard-dollar impact.`,
       action: hardShare === undefined ? 'Identify a measurable hard-dollar outcome.' : hardShare < 0.4 ? 'Tie the outcome to avoided cost or incremental revenue where credible.' : undefined,
     },
     {
+      label: 'Rollout scale',
       weight: 15,
       score: figures ? (figures.rollout ? 82 : 62) : (vp?.rolloutFull ? 74 : undefined),
       evidence: figures?.rollout
@@ -123,6 +145,7 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
       action: figures || vp?.rolloutFull ? undefined : 'Size the frequency and credible first rollout.',
     },
     {
+      label: 'Cost of delay',
       weight: 15,
       score: figures ? (figures.costOfDelay > figures.ask.total ? 90 : 65) : (idea.brief && idea.brief.length > 200 ? 68 : undefined),
       evidence: figures
@@ -133,12 +156,14 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
       action: figures ? undefined : 'Estimate the cost of waiting or of one bad outcome.',
     },
     {
+      label: 'People reached',
       weight: 10,
       score: people.size ? Math.min(95, 48 + people.size * 14) : undefined,
       evidence: people.size ? `${people.size} user role${people.size === 1 ? '' : 's'} benefit directly.` : undefined,
       action: people.size ? undefined : 'Name the people who make or act on the decision.',
     },
     {
+      label: 'Quality review',
       weight: 10,
       score: reviewerValue,
       evidence: reviewerValue === undefined ? undefined : `Reviewer value evidence scored ${reviewerValue}/100.`,
@@ -165,6 +190,7 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
 
   const feasibilityTerms: Term[] = [
     {
+      label: 'Data readiness',
       weight: 25, score: dataScore,
       evidence: context.dataSource
         ? `Data path: ${context.dataSource}${context.dataLocation ? ` (${context.dataLocation})` : ''}.`
@@ -174,21 +200,25 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
       action: dataScore === undefined || dataScore < 65 ? 'Identify the actual catalog/schema or choose a proven industry model.' : undefined,
     },
     {
+      label: 'Question coverage',
       weight: 20, score: coverage === undefined ? undefined : ((coverage * 0.65 + (needsCoverage ?? coverage) * 0.35) * 100),
       evidence: bp ? `${bp.matchedQuestions}/${bp.totalQuestions} questions and ${bp.coveredNeeds}/${bp.totalNeeds} needs are covered.` : undefined,
       action: bp?.gapCount ? `Resolve ${bp.gapCount} uncovered model need${bp.gapCount === 1 ? '' : 's'} or choose a closer model.` : coverage === undefined ? 'Confirm which KPIs answer the priority questions.' : undefined,
     },
     {
+      label: 'Data complexity',
       weight: 15, score: tableComplexity,
       evidence: bp ? `${bp.tableCount} tables are needed by the selected areas.` : undefined,
       action: tableComplexity !== undefined && tableComplexity < 65 ? 'Reduce the first pilot to fewer sources, tables, or joins.' : undefined,
     },
     {
+      label: 'Workflow alignment',
       weight: 15, score: roleComplexity,
       evidence: people.size ? `${people.size} roles need to align in the operating workflow.` : undefined,
       action: roleComplexity !== undefined && roleComplexity < 65 ? 'Start with one primary decision owner and one collaborating role.' : undefined,
     },
     {
+      label: 'Build complexity',
       weight: 15, score: buildComplexity,
       evidence: shape
         ? `${shape.title} is a ${shape.effort || 'medium'}-effort ${shape.kind} build.`
@@ -198,6 +228,7 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
       action: buildComplexity !== undefined && buildComplexity < 65 ? 'Stage delivery: prove Genie/dashboard first, then add App write-back or automation.' : undefined,
     },
     {
+      label: 'Quality review',
       weight: 10, score: reviewerFeasibility,
       evidence: reviewerFeasibility === undefined ? undefined : `Reviewer feasibility evidence scored ${reviewerFeasibility}/100.`,
       action: reviewerFeasibility === undefined ? 'Score the brief to surface unresolved feasibility assumptions.' : undefined,
@@ -231,9 +262,25 @@ export function assessPriority(idea: Idea, context: PriorityContext = {}): Prior
     feasibilityEvidence: f.evidence.slice(0, 4),
     valueActions: [...new Set(v.actions)].slice(0, 3),
     feasibilityActions: [...new Set(f.actions)].slice(0, 3),
+    valueFactors: v.factors,
+    feasibilityFactors: f.factors,
+    valueEvidenceWeight: v.weight,
+    feasibilityEvidenceWeight: f.weight,
     status: context.status ?? idea.review?.status,
     industry: context.industry ?? idea.spark?.industry ?? idea.industry,
     owner: context.owner,
     annualValue,
   };
+}
+
+/**
+ * Canonical portfolio coordinates use only evidence persisted on the idea.
+ * Display-only metadata is allowed, but transient screen state (for example a
+ * not-yet-saved blueprint selection) must not move an idea between maps.
+ */
+export function assessPortfolioPriority(
+  idea: Idea,
+  context: Pick<PriorityContext, 'status' | 'industry' | 'owner' | 'annualValue'> = {},
+): PriorityAssessment {
+  return assessPriority(idea, context);
 }

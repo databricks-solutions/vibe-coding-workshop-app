@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { calculateIdeaScore } from '../../constants/scoring';
 import { apiClient } from '../../api/client';
-import { ArrowRight, BookOpenCheck, CheckCircle2, Clock, Copy, Hammer, History, Inbox, Lightbulb, Menu, MoreHorizontal, Pencil, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowRight, BookOpenCheck, Check, CheckCircle2, Clock, Copy, Hammer, HelpCircle, History, Inbox, Lightbulb, Menu, MoreHorizontal, Pencil, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Modal } from '../library/ui';
 import {
   ApprovalTracker, ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, ReviewDialog, SAMPLES, STEP_ART, SubmitDialog, SummitTrail,
   isApproved, personName, useReviewRefresh, useReviewer, SurfaceChips, TierBadge, VoiceTextarea,
@@ -21,6 +22,46 @@ const PROMPTS = [
   'Claims adjusters re-key the same data into three systems…',
   'Store managers never know which shelves will run empty…',
 ];
+
+interface IdeaExample { industry: string; title: string; prompt: string }
+
+/** Ready-to-use seeds for people who aren't sure how much to write. */
+const IDEA_EXAMPLES: IdeaExample[] = [
+  {
+    industry: 'Quick Service Restaurants',
+    title: 'Loyalty next best offer',
+    prompt: 'Our loyalty members get generic or poorly timed offers, and most get ignored or just discount orders they would have placed anyway. Can you help us pick the single best offer for each member, and when to send it, so redemptions and check size go up?',
+  },
+  {
+    industry: 'CPG',
+    title: 'Promotion profitability',
+    prompt: 'We spend a lot on retailer promotions, but we don’t know which ones actually make money after the discount and trade spend. Can you help me see which promotions worked, which lost money, and what we should change before agreeing to the next one?',
+  },
+  {
+    industry: 'Retail',
+    title: 'Preventing stockouts',
+    prompt: 'Customers keep finding empty shelves even though we still have inventory elsewhere. Can you help store managers see which products are likely to run out in the next 48 hours and what they should reorder or move before sales are lost?',
+  },
+  {
+    industry: 'Airlines',
+    title: 'Preventing flight delays',
+    prompt: 'One late arrival can create problems with gates, crews, and the next flight. Can you help our operations team see which flights are most likely to leave late in the next hour, understand what is causing the risk, and decide what action to take before the delay happens?',
+  },
+  {
+    industry: 'Hotels',
+    title: 'Late cancellations',
+    prompt: 'Too many hotel bookings get cancelled in the last 48 hours, and we end up with empty rooms. I want to see which hotels, booking channels and seasons have the most late cancellations so revenue managers can adjust deposits and overbooking.',
+  },
+];
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function timeAgo(iso: string) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -47,6 +88,8 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
   const navigate = useNavigate();
   const [seed, setSeed] = useState('');
   const [industry, setIndustry] = useState('');
+  const [examplesOpen, setExamplesOpen] = useState(false);
+  const seedRef = useRef<HTMLTextAreaElement>(null);
   const [filter, setFilter] = useState<IdeaStatus | 'all' | 'pending' | 'changes_requested' | 'rejected' | 'approved' | 'building'>('all');
   const [sort, setSort] = useState<'recent' | 'value'>('recent');
   const [submitting, setSubmitting] = useState<Idea | null>(null);
@@ -175,7 +218,17 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
         </div>
 
         <div className="rounded-3xl border border-border bg-card p-5 md:p-6 shadow-sm animate-slide-up-fade">
+          <div className="flex justify-end -mt-1 mb-2">
+            <button
+              type="button"
+              onClick={() => setExamplesOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ui-xs text-muted-foreground/70 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            >
+              <HelpCircle className="w-3.5 h-3.5" /> Show me an example
+            </button>
+          </div>
           <VoiceTextarea
+            ref={seedRef}
             value={seed}
             onChange={setSeed}
             size="lg"
@@ -275,6 +328,22 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
 
         <SamplesSection onOpen={id => navigate(`/ideate/${id}`)} />
       </div>
+      <ExamplesDialog
+        open={examplesOpen}
+        onClose={() => setExamplesOpen(false)}
+        onUse={example => {
+          setSeed(example.prompt);
+          setIndustry(example.industry);
+          void copyText(example.prompt);
+          setExamplesOpen(false);
+          requestAnimationFrame(() => {
+            const el = seedRef.current;
+            if (!el) return;
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          });
+        }}
+      />
       {submitting && <SubmitDialog idea={ideas.find(i => i.id === submitting.id) ?? submitting} onClose={() => setSubmitting(null)} />}
       {reviewing && (
         <ReviewDialog
@@ -529,6 +598,59 @@ function CoachBanner({ coach, idea, canReview, everyone, onReview, onBuild, onOp
         <X className="w-3.5 h-3.5" />
       </button>
     </div>
+  );
+}
+
+function ExamplesDialog({ open, onClose, onUse }: { open: boolean; onClose: () => void; onUse: (example: IdeaExample) => void }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      width="max-w-2xl"
+      icon={<span className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><Lightbulb className="w-4 h-4" /></span>}
+      title="Start from an example"
+      subtitle="A rough paragraph is enough. Pick one, then make it yours."
+    >
+      <ul className="space-y-2.5">
+        {IDEA_EXAMPLES.map(example => <ExampleCard key={example.title} example={example} onUse={() => onUse(example)} />)}
+      </ul>
+    </Modal>
+  );
+}
+
+function ExampleCard({ example, onUse }: { example: IdeaExample; onUse: () => void }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <li className="group rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
+      <div className="flex items-center gap-2">
+        <span className="text-ui-2xs font-semibold uppercase tracking-wider text-primary">{example.industry}</span>
+        <span className="text-ui-2xs text-muted-foreground/50">·</span>
+        <span className="text-ui-sm font-semibold text-foreground">{example.title}</span>
+      </div>
+      <p className="text-ui-sm text-muted-foreground leading-relaxed mt-1.5">{example.prompt}</p>
+      <div className="flex items-center justify-end gap-2 mt-3">
+        <button
+          type="button"
+          onClick={async () => setCopied(await copyText(example.prompt))}
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-ui-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-secondary"
+          aria-label={`Copy the ${example.title} example`}
+        >
+          {copied ? <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+        </button>
+        <button
+          type="button"
+          onClick={onUse}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-ui-xs font-semibold shadow-sm transition-all hover:opacity-90 active:scale-[0.97]"
+        >
+          Use this <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </li>
   );
 }
 

@@ -193,6 +193,19 @@ class TestWritePathPlaceholder(unittest.TestCase):
         self.assertEqual(len(real), 1)
         self.assertEqual(real[0]["industry"], "airline")
 
+    def test_add_use_case_rejects_partner_community_home(self):
+        with self.assertRaises(routes.HTTPException) as ctx:
+            asyncio.run(routes.add_use_case(
+                routes.UseCaseCreate(
+                    industry=routes.COMMUNITY_COLLECTION_ID,
+                    use_case="ui_created",
+                    use_case_label="UI Created",
+                    prompt_template="This must come from contrib.",
+                )
+            ))
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(self.db.rows, [])
+
     def test_add_duplicate_industry_rejected(self):
         asyncio.run(routes.add_industry(
             routes.IndustryCreate(industry="airline", industry_label="Airline")

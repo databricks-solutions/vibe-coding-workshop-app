@@ -10,6 +10,9 @@ import { KINDS } from './theme';
 import { CollectionGlyph, Kbd, Modal } from './ui';
 import { cx } from './cx';
 import { BTN_GHOST, BTN_PRIMARY } from '../skills/uiStyles';
+import { isRepositoryManagedCollection } from './curation';
+import { SupportingResourceCard } from './SupportingResourceCard';
+import { resourcePresentation } from './supportingResource';
 
 interface Props {
   open: boolean;
@@ -17,14 +20,17 @@ interface Props {
   homeId: string;
   alsoIn: string[];
   actions: LibraryActions;
+  resourcesEnabled?: boolean;
   onClose: () => void;
   onCreated: (industry: string, useCase: string) => void;
 }
 
 const toSlug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
-export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, onClose, onCreated }: Props) {
+export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, resourcesEnabled = false, onClose, onCreated }: Props) {
   const builder = useUseCaseBuilder();
+  const firstWritableHome = model.collections.find(c => !isRepositoryManagedCollection(c.collection_id))?.collection_id || '';
+  const initialHome = isRepositoryManagedCollection(homeId) ? firstWritableHome : homeId;
   const [home, setHome] = useState(homeId);
   const [category, setCategory] = useState<string>('');
   const [newCategory, setNewCategory] = useState(false);
@@ -35,25 +41,29 @@ export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, onClos
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [resourceUrl, setResourceUrl] = useState('');
+  const [resourceLabel, setResourceLabel] = useState('');
 
   const homeCollection = model.byId[home];
 
   useEffect(() => {
     if (!open) return;
-    setHome(homeId);
-    setExtra(alsoIn);
+    setHome(initialHome);
+    setExtra(alsoIn.filter(id => !isRepositoryManagedCollection(id)));
     setCategory('');
     setNewCategory(false);
     setSlug('');
     setSlugEdited(false);
     setConfirmDiscard(false);
+    setResourceUrl('');
+    setResourceLabel('');
     builder.setUseCaseName('');
     builder.setHints('');
     builder.setAttachments([]);
     builder.setOutputText('');
     builder.setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, homeId, alsoIn.join(',')]);
+  }, [open, initialHome, alsoIn.join(',')]);
 
   useEffect(() => {
     if (homeCollection) builder.setIndustry(homeCollection.label);
@@ -62,9 +72,11 @@ export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, onClos
 
   const derivedSlug = slugEdited ? slug : toSlug(builder.useCaseName);
   const description = builder.isEditing ? builder.editText : builder.outputText;
+  const resourcePreview = resourceUrl.trim() ? resourcePresentation({ url: resourceUrl.trim(), label: resourceLabel }) : null;
+  const resourceValid = !resourceUrl.trim() || !!resourcePreview;
   const taken = useMemo(() => new Set(model.useCases.filter(u => u.industry === home).map(u => u.use_case)), [model, home]);
   const slugTaken = taken.has(derivedSlug);
-  const canSave = !!(builder.useCaseName.trim() && description.trim() && derivedSlug && !slugTaken && !builder.isStreaming && !saving);
+  const canSave = !!(builder.useCaseName.trim() && description.trim() && derivedSlug && !slugTaken && resourceValid && !builder.isStreaming && !saving);
   const cats = categoriesOf(model, home);
 
   const close = () => {
@@ -90,6 +102,8 @@ export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, onClos
       use_case: derivedSlug,
       use_case_label: builder.useCaseName.trim(),
       prompt_template: description.trim(),
+      resource_url: resourceUrl.trim() || null,
+      resource_label: resourceLabel.trim() || null,
       category: category || null,
       category_order: col && col.order < 900 ? col.order : category ? Math.max(0, ...columnsFor(model.entriesByCollection[home] || []).map(c => (c.order < 900 ? c.order : 0))) + 1 : null,
       alsoIn: extra.filter(id => id !== home),
@@ -133,7 +147,9 @@ export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, onClos
                 >
                   {KINDS.map(k => (
                     <optgroup key={k.id} label={k.label}>
-                      {model.byKind[k.id].map(c => <option key={c.collection_id} value={c.collection_id}>{c.label}</option>)}
+                      {model.byKind[k.id]
+                        .filter(c => !isRepositoryManagedCollection(c.collection_id))
+                        .map(c => <option key={c.collection_id} value={c.collection_id}>{c.label}</option>)}
                     </optgroup>
                   ))}
                 </select>
@@ -175,7 +191,11 @@ export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, onClos
                   {adding && (
                     <div className="absolute z-10 left-0 top-full mt-1 w-60 max-h-72 overflow-y-auto rounded-xl bg-popover p-1.5 shadow-xl ring-1 ring-border">
                       {KINDS.map(k => {
-                        const opts = model.byKind[k.id].filter(c => c.collection_id !== home && !extra.includes(c.collection_id));
+                        const opts = model.byKind[k.id].filter(c =>
+                          c.collection_id !== home
+                          && !extra.includes(c.collection_id)
+                          && !isRepositoryManagedCollection(c.collection_id),
+                        );
                         if (!opts.length) return null;
                         return (
                           <div key={k.id}>
@@ -193,6 +213,30 @@ export function NewUseCaseOverlay({ open, model, homeId, alsoIn, actions, onClos
                 </div>
               </div>
             </div>
+
+            {resourcesEnabled && <div>
+              <label className="block text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Supporting resource <span className="normal-case tracking-normal font-normal">(optional)</span></label>
+              <input
+                value={resourceUrl}
+                onChange={event => setResourceUrl(event.target.value)}
+                placeholder="YouTube, Google Doc, or web link"
+                className="w-full rounded-lg bg-background px-3 py-2 text-ui-xs ring-1 ring-border outline-none focus:ring-primary/50"
+              />
+              <input
+                value={resourceLabel}
+                onChange={event => setResourceLabel(event.target.value)}
+                maxLength={120}
+                placeholder="Label, e.g. Watch the demo"
+                className="mt-2 w-full rounded-lg bg-background px-3 py-2 text-ui-xs ring-1 ring-border outline-none focus:ring-primary/50"
+              />
+              {resourcePreview ? (
+                <div className="mt-2"><SupportingResourceCard resource={{ url: resourceUrl.trim(), label: resourceLabel }} compact /></div>
+              ) : resourceUrl.trim() ? (
+                <p className="mt-1.5 text-ui-2xs text-amber-600 dark:text-amber-400">Use a valid HTTPS link.</p>
+              ) : (
+                <p className="mt-1.5 text-ui-2xs text-muted-foreground">YouTube links show a thumbnail automatically.</p>
+              )}
+            </div>}
 
             <div>
               <label className="block text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Use case ID</label>

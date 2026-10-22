@@ -59,7 +59,7 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
   const lastOpen = questions.filter(x => !impact.answers[x.key]).length <= 1;
   const trail = questions
     .map((x, index) => ({ key: x.key, index, question: x.question, answer: impact.answers[x.key]?.label ?? '', soft: impact.answers[x.key]?.source === 'assumed' }))
-    .filter(x => x.answer && x.index !== active);
+    .filter(x => x.answer);
   const typical = idea.useCaseContext?.valueProfile;
 
   const save = (key: string, label: string, value: number, source: 'you said' | 'assumed') => {
@@ -92,6 +92,8 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
         {impact.scope && <span className="ml-auto text-ui-xs text-muted-foreground truncate">Sized for {impact.scope.charAt(0).toLowerCase() + impact.scope.slice(1)}</span>}
       </div>
 
+      {q && <AnswerTrail items={trail} activeIndex={editing} onEdit={setEditing} />}
+
       {q && (
         <QuestionCard
           key={q.key}
@@ -111,8 +113,6 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
       )}
 
       {q && answeredCount > 0 && <RunningEstimate flow={flow} />}
-
-      {q && <AnswerTrail items={trail} onEdit={setEditing} />}
 
       {!q && <ImpactRecap flow={flow} onEdit={setEditing} />}
 

@@ -6,6 +6,7 @@ import type { LibraryModel } from './model';
 import { KINDS } from './theme';
 import { CollectionGlyph } from './ui';
 import { cx } from './cx';
+import { isRepositoryManagedCollection } from './curation';
 
 interface Props {
   model: LibraryModel;
@@ -41,7 +42,9 @@ export function BulkBar({ model, selected, onClear, onFlags, onAddTo, excludeCol
               {picker && (
                 <div className="absolute bottom-full mb-2 left-0 w-64 max-h-80 overflow-y-auto rounded-xl bg-popover text-foreground p-1.5 shadow-2xl ring-1 ring-border">
                   {KINDS.map(k => {
-                    const list = model.byKind[k.id].filter(c => c.collection_id !== excludeCollection);
+                    const list = model.byKind[k.id].filter(c =>
+                      c.collection_id !== excludeCollection && !isRepositoryManagedCollection(c.collection_id),
+                    );
                     if (!list.length) return null;
                     return (
                       <div key={k.id} className="mb-1">

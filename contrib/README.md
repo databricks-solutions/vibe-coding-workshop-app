@@ -26,6 +26,8 @@ git commit -s -m "Add Claims Triage Agent use case"
 
 Add a line for your folder to [`.github/CODEOWNERS`](../.github/CODEOWNERS) in the same pull request, for example `/contrib/usecases/acme/  @prashsub @varunrao @acme-org/solutions`, so you're asked to review future changes to your use cases.
 
+After the pull request is reviewed and merged, a maintainer must sync or deploy that commit to the Databricks App. In **Configuration > Library > Partner & Community**, choose **Reload deployed files** to re-read the `contrib/` directory without restarting the process. Reload does not pull from GitHub; a merged change cannot appear until its commit has been deployed.
+
 ## Folder layout
 
 ```
@@ -78,6 +80,18 @@ Several contributors can share credit for one use case through `co_contributors:
 
 Commands such as `rm -rf` or `sudo` produce a warning rather than an error.
 
+## Optional featured resource
+
+A use case can feature one recording, Google Doc/Sheet/Slides file, or other HTTPS resource without making it required:
+
+```yaml
+featured_resource:
+  label: Watch the demo
+  url: https://www.youtube.com/watch?v=MUa5kbIV1Lc
+```
+
+YouTube links receive a thumbnail automatically. Other links render as a compact provider card. The sample contribution includes the workshop walkthrough so you can preview the treatment in the app.
+
 ## Versions and updates
 
 Use semantic versions. Every change to a use case folder needs a higher `version` and a matching `changelog` entry; the pull-request check enforces this. Git keeps the full history of every file.
@@ -101,7 +115,8 @@ The app shows a "Certified by Acme" badge only while the certified version equal
 
 - **Badges** on every card: Native, Partner or Third-party with the contributor's name, Certified by, Sample and Deprecated.
 - **Placement**: in the `home` collection (if this install has it), in any `also` collections, and always in Partner & Community.
-- **Details panel** under the description: contributor, certifications, version history, screenshots and links.
+- **Supporting resource** above the description when `featured_resource` is present, using the same restrained card as native use cases.
+- **Details panel** under the description: contributor, certifications, version history, screenshots and additional links.
 - **Filter** in the workshop picker (All, Native, Partner, Third-party, Certified) whenever a collection has contributions.
 - **MCP**: use-case listings include `provenance`, `contributed_by` and `certified_by`.
 

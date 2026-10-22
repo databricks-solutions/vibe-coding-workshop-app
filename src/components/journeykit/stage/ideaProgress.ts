@@ -18,6 +18,8 @@ export function ideaProgressSteps(idea: Idea, viewStep: StepKey | null): Progres
     optional: s.optional,
     disabled: i > furthest,
     points: { earned: ideaStepPoints(idea, s.key), available: ideaStepAvailable(idea, s.key) },
+    detail: s.detail,
+    minutes: s.minutes,
   }));
 }
 
@@ -26,8 +28,12 @@ export function ideaTrail(idea: Idea): { briefMarker: 'summit' | 'camp'; beyond?
   const t = modeOf(idea).trail;
   if (!t.beyond) return { briefMarker: t.briefMarker };
   const state = idea.buildStage === 'studio' ? 'done' : idea.lockedAt ? 'current' : 'upcoming';
-  return { briefMarker: t.briefMarker, beyond: { label: t.beyond.label, state } };
+  return { briefMarker: t.briefMarker, beyond: { label: t.beyond.label, state, detail: `${t.beyond.hint}. This is where your Genie gets built.` } };
 }
+
+/** The trailhead intro shows once, before the first step, for someone working on their own idea. */
+export const showsTrailhead = (idea: Idea, readOnly: boolean) =>
+  !idea.trailSeenAt && idea.approved.length === 0 && !readOnly && !idea.sample;
 
 /** Stops left to the top of this idea's trail, counting only required steps. */
 export function stopsToSummit(idea: Idea): number {

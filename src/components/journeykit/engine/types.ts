@@ -32,28 +32,30 @@ export interface StepMeta {
   key: StepKey;
   label: string;
   hint: string;
+  /** What happens at this stop and what you leave with; shown when someone looks at the route. */
+  detail: string;
   optional?: boolean;
   /** Rough time on this step, used for path estimates. */
   minutes: number;
 }
 
 export const STEPS: StepMeta[] = [
-  { key: 'spark', label: 'Your idea', hint: 'Did I get your idea right?', minutes: 1 },
-  { key: 'map', label: 'Where it fits', hint: 'Where your idea sits in the industry', minutes: 1 },
-  { key: 'clarify', label: 'A few questions', hint: 'A few quick questions', minutes: 2 },
-  { key: 'shape', label: 'Pick an approach', hint: 'Three ways to bring it to life', minutes: 2 },
-  { key: 'impact', label: "What it's worth", hint: 'What could it be worth?', optional: true, minutes: 2 },
-  { key: 'brief', label: 'Your brief', hint: 'Your decision-ready one-pager', minutes: 2 },
+  { key: 'spark', label: 'Your idea', hint: 'Did I get your idea right?', detail: 'The AI plays your idea back in one clear line. Confirm it, or say what to change.', minutes: 1 },
+  { key: 'map', label: 'Where it fits', hint: 'Where your idea sits in the industry', detail: 'See where the idea sits in your industry, who it helps, and the related opportunities around it.', minutes: 1 },
+  { key: 'clarify', label: 'A few questions', hint: 'A few quick questions', detail: 'Answer a handful of multiple-choice questions so the plan fits how your team really works.', minutes: 2 },
+  { key: 'shape', label: 'Pick an approach', hint: 'Three ways to bring it to life', detail: 'Compare three ways to build it, with the effort and value of each, and pick one.', minutes: 2 },
+  { key: 'impact', label: "What it's worth", hint: 'What could it be worth?', detail: 'Optional. Rough answers turn into a yearly value range for your business case. You can skip it.', optional: true, minutes: 2 },
+  { key: 'brief', label: 'Your brief', hint: 'Your decision-ready one-pager', detail: 'Everything you decided, on one page you can share and submit for approval.', minutes: 2 },
 ];
 
 export const INSIGHTS_STEPS: StepMeta[] = [
   STEPS[0],
   STEPS[1],
   STEPS[2],
-  { key: 'shape', label: 'Pick an approach', hint: 'Three ways people could get their answers', minutes: 2 },
-  { key: 'questions', label: 'Questions for Genie', hint: 'What should people be able to ask?', minutes: 2 },
+  { key: 'shape', label: 'Pick an approach', hint: 'Three ways people could get their answers', detail: 'Compare three ways people could get their answers, each a Genie and a dashboard, and pick one.', minutes: 2 },
+  { key: 'questions', label: 'Questions for Genie', hint: 'What should people be able to ask?', detail: 'List the questions people should be able to ask. Your Genie is tested on them.', minutes: 2 },
   STEPS[4],
-  { key: 'brief', label: 'Your brief', hint: 'Lock in what you are about to build', minutes: 2 },
+  { key: 'brief', label: 'Your brief', hint: 'Lock in what you are about to build', detail: 'Check the plan on one page, then lock it in and pick the data your Genie runs on.', minutes: 2 },
 ];
 
 export const stepsFor = (mode: JourneyMode = 'ideate'): StepMeta[] => (mode === 'insights' ? INSIGHTS_STEPS : STEPS);

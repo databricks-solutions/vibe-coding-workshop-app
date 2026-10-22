@@ -18,6 +18,7 @@ import { LibrarySearch } from './LibrarySearch';
 import { EmptyState, Kbd, Modal } from './ui';
 import { cx } from './cx';
 import { BTN_GHOST, BTN_PRIMARY } from '../skills/uiStyles';
+import { isRepositoryManagedCollection } from './curation';
 import './library.css';
 
 function parseView(pathname: string): LibraryView {
@@ -131,10 +132,17 @@ export function LibraryPage() {
 
   const startNewUseCase = useCallback((home?: string, alsoIn: string[] = []) => {
     if (!model) return;
-    const fallback = currentCollection?.collection_id || model.byKind.industry.find(c => c.collection_id !== 'sample')?.collection_id || model.collections[0]?.collection_id;
+    if (home && isRepositoryManagedCollection(home)) {
+      notify({ tone: 'info', message: 'Partner contributions are added through contrib/ and reviewed in a pull request.' });
+      return;
+    }
+    const currentId = currentCollection?.collection_id;
+    const fallback = (currentId && !isRepositoryManagedCollection(currentId) ? currentId : null)
+      || model.byKind.industry.find(c => c.collection_id !== 'sample' && !isRepositoryManagedCollection(c.collection_id))?.collection_id
+      || model.collections.find(c => !isRepositoryManagedCollection(c.collection_id))?.collection_id;
     const h = home || fallback;
     if (!h) { notify({ tone: 'info', message: 'Create a collection first' }); return; }
-    setNewUc({ open: true, home: h, alsoIn });
+    setNewUc({ open: true, home: h, alsoIn: alsoIn.filter(id => !isRepositoryManagedCollection(id)) });
   }, [model, currentCollection, notify]);
 
   const createCollection = useCallback((kind: CollectionKind) => setCollectionDialog({ open: true, initial: null, kind }), []);
@@ -156,6 +164,10 @@ export function LibraryPage() {
 
   const addTo = useCallback(async (ucs: LibraryUseCase[], collectionId: string, m: LibraryModel) => {
     const target = m.byId[collectionId];
+    if (isRepositoryManagedCollection(collectionId)) {
+      notify({ tone: 'info', message: 'Partner & Community is populated only by validated files in contrib/.' });
+      return;
+    }
     const todo = ucs.filter(u => u.industry !== collectionId && !(m.membersByKey[keyOf(u)] || []).some(x => x.collection_id === collectionId));
     if (!todo.length) { notify({ tone: 'info', message: `Already in ${target?.label || 'that collection'}` }); return; }
     try {
@@ -279,6 +291,7 @@ export function LibraryPage() {
         model={model}
         uc={drawerUc}
         actions={actions}
+        resourcesEnabled={!!capabilities?.resources}
         onClose={() => setParam('uc', null)}
         onNavigateCollection={id => go(`/library/c/${id}`)}
       />
@@ -308,6 +321,7 @@ export function LibraryPage() {
         homeId={newUc.home}
         alsoIn={newUc.alsoIn}
         actions={actions}
+        resourcesEnabled={!!capabilities?.resources}
         onClose={() => setNewUc(s => ({ ...s, open: false }))}
         onCreated={(industry, useCase) => {
           setNewUc(s => ({ ...s, open: false }));

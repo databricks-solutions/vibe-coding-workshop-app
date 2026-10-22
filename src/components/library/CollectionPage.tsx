@@ -3,12 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { BadgeCheck, Eye, EyeOff, HeartHandshake, LayoutGrid, Link2, List as ListIcon, Pencil, Plus, Search, Settings2, SearchX, Target } from 'lucide-react';
 import type { LibraryCollection, LibraryUseCase } from '../../api/library';
 import { columnsFor, keyOf, UNCATEGORIZED, type Column, type Entry, type LibraryModel } from './model';
-import { focusPlan, isContributed } from './curation';
+import { focusPlan, isContributed, isRepositoryManagedCollection } from './curation';
 import { FocusDialog } from './FocusDialog';
 import type { LibraryActions } from './useLibrary';
 import { BulkBar } from './BulkBar';
 import { UseCaseCard } from './UseCaseCard';
 import { UseCaseTable } from './UseCaseTable';
+import { ContributionGuide } from './ContributionGuide';
 import { KIND_BY_ID, categoryTint, collectionIcon, collectionTint, relativeTime, tintStyle } from './theme';
 import { Avatar, CollectionGlyph, EmptyState, KindBadge, Meter, SegmentedControl, Switch } from './ui';
 import { cx } from './cx';
@@ -94,6 +95,7 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
   useEffect(() => { localStorage.setItem(VIEW_KEY, mode); }, [mode]);
 
   const id = collection.collection_id;
+  const repositoryManaged = isRepositoryManagedCollection(id);
   const tint = collectionTint(collection);
   const kind = KIND_BY_ID[collection.kind];
   const stats = model.stats[id] || { total: 0, live: 0, hidden: 0, certified: 0, crossListed: 0, contributed: 0 };
@@ -160,14 +162,23 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
           <div className="flex items-start gap-5">
             <CollectionGlyph collection={collection} size="xl" off={!collection.is_enabled} />
             <div className="flex-1 min-w-0">
-              <InlineText value={collection.label} onSave={v => v && void actions.updateCollection(id, { label: v })} className="text-ui-3xl font-semibold tracking-tight text-foreground" />
-              <InlineText
-                value={collection.description || ''}
-                placeholder="Add a one-line description attendees will see under the tab…"
-                multiline
-                onSave={v => void actions.updateCollection(id, { description: v || null })}
-                className="mt-1 text-ui-md text-muted-foreground max-w-2xl"
-              />
+              {repositoryManaged ? (
+                <>
+                  <h1 className="text-ui-3xl font-semibold tracking-tight text-foreground">{collection.label}</h1>
+                  <p className="mt-1 text-ui-md text-muted-foreground max-w-2xl">{collection.description}</p>
+                </>
+              ) : (
+                <>
+                  <InlineText value={collection.label} onSave={v => v && void actions.updateCollection(id, { label: v })} className="text-ui-3xl font-semibold tracking-tight text-foreground" />
+                  <InlineText
+                    value={collection.description || ''}
+                    placeholder="Add a one-line description attendees will see under the tab…"
+                    multiline
+                    onSave={v => void actions.updateCollection(id, { description: v || null })}
+                    className="mt-1 text-ui-md text-muted-foreground max-w-2xl"
+                  />
+                </>
+              )}
             </div>
             <div className={cx('shrink-0 rounded-2xl p-4 w-72 ring-1 backdrop-blur', collection.is_enabled ? 'bg-card/70 ring-border' : 'bg-card/50 ring-amber-500/30')}>
               <div className="flex items-center gap-3">
@@ -245,30 +256,33 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
           onChange={setMode}
           options={[{ id: 'board', label: 'Board', icon: <LayoutGrid className="w-3.5 h-3.5" /> }, { id: 'list', label: 'List', icon: <ListIcon className="w-3.5 h-3.5" /> }]}
         />
-        <button className={BTN_SECONDARY} onClick={() => onEditCollection(collection)} title="Collection settings"><Settings2 className="w-4 h-4" /></button>
+        {!repositoryManaged && <button className={BTN_SECONDARY} onClick={() => onEditCollection(collection)} title="Collection settings"><Settings2 className="w-4 h-4" /></button>}
         {canFocus && (
           <button className={BTN_SECONDARY} onClick={() => setFocusOpen(true)} title="Keep the certified use cases live and hide the rest">
             <Target className="w-4 h-4" />Focus on certified
           </button>
         )}
         <button className={BTN_SECONDARY} onClick={() => onPreview(id)}><Eye className="w-4 h-4" />Preview</button>
-        <button className={BTN_PRIMARY} onClick={() => onNewUseCase(id)}><Plus className="w-4 h-4" />New use case</button>
+        {!repositoryManaged && <button className={BTN_PRIMARY} onClick={() => onNewUseCase(id)}><Plus className="w-4 h-4" />New use case</button>}
       </div>
 
       {/* Body */}
       <div className="flex-1 px-8 py-6">
+        {repositoryManaged && <div className="mb-6"><ContributionGuide onCatalogReload={actions.reload} /></div>}
         {allEntries.length === 0 ? (
           <EmptyState
             icon={(() => { const I = collectionIcon(collection); return <I className="w-6 h-6" />; })()}
             title={`${collection.label} is empty`}
-            body={collection.kind === 'industry'
+            body={repositoryManaged
+              ? 'No validated contributions are present in the deployed files yet. Follow the contributor guide above, deploy the merged commit, then reload the catalog.'
+              : collection.kind === 'industry'
               ? 'Build a use case with the AI builder, or add existing ones from other collections.'
               : `Cross-list use cases from your industries into ${collection.label}, or build a new play from scratch.`}
-            action={
+            action={!repositoryManaged ? (
               <div className="flex gap-2">
                 <button className={BTN_PRIMARY} onClick={() => onNewUseCase(id)}><Plus className="w-4 h-4" />Build a use case</button>
               </div>
-            }
+            ) : undefined}
           />
         ) : entries.length === 0 ? (
           <EmptyState icon={<SearchX className="w-6 h-6" />} title="Nothing matches" body="Try a different search or filter." action={<button className={BTN_SECONDARY} onClick={() => { setQuery(''); setFilter('all'); }}>Clear filters</button>} />

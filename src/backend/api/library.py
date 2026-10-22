@@ -13,7 +13,7 @@ import re
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.backend.api.routes import (
     SKILL_USE_CASES,
@@ -82,11 +82,12 @@ async def get_library(response: Response) -> Dict[str, Any]:
     schema = get_schema()
     caps = ensure_library_schema(schema)
     source_col = "source" if caps["source"] else "'admin' AS source"
+    resource_cols = "resource_url, resource_label" if caps.get("resources") else "NULL AS resource_url, NULL AS resource_label"
     use_cases = execute_query(f"""
         SELECT DISTINCT ON (industry, use_case)
             industry, industry_label, use_case, use_case_label, prompt_template, version,
             is_active, is_certified, path_type, category, category_order, display_order,
-            created_by, {source_col},
+            created_by, {source_col}, {resource_cols},
             TO_CHAR(inserted_at, 'YYYY-MM-DD"T"HH24:MI:SS') AS updated_at,
             COUNT(*) OVER (PARTITION BY industry, use_case) AS version_count
         FROM {schema}.usecase_descriptions
@@ -149,6 +150,8 @@ def _library_contributed(db_use_cases: List[Dict[str, Any]]) -> Dict[str, List[D
             "is_active": r["is_active"], "is_certified": False, "path_type": r["path_type"],
             "category": r.get("category"), "category_order": r.get("category_order"), "display_order": r.get("display_order"),
             "created_by": c["contributor"]["display_name"], "source": "contributed", "updated_at": None,
+            "resource_url": (c.get("featured_resource") or {}).get("url"),
+            "resource_label": (c.get("featured_resource") or {}).get("label"),
             "read_only": True, "provenance": r["provenance"], "contribution": c,
         })
     members = [m for m in _members_with_contrib(rows) if m.get("locked") and (m["collection_id"], m["home_industry"], m["use_case"]) not in db_members]
@@ -200,6 +203,8 @@ async def create_collection(body: CollectionCreate, request: Request) -> Dict[st
     cid = _slug(body.collection_id or body.label)
     if not cid:
         raise HTTPException(status_code=400, detail="Give the collection a name with at least one letter or number.")
+    if cid == COMMUNITY_COLLECTION_ID:
+        raise HTTPException(status_code=409, detail="Partner & Community is managed by the contrib/ repository workflow.")
     clash = execute_query(
         f"""SELECT 1 FROM {schema}.usecase_collections WHERE collection_id = %s
             UNION ALL SELECT 1 FROM {schema}.usecase_descriptions WHERE industry = %s LIMIT 1""",
@@ -232,6 +237,11 @@ async def update_collection(collection_id: str, body: CollectionUpdate, request:
     fields = _set_fields(body)
     if not fields:
         return {"success": True}
+    if collection_id == COMMUNITY_COLLECTION_ID and set(fields) - {"is_enabled"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Partner & Community details are repository-managed; only attendee visibility can be changed here.",
+        )
     _ensure_collection_row(schema, collection_id, user)
     assignments = ", ".join(f"{k} = %s" for k in fields)
     ok = execute_insert(
@@ -268,6 +278,11 @@ async def reorder_collections(body: CollectionOrder, request: Request) -> Dict[s
 
 @router.delete("/config/collections/{collection_id}")
 async def delete_collection(collection_id: str) -> Dict[str, Any]:
+    if collection_id == COMMUNITY_COLLECTION_ID:
+        raise HTTPException(
+            status_code=409,
+            detail="Partner & Community is repository-managed and can be hidden, but not deleted.",
+        )
     schema = get_schema()
     _require_tables(schema)
     execute_insert(
@@ -294,6 +309,15 @@ class UseCaseUpdate(BaseModel):
     category: Optional[str] = None
     category_order: Optional[int] = None
     display_order: Optional[int] = None
+    resource_url: Optional[str] = Field(default=None, max_length=2048)
+    resource_label: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("resource_url")
+    @classmethod
+    def _https_resource(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value != "" and not value.startswith("https://"):
+            raise ValueError("Supporting resource must use HTTPS.")
+        return value or None
 
 
 class BulkUpdate(BaseModel):
@@ -340,8 +364,36 @@ def _update_use_case(schema: str, industry: str, use_case: str, fields: Dict[str
     )
 
 
+_GOVERNED_UNAPPROVED_SOURCES = {"ideate_pending", "ideate_changes", "ideate_rejected"}
+
+
+def _assert_use_case_publishable(schema: str, industry: str, use_case: str, fields: Dict[str, Any]) -> None:
+    """Only the revision-aware Ideate review action may publish governed submissions."""
+    if fields.get("is_active") is not True:
+        return
+    if not ensure_library_schema(schema).get("source"):
+        return
+    rows = execute_query(
+        f"""SELECT source FROM {schema}.usecase_descriptions
+            WHERE industry = %s AND use_case = %s
+            ORDER BY version DESC LIMIT 1""",
+        (industry, use_case),
+    ) or []
+    source = rows[0].get("source") if rows else None
+    if source in _GOVERNED_UNAPPROVED_SOURCES:
+        raise HTTPException(
+            status_code=409,
+            detail="This Ideate submission must be approved from the review workspace before it can go live.",
+        )
+
+
 @router.patch("/config/use-cases/bulk")
 async def bulk_update_use_cases(body: BulkUpdate, request: Request) -> Dict[str, Any]:
+    if any(i.industry == COMMUNITY_COLLECTION_ID and not is_contributed_key(i.use_case) for i in body.items):
+        raise HTTPException(
+            status_code=409,
+            detail="Partner & Community accepts only repository-contributed use cases.",
+        )
     schema = get_schema()
     user = _get_session_user(request)
     fields = {k: v for k, v in _set_fields(body).items() if k in ("is_active", "is_certified")}
@@ -354,6 +406,7 @@ async def bulk_update_use_cases(body: BulkUpdate, request: Request) -> Dict[str,
                 continue
             ok = contrib_overrides.upsert(schema, i.use_case, contrib_fields, user)
         else:
+            _assert_use_case_publishable(schema, i.industry, i.use_case, fields)
             ok = _update_use_case(schema, i.industry, i.use_case, fields)
         if ok:
             updated += 1
@@ -367,11 +420,22 @@ async def bulk_update_use_cases(body: BulkUpdate, request: Request) -> Dict[str,
 
 @router.patch("/config/use-cases/{industry}/{use_case}")
 async def update_use_case(industry: str, use_case: str, body: UseCaseUpdate, request: Request) -> Dict[str, Any]:
+    if industry == COMMUNITY_COLLECTION_ID and not is_contributed_key(use_case):
+        raise HTTPException(
+            status_code=409,
+            detail="Partner & Community accepts only repository-contributed use cases.",
+        )
     schema = get_schema()
     fields = _set_fields(body)
+    if {"resource_url", "resource_label"} & fields.keys() and not ensure_library_schema(schema).get("resources"):
+        raise HTTPException(
+            status_code=503,
+            detail="Supporting resources need the latest Library schema. Run the additive Lakebase setup.",
+        )
     if is_contributed_key(use_case):
         ok = _contributed_update(schema, use_case, fields, _get_session_user(request))
     else:
+        _assert_use_case_publishable(schema, industry, use_case, fields)
         ok = _update_use_case(schema, industry, use_case, fields)
     if not ok:
         raise HTTPException(status_code=500, detail="Couldn't update the use case.")
@@ -401,6 +465,11 @@ def _category_slot(schema: str, collection_id: str, category: Optional[str]) -> 
 
 @router.put("/config/use-cases/{industry}/{use_case}/placements")
 async def set_placements(industry: str, use_case: str, body: PlacementsUpdate, request: Request) -> Dict[str, Any]:
+    if any(p.collection_id == COMMUNITY_COLLECTION_ID for p in body.placements):
+        raise HTTPException(
+            status_code=409,
+            detail="Partner & Community is populated only from contrib/ files; native use cases cannot be added to it.",
+        )
     schema = get_schema()
     _require_tables(schema)
     user = _get_session_user(request)
@@ -439,6 +508,11 @@ async def set_placements(industry: str, use_case: str, body: PlacementsUpdate, r
 @router.put("/config/collections/{collection_id}/layout")
 async def set_layout(collection_id: str, body: LayoutUpdate) -> Dict[str, Any]:
     """Persist card order and category moves from the Library board."""
+    if collection_id == COMMUNITY_COLLECTION_ID and any(not is_contributed_key(i.use_case) for i in body.items):
+        raise HTTPException(
+            status_code=409,
+            detail="Only repository-contributed use cases can be arranged in Partner & Community.",
+        )
     schema = get_schema()
     for item in body.items:
         fields = {"category": item.category, "category_order": item.category_order, "display_order": item.display_order}
@@ -471,6 +545,8 @@ async def set_layout(collection_id: str, body: LayoutUpdate) -> Dict[str, Any]:
 async def review_use_case(industry: str, use_case: str, body: ReviewAction) -> Dict[str, Any]:
     if is_contributed_key(use_case):
         raise HTTPException(status_code=409, detail="Contributed use cases are reviewed in their pull request.")
+    if industry == COMMUNITY_COLLECTION_ID:
+        raise HTTPException(status_code=409, detail="Partner & Community use cases are reviewed in their pull request.")
     schema = get_schema()
     caps = ensure_library_schema(schema)
     fields: Dict[str, Any] = {"is_active": True} if body.action == "approve" else {}

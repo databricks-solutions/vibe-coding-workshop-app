@@ -13,6 +13,9 @@ export interface ProgressStep {
   disabled?: boolean;
   /** Idea Points on this step: what it can earn, and what it has. */
   points?: { earned: number; available: number };
+  /** One or two sentences on what happens at this step. */
+  detail?: string;
+  minutes?: number;
 }
 
 export interface ProgressPhase {

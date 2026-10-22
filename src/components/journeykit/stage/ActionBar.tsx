@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Loader2, MessageSquareWarning, PenLine, RefreshC
 import { RefineButton } from '../ui/RefineButton';
 import { VoiceTextarea } from '../ui/VoiceTextarea';
 import { GhostButton, PrimaryButton, SecondaryButton } from '../ui/primitives';
+import { StepDock, type DockProgress } from './StepDock';
 
 interface ActionBarProps {
   onBack?: () => void;
@@ -16,24 +17,50 @@ interface ActionBarProps {
   note?: ReactNode;
   /** Replaces the primary button, e.g. with "Continue" on an approved step. */
   primary?: ReactNode;
+  /**
+   * Pins the buttons to the bottom of the screen beside the journey progress. The bar renders
+   * with `display: contents` so the dock can stick for the whole height of the step above it.
+   */
+  dock?: DockProgress;
   children?: ReactNode;
 }
 
 /** The bottom row of every guided screen: Back left, quiet actions middle, one primary action right. */
-export function ActionBar({ onBack, backLabel = 'Back', secondary, primaryLabel, onPrimary, primaryDisabled, note, primary, children }: ActionBarProps) {
+export function ActionBar({ onBack, backLabel = 'Back', secondary, primaryLabel, onPrimary, primaryDisabled, note, primary, dock, children }: ActionBarProps) {
+  const main = primary ?? (onPrimary && (
+    <PrimaryButton size="lg" onClick={onPrimary} disabled={primaryDisabled}>
+      {primaryLabel} <ArrowRight className="w-4 h-4" />
+    </PrimaryButton>
+  ));
+  if (dock) {
+    return (
+      <div className="contents">
+        {children && <div className="mt-8 space-y-3">{children}</div>}
+        <StepDock
+          {...dock}
+          actions={
+            <>
+              {secondary}
+              {onBack && (
+                <SecondaryButton onClick={onBack} title={backLabel} aria-label={backLabel} className="h-12 w-12 px-0">
+                  <ArrowLeft className="w-4 h-4" />
+                </SecondaryButton>
+              )}
+              {main}
+            </>
+          }
+        />
+        {note && <p className="text-ui-sm text-muted-foreground text-right">{note}</p>}
+      </div>
+    );
+  }
   return (
     <div className="mt-8 pt-5 border-t border-border/60 space-y-3">
       {children}
       <div className="flex flex-wrap items-center gap-2">
         {onBack && <SecondaryButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> {backLabel}</SecondaryButton>}
         {secondary}
-        <div className="ml-auto flex items-center gap-3">
-          {primary ?? (onPrimary && (
-            <PrimaryButton size="lg" onClick={onPrimary} disabled={primaryDisabled}>
-              {primaryLabel} <ArrowRight className="w-4 h-4" />
-            </PrimaryButton>
-          ))}
-        </div>
+        <div className="ml-auto flex items-center gap-3">{main}</div>
       </div>
       {note && <p className="text-ui-sm text-muted-foreground text-right">{note}</p>}
     </div>
@@ -61,6 +88,7 @@ interface StepActionsProps {
   /** Extra quiet action, e.g. "Skip this step". */
   extra?: ReactNode;
   showKeyHint?: boolean;
+  dock?: DockProgress;
 }
 
 /**
@@ -68,7 +96,7 @@ interface StepActionsProps {
  * ask for a targeted change (voice or text), or have the AI push back.
  */
 export function StepActions({
-  canApprove, approveLabel, onApprove, onChange, onChallenge, challengeLabel = 'Challenge me', challenging, pushbacks, onDismissPushbacks, busy, approved, onContinue, continueLabel = 'Continue', onBack, backLabel, extra, showKeyHint = false,
+  canApprove, approveLabel, onApprove, onChange, onChallenge, challengeLabel = 'Challenge me', challenging, pushbacks, onDismissPushbacks, busy, approved, onContinue, continueLabel = 'Continue', onBack, backLabel, extra, showKeyHint = false, dock,
 }: StepActionsProps) {
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -121,7 +149,7 @@ export function StepActions({
     </SecondaryButton>
   ) : (
     <>
-      {showKeyHint && <span className="hidden sm:inline text-ui-2xs text-muted-foreground/60">Press Enter ↵</span>}
+      {showKeyHint && <span className="hidden lg:inline text-ui-2xs text-muted-foreground/60 whitespace-nowrap">Press Enter ↵</span>}
       <PrimaryButton size="lg" onClick={onApprove} disabled={!canApprove || busy}>
         {approveLabel} <ArrowRight className="w-4 h-4" />
       </PrimaryButton>
@@ -129,7 +157,7 @@ export function StepActions({
   );
 
   return (
-    <ActionBar onBack={onBack} backLabel={backLabel} secondary={secondary} primary={primary}>
+    <ActionBar onBack={onBack} backLabel={backLabel} secondary={secondary} primary={primary} dock={dock}>
       {refine}
       {pushbacks && (
         <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3.5 animate-slide-up-fade">

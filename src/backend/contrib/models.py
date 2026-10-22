@@ -115,6 +115,10 @@ class UseCaseManifest(_Strict):
     collections: Collections
     tags: List[str] = Field(default_factory=list, max_length=10)
     media: Media = Field(default_factory=Media)
+    featured_resource: Optional[Link] = Field(
+        default=None,
+        description="Optional recording, document, presentation, spreadsheet, or other featured link.",
+    )
     links: List[Link] = Field(default_factory=list, max_length=10)
     changelog: List[ChangelogEntry] = Field(..., min_length=1)
 

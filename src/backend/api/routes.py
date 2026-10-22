@@ -221,13 +221,17 @@ def library_capabilities(schema: str) -> Dict[str, bool]:
                   to_regclass(%s) IS NOT NULL AS members,
                   EXISTS (SELECT 1 FROM information_schema.columns
                           WHERE table_schema = %s AND table_name = 'usecase_descriptions'
-                            AND column_name = 'source') AS source""",
-        (f"{schema}.usecase_collections", f"{schema}.usecase_collection_members", schema),
+                            AND column_name = 'source') AS source,
+                  EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_schema = %s AND table_name = 'usecase_descriptions'
+                            AND column_name = 'resource_url') AS resources""",
+        (f"{schema}.usecase_collections", f"{schema}.usecase_collection_members", schema, schema),
     )
     row = rows[0] if rows else {}
     return {
         "tables": bool(row.get("collections") and row.get("members")),
         "source": bool(row.get("source")),
+        "resources": bool(row.get("resources")),
     }
 
 
@@ -323,10 +327,11 @@ def _refresh_lakebase_cache():
         # display_order). On legacy databases that haven't run the
         # 09_add_category_columns.sql migration yet, retry without those columns
         # so existing deployments don't break.
+        resource_columns = "resource_url, resource_label" if library_capabilities(schema).get("resources") else "NULL AS resource_url, NULL AS resource_label"
         usecase_desc_sql_with_category = f"""
             SELECT DISTINCT ON (industry, use_case)
                 industry, industry_label, use_case, use_case_label, prompt_template, version,
-                category, category_order, display_order, is_certified
+                category, category_order, display_order, is_certified, {resource_columns}
             FROM {schema}.usecase_descriptions
             WHERE is_active = TRUE
             ORDER BY industry, use_case, version DESC
@@ -861,6 +866,16 @@ def reject_contributed_write(use_case: str) -> None:
         )
 
 
+def reject_repository_managed_home(industry: str, use_case: str) -> None:
+    """Never create or mutate database-backed content inside Partner & Community."""
+    if industry == COMMUNITY_COLLECTION_ID and not is_contributed_key(use_case):
+        raise HTTPException(
+            status_code=409,
+            detail="Partner & Community is populated only by validated files in contrib/. "
+                   "Submit or update the use case through a pull request.",
+        )
+
+
 def _community_collection_row() -> Dict:
     return {
         "collection_id": COMMUNITY_COLLECTION_ID,
@@ -1070,6 +1085,13 @@ def _group_use_case_entries(rows: List[Dict]) -> Dict[str, List[Dict]]:
                 "path_type": _derive_path_type(row),
                 "is_certified": bool(row.get("is_certified")),
             }
+            if row.get("resource_url"):
+                entry["resource_url"] = row["resource_url"]
+                entry["resource_label"] = row.get("resource_label")
+            elif row.get("contribution", {}).get("featured_resource"):
+                featured = row["contribution"]["featured_resource"]
+                entry["resource_url"] = featured.get("url")
+                entry["resource_label"] = featured.get("label")
             # Outcome-map grouping (Travel & Hospitality). NULL/missing for
             # Sample, legacy rows, and any database that hasn't run the
             # 09_add_category_columns.sql migration yet.
@@ -2780,6 +2802,7 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
     Computes next version automatically (max + 1).
     Never updates existing rows - always appends.
     """
+    reject_repository_managed_home(request.industry, request.use_case)
     reject_contributed_write(request.use_case)
     logger.info(f"[Config API] Creating new prompt config version for {request.industry}/{request.use_case}")
     
@@ -2801,8 +2824,10 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
     # flips the flag.
     # Visibility, placement and path type carry forward too, so publishing a
     # new description never un-hides a use case or drops its category.
+    has_resources = library_capabilities(schema).get("resources", False)
+    resource_select = ", resource_url, resource_label" if has_resources else ""
     prev_sql = f"""
-        SELECT is_certified, is_active, path_type, category, category_order, display_order
+        SELECT is_certified, is_active, path_type, category, category_order, display_order{resource_select}
         FROM {schema}.usecase_descriptions
         WHERE industry = %s AND use_case = %s
         ORDER BY version DESC
@@ -2817,15 +2842,17 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
     resolved_active = bool(prev.get('is_active')) if prev else True
     
     # Insert new row with computed version
+    resource_columns = ", resource_url, resource_label" if has_resources else ""
+    resource_values = ", %s, %s" if has_resources else ""
     insert_sql = f"""
         INSERT INTO {schema}.usecase_descriptions 
         (industry, industry_label, use_case, use_case_label, prompt_template, 
          version, is_active, inserted_at, updated_at, created_by, is_certified,
-         path_type, category, category_order, display_order)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s, %s)
+         path_type, category, category_order, display_order{resource_columns})
+        VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s, %s{resource_values})
     """
     
-    success = execute_insert(insert_sql, (
+    insert_params = (
         request.industry,
         request.industry_label,
         request.use_case,
@@ -2839,7 +2866,8 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
         (prev or {}).get('category'),
         (prev or {}).get('category_order'),
         (prev or {}).get('display_order'),
-    ))
+    ) + (((prev or {}).get('resource_url'), (prev or {}).get('resource_label')) if has_resources else ())
+    success = execute_insert(insert_sql, insert_params)
     if not success:
         legacy_sql = f"""
             INSERT INTO {schema}.usecase_descriptions 
@@ -2931,6 +2959,7 @@ async def add_use_case(request: UseCaseCreate) -> Dict[str, Any]:
     """
     Add a new use case under an existing industry.
     """
+    reject_repository_managed_home(request.industry, request.use_case)
     reject_contributed_write(request.use_case)
     logger.info(f"[Config API] Adding new use case: {request.industry}/{request.use_case}")
     
@@ -2979,6 +3008,7 @@ async def toggle_usecase_active(industry: str, use_case: str) -> Dict[str, Any]:
     Toggle the is_active flag for a use case.
     This controls whether the use case appears in the workflow dropdown.
     """
+    reject_repository_managed_home(industry, use_case)
     reject_contributed_write(use_case)
     logger.info(f"[Config API] Toggling active status for {industry}/{use_case}")
     
@@ -3031,6 +3061,7 @@ async def toggle_usecase_certified(industry: str, use_case: str) -> Dict[str, An
     Certified use cases sort to the top of each section in the workshop flow
     and render a "Certified" badge on the card and workflow steps.
     """
+    reject_repository_managed_home(industry, use_case)
     reject_contributed_write(use_case)
     logger.info(f"[Config API] Toggling certified status for {industry}/{use_case}")
     
@@ -3083,6 +3114,7 @@ async def delete_usecase(industry: str, use_case: str) -> Dict[str, Any]:
     Delete a use case and all its versions.
     This is a hard delete - use toggle-active for soft disable.
     """
+    reject_repository_managed_home(industry, use_case)
     reject_contributed_write(use_case)
     logger.info(f"[Config API] Deleting use case: {industry}/{use_case}")
     
