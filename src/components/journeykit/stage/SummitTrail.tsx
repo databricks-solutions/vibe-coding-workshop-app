@@ -44,7 +44,12 @@ export function SummitTrail({ steps, size = 'md', briefMarker = 'summit', beyond
   const gradId = useId().replace(/:/g, '');
   const rootRef = useRef<HTMLDivElement>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const { main, pos, beyond: beyondPt, loops, trailPts, progressPts } = layoutTrail(steps, FRAME[size], !!beyond);
+  const { main, pos, beyond: beyondPt, loops, trailPts, progressPts } = layoutTrail(
+    steps,
+    FRAME[size],
+    !!beyond,
+    !!beyond && (beyond.state === 'current' || beyond.state === 'done'),
+  );
   const band = FRAME[size];
 
   useEffect(() => {

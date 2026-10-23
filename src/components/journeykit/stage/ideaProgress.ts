@@ -1,3 +1,4 @@
+import { Database, Hammer, Rocket } from 'lucide-react';
 import { ideaStepAvailable, ideaStepPoints } from '../../../constants/scoring';
 import { STEP_ART } from '../art';
 import { stepIndex, stepsOf } from '../engine/ideaContext';
@@ -23,12 +24,69 @@ export function ideaProgressSteps(idea: Idea, viewStep: StepKey | null): Progres
   }));
 }
 
-/** How this idea's trail ends, from its mode: the brief is the summit, or base camp before the build. */
-export function ideaTrail(idea: Idea): { briefMarker: 'summit' | 'camp'; beyond?: TrailBeyond } {
+/** Generic build stages that follow Base Camp ("Your brief") once ideation is complete. */
+export const BUILD_CLIMB_STEPS: { key: string; label: string; icon: typeof Database; detail: string; minutes: number }[] = [
+  {
+    key: 'build_data',
+    label: 'Analyze your data',
+    icon: Database,
+    detail: 'Connect, explore, and understand your data. Surface insights that inform your solution and set you up for a strong build.',
+    minutes: 5,
+  },
+  {
+    key: 'build_solution',
+    label: 'Build',
+    icon: Hammer,
+    detail: 'Create your governed metrics, Genie space, dashboard, and app or agent chapters.',
+    minutes: 25,
+  },
+  {
+    key: 'build_deploy',
+    label: 'Deploy',
+    icon: Rocket,
+    detail: 'Test against your benchmark questions, verify end-to-end, and publish the live solution for your team.',
+    minutes: 10,
+  },
+];
+
+/**
+ * Full 10-stop route shown after ideation completes (Base Camp reached):
+ * Steps 1-7 are the ideation climb to Base Camp ("Your brief", marked current so "You are here" and the
+ * solid green line stop at Base Camp), followed by the 3 upcoming build stages climbing to the summit.
+ */
+export function ideaLockedClimbSteps(idea: Idea): ProgressStep[] {
+  const inStudio = idea.buildStage === 'studio';
+  const ideaSteps = ideaProgressSteps(idea, inStudio ? null : 'brief').map(s =>
+    s.key === 'brief' && !inStudio
+      ? { ...s, state: 'current' as const }
+      : s,
+  );
+  const buildSteps: ProgressStep[] = BUILD_CLIMB_STEPS.map((b, i) => ({
+    key: b.key,
+    label: b.label,
+    icon: b.icon,
+    state: inStudio && i === 0 ? 'done' : inStudio && i === 1 ? 'current' : 'upcoming',
+    disabled: true,
+    detail: b.detail,
+    minutes: b.minutes,
+  }));
+  return [...ideaSteps, ...buildSteps];
+}
+
+/** How this idea's trail ends: during ideation, a blurred next peak hints at the build; once locked, the build climb unfolds. */
+export function ideaTrail(idea: Idea): { briefMarker: 'summit' | 'camp'; beyond?: TrailBeyond; teaserPeak?: { label: string; sublabel: string } } {
   const t = modeOf(idea).trail;
-  if (!t.beyond) return { briefMarker: t.briefMarker };
-  const state = idea.buildStage === 'studio' ? 'done' : idea.lockedAt ? 'current' : 'upcoming';
-  return { briefMarker: t.briefMarker, beyond: { label: t.beyond.label, state, detail: `${t.beyond.hint}. This is where your Genie gets built.` } };
+  if (!idea.lockedAt) {
+    return {
+      briefMarker: 'summit',
+      teaserPeak: t.beyond ? { label: `Next climb: ${t.beyond.hint}`, sublabel: 'Unlocks after your brief' } : undefined,
+    };
+  }
+  const state = idea.buildStage === 'studio' ? 'done' : 'upcoming';
+  return {
+    briefMarker: 'camp',
+    beyond: t.beyond ? { label: t.beyond.label, state, detail: `${t.beyond.hint}.` } : undefined,
+  };
 }
 
 /** The trailhead intro shows once, before the first step, for someone working on their own idea. */

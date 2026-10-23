@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { ArrowRight, Database, History, Pencil, Target } from 'lucide-react';
 import {
-  ART, BusinessCaseButton, FadeIn, GhostButton, PersonaChip, PrimaryButton, SecondaryButton, SHAPE_KINDS, SurfaceChips, UseCaseBadge, answerFor, chosenShape, placedLeaf, shapeBuild, type Idea,
+  ART, BusinessCaseButton, ClimbRoute, FadeIn, GhostButton, PersonaChip, PrimaryButton, SecondaryButton, SHAPE_KINDS, SurfaceChips, UseCaseBadge,
+  answerFor, chosenShape, ideaLockedClimbSteps, placedLeaf, shapeBuild, type Idea, type StepKey,
 } from '../../journeykit';
 
 interface IdeaLockedScreenProps {
   idea: Idea;
   readOnly: boolean;
-  onEdit: () => void;
+  onEdit: (step?: StepKey) => void;
   onOpenCase?: () => void;
   onNext: () => void;
   /** Set when this idea already has a build: the screen offers to update it instead of starting over. */
@@ -28,17 +29,28 @@ export function IdeaLockedScreen({ idea, readOnly, onEdit, onOpenCase, onNext, b
         <img src={ART.celebrate} alt="" width={96} height={96} className="w-24 h-24 rounded-3xl object-cover ring-1 ring-border/60 shrink-0" />
         <div className="space-y-2 min-w-0">
           <p className={`text-ui-sm font-semibold uppercase tracking-[0.14em] ${build?.changed ? 'text-sky-500' : 'text-emerald-500'}`}>
-            {build?.changed ? 'Changes ready to apply' : 'Idea locked in'}
+            {build?.changed ? 'Changes ready to apply' : 'Base camp reached'}
           </p>
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.1]">{idea.title}</h1>
           <p className="text-ui-lg text-muted-foreground leading-relaxed">
             {!build
-              ? 'Nice work. Next, tell us where your data lives so we can build it.'
+              ? 'Your brief is locked in at base camp. Ahead is the build climb: analyze your data, build your solution, and deploy it.'
               : build.changed
                 ? 'Your answers changed since the build was set up. Update the build to carry them into every chapter; the current build keeps working until you do.'
                 : 'Nothing has changed since the build was set up.'}
           </p>
         </div>
+      </FadeIn>
+
+      <FadeIn delay={0.04}>
+        <ClimbRoute
+          steps={ideaLockedClimbSteps(idea)}
+          briefMarker="summit"
+          campKey="brief"
+          initialSelectedKey={idea.buildStage === 'studio' ? 'build_solution' : 'build_data'}
+          animateIn
+          onSelectStep={!readOnly ? k => onEdit(k as StepKey) : undefined}
+        />
       </FadeIn>
 
       <FadeIn delay={0.06} className="rounded-2xl border border-border bg-card divide-y divide-border/60">
@@ -91,7 +103,7 @@ export function IdeaLockedScreen({ idea, readOnly, onEdit, onOpenCase, onNext, b
 
       <FadeIn delay={0.12} className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 pt-2">
         <div className="flex flex-wrap items-center gap-2">
-          {!readOnly && <GhostButton onClick={onEdit}><Pencil className="w-3.5 h-3.5" /> Edit idea</GhostButton>}
+          {!readOnly && <GhostButton onClick={() => onEdit()}><Pencil className="w-3.5 h-3.5" /> Edit idea</GhostButton>}
           {onOpenCase && <BusinessCaseButton idea={idea} onClick={onOpenCase} />}
         </div>
         {build && !readOnly ? (

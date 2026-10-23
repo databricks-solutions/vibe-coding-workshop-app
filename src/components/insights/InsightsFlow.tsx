@@ -306,7 +306,8 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     setStage('start');
   };
 
-  const editIdea = () => {
+  const editIdea = (step?: StepKey) => {
+    if (step && idea && !readOnly) updateIdea(idea.id, { step });
     setLockSeen(idea?.lockedAt);
     setStage('idea');
     if (ready) setReviewing(true);
@@ -493,7 +494,10 @@ function InsightsFlowInner(props: InsightsFlowProps) {
           readOnly={readOnly}
           onEdit={editIdea}
           onOpenCase={openCase}
-          onNext={() => setStage('data')}
+          onNext={() => {
+            if (idea && !readOnly && idea.buildStage !== 'studio') updateIdea(idea.id, { buildStage: 'data' });
+            setStage('data');
+          }}
           build={ready ? { changed: needsBuildUpdate(idea), onUpdate: updateBuild, onOpen: backToBuild } : undefined}
         />
       </JourneyScreen>
@@ -585,7 +589,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
       <ReadyScreen
         progress={progress}
         idea={{ headline: idea.title, problem: idea.spark?.statement, approach: shape ? { label: shape.title, kind: shape.kind } : undefined }}
-        onEditIdea={editIdea}
+        onEditIdea={() => editIdea()}
         onOpenCase={openCase}
         name={name}
         onNameChange={setName}
@@ -609,7 +613,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         buildBlocker={requiredBuildBlocker}
         priority={priority}
         portfolio={portfolio}
-        onImproveValue={editIdea}
+        onImproveValue={() => editIdea('impact')}
         onImproveFeasibility={() => setStage(usingBlueprint ? 'blueprint' : exploringTables ? 'source' : 'data')}
         onOpenPriorityIdea={targetId => navigate(`/ideate/view/${encodeURIComponent(targetId)}`)}
       />

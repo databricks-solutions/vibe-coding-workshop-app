@@ -34,7 +34,7 @@ export function smooth(pts: Pt[]): string {
 }
 
 /** Places required steps on a gentle rolling climb and optional ones on a short loop below it. */
-export function layoutTrail(steps: ProgressStep[], frame: TrailFrame, hasBeyond: boolean) {
+export function layoutTrail(steps: ProgressStep[], frame: TrailFrame, hasBeyond: boolean, beyondActive = false) {
   const main = steps.filter(s => !s.optional);
   const { base, top, left } = frame;
   const right = hasBeyond ? frame.rightWithBeyond : frame.right;
@@ -58,7 +58,7 @@ export function layoutTrail(steps: ProgressStep[], frame: TrailFrame, hasBeyond:
 
   const loops = steps.filter(s => s.optional).map(s => {
     const i = steps.indexOf(s);
-    const prev = [...steps.slice(0, i)].reverse().find(p => !p.optional);
+    const prev = [...steps.slice(i ? 0 : 0, i)].reverse().find(p => !p.optional);
     const next = steps.slice(i + 1).find(p => !p.optional);
     const o = pos.get(s.key)!;
     const a = prev ? pos.get(prev.key)! : o;
@@ -70,7 +70,10 @@ export function layoutTrail(steps: ProgressStep[], frame: TrailFrame, hasBeyond:
   const trailPts = beyond ? [...mainPts, beyond] : mainPts;
   const lastDone = main.reduce((n, s, i) => (s.state === 'done' ? i : n), -1);
   const reached = Math.max(lastDone, main.findIndex(s => s.state === 'current'));
-  return { main, pos, beyond, loops, trailPts, progressPts: mainPts.slice(0, reached + 1) };
+  const progressPts = beyond && beyondActive && reached === main.length - 1
+    ? [...mainPts, beyond]
+    : mainPts.slice(0, reached + 1);
+  return { main, pos, beyond, loops, trailPts, progressPts };
 }
 
 /** Where a stop stands relative to the person looking at the route. */

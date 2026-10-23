@@ -14,24 +14,49 @@ const BEYOND_KEY = '__beyond';
 const DRAW_START = 0.35;
 const DRAW_TIME = 1.1;
 
+export interface TeaserPeak {
+  label: string;
+  sublabel?: string;
+}
+
 interface ClimbRouteProps {
   steps: ProgressStep[];
   briefMarker?: 'summit' | 'camp';
   beyond?: TrailBeyond;
+  /** Softly blurred distant peak shown during ideation to hint at the build climb that follows. */
+  teaserPeak?: TeaserPeak;
+  /** Optional step key that carries the Base Camp marker when build steps follow it in `steps`. */
+  campKey?: string;
+  /** Optional initial stop key selected in the bottom details panel. */
+  initialSelectedKey?: string;
   /** Play the entrance: hills rise, the trail draws, stops arrive as it reaches them. */
   animateIn?: boolean;
+  /** Opens a step when the user picks it from the route details. */
+  onSelectStep?: (key: string) => void;
 }
 
 /**
  * The whole route as a small mountain scene with a details panel under it. Every stop is a
  * button; the panel says what happens there. Starts on the stop you are at.
  */
-export function ClimbRoute({ steps, briefMarker = 'summit', beyond, animateIn = false }: ClimbRouteProps) {
+export function ClimbRoute({
+  steps,
+  briefMarker = 'summit',
+  beyond,
+  teaserPeak,
+  campKey,
+  initialSelectedKey,
+  animateIn = false,
+  onSelectStep,
+}: ClimbRouteProps) {
   const beyondStep: ProgressStep | null = beyond
     ? { key: BEYOND_KEY, label: beyond.label, icon: Mountain, state: beyond.state, detail: beyond.detail, disabled: true }
     : null;
   const stops = beyondStep ? [...steps, beyondStep] : steps;
-  const initial = stops.find(s => s.state === 'current') ?? stops.find(s => s.state !== 'done') ?? stops[stops.length - 1];
+  const initial = (initialSelectedKey ? stops.find(s => s.key === initialSelectedKey) : undefined)
+    ?? stops.find(s => s.state === 'current')
+    ?? stops.find(s => s.state !== 'done')
+    ?? stops[stops.length - 1];
   const [selectedKey, setSelectedKey] = useState(initial?.key);
   const selected = stops.find(s => s.key === selectedKey) ?? initial;
   const index = selected ? stops.indexOf(selected) : -1;
@@ -42,7 +67,17 @@ export function ClimbRoute({ steps, briefMarker = 'summit', beyond, animateIn = 
 
   return (
     <div className="rounded-3xl border border-border bg-card shadow-sm overflow-hidden">
-      <ClimbMap steps={steps} briefMarker={briefMarker} beyond={beyond} selectedKey={selected?.key} onSelect={setSelectedKey} onMove={move} animateIn={animateIn} />
+      <ClimbMap
+        steps={steps}
+        briefMarker={briefMarker}
+        beyond={beyond}
+        teaserPeak={teaserPeak}
+        campKey={campKey}
+        selectedKey={selected?.key}
+        onSelect={setSelectedKey}
+        onMove={move}
+        animateIn={animateIn}
+      />
       {selected && (
         <div className="relative border-t border-border/60 px-5 sm:px-6 py-5">
           <div className="absolute right-4 top-4 flex items-center gap-1">
@@ -63,6 +98,7 @@ export function ClimbRoute({ steps, briefMarker = 'summit', beyond, animateIn = 
                 step={selected}
                 position={selected === beyondStep ? 'After your brief' : stopPosition(selected, steps)}
                 status={stopStatus(selected, stops)}
+                onGo={onSelectStep && selected !== beyondStep && !selected.disabled ? () => onSelectStep(selected.key) : undefined}
               />
             </motion.div>
           </AnimatePresence>
@@ -90,19 +126,30 @@ interface ClimbMapProps {
   steps: ProgressStep[];
   briefMarker: 'summit' | 'camp';
   beyond?: TrailBeyond;
+  teaserPeak?: TeaserPeak;
+  campKey?: string;
   selectedKey?: string;
   onSelect: (key: string) => void;
   onMove: (delta: number) => void;
   animateIn: boolean;
 }
 
-function ClimbMap({ steps, briefMarker, beyond, selectedKey, onSelect, onMove, animateIn }: ClimbMapProps) {
+function ClimbMap({ steps, briefMarker, beyond, teaserPeak, campKey, selectedKey, onSelect, onMove, animateIn }: ClimbMapProps) {
   const reduce = useReducedMotion();
   const draw = animateIn && !reduce;
-  const clipId = `climb-${useId().replace(/:/g, '')}`;
+  const uid = useId().replace(/:/g, '');
+  const clipId = `climb-${uid}`;
+  const blurId = `blur-${uid}`;
   const groupRef = useRef<HTMLDivElement>(null);
-  const { main, pos, beyond: beyondPt, loops, trailPts, progressPts } = layoutTrail(steps, FRAME, !!beyond);
-  const peak = trailPts.at(-1) ?? { x: 50, y: 40 };
+  const hasHorizon = !!beyond || !!teaserPeak;
+  const { main, pos, beyond: beyondPt, loops, trailPts, progressPts } = layoutTrail(
+    steps,
+    FRAME,
+    hasHorizon,
+    !!beyond && (beyond.state === 'current' || beyond.state === 'done'),
+  );
+  const mainEnd = main.length > 0 ? pos.get(main[main.length - 1].key)! : { x: 70, y: 40 };
+  const peak = beyond ? (trailPts.at(-1) ?? mainEnd) : mainEnd;
   const summitReached = beyond ? beyond.state === 'done' : main.at(-1)?.state === 'done';
   const arrive = (p: Pt) => (draw ? DRAW_START + (p.x / 100) * DRAW_TIME : 0);
 
@@ -139,11 +186,30 @@ function ClimbMap({ steps, briefMarker, beyond, selectedKey, onSelect, onMove, a
               ? <motion.rect x={0} y={0} height={100} initial={{ width: 0 }} animate={{ width: 100 }} transition={{ delay: DRAW_START, duration: DRAW_TIME, ease: [0.45, 0, 0.25, 1] }} />
               : <rect x={0} y={0} width={100} height={100} />}
           </clipPath>
+          <filter id={blurId} x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur stdDeviation="1.2" />
+          </filter>
         </defs>
-        <Hills trail={trailPts} peak={peak} draw={draw} />
+        <Hills trail={ beyond ? trailPts : trailPts.slice(0, main.length) } peak={peak} draw={draw} />
+        {teaserPeak && !beyond && beyondPt && (
+          <g filter={`url(#${blurId})`} className="opacity-45">
+            <path
+              d={`M ${beyondPt.x - 18} 100 C ${beyondPt.x - 10} 62, ${beyondPt.x - 4} ${beyondPt.y + 4}, ${beyondPt.x + 2} ${beyondPt.y - 8} C ${beyondPt.x + 6} ${beyondPt.y + 4}, ${beyondPt.x + 10} 58, 100 100 Z`}
+              className="fill-primary/20"
+            />
+            <path
+              d={smooth([mainEnd, { x: (mainEnd.x + beyondPt.x) / 2, y: (mainEnd.y + beyondPt.y) / 2 + 2 }, { x: beyondPt.x + 2, y: beyondPt.y - 2 }])}
+              className="fill-none stroke-muted-foreground/50"
+              strokeWidth={1.75}
+              strokeDasharray="3 4"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
+        )}
         <g clipPath={`url(#${clipId})`}>
-          <path d={smooth(trailPts)} className="fill-none stroke-white/70 dark:stroke-white/[0.06]" strokeWidth={7} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <path d={smooth(trailPts)} className="fill-none stroke-muted-foreground/35" strokeWidth={2} strokeDasharray="4 5" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <path d={smooth(beyond ? trailPts : trailPts.slice(0, main.length))} className="fill-none stroke-white/70 dark:stroke-white/[0.06]" strokeWidth={7} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <path d={smooth(beyond ? trailPts : trailPts.slice(0, main.length))} className="fill-none stroke-muted-foreground/35" strokeWidth={2} strokeDasharray="4 5" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           {loops.map(l => (
             <path key={l.key} d={l.d} className={`fill-none ${l.done ? 'stroke-emerald-500/70' : 'stroke-amber-400/80'}`} strokeWidth={1.75} strokeDasharray="3 4" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           ))}
@@ -156,6 +222,13 @@ function ClimbMap({ steps, briefMarker, beyond, selectedKey, onSelect, onMove, a
       {steps.map((s, i) => {
         const p = pos.get(s.key)!;
         const last = !s.optional && main.indexOf(s) === main.length - 1;
+        const stopFlag = campKey && s.key === campKey
+          ? 'camp'
+          : last && briefMarker === 'summit'
+            ? 'summit'
+            : last && briefMarker === 'camp'
+              ? 'camp'
+              : undefined;
         return (
           <Stop
             key={s.key}
@@ -166,10 +239,19 @@ function ClimbMap({ steps, briefMarker, beyond, selectedKey, onSelect, onMove, a
             draw={draw}
             selected={selectedKey === s.key}
             onSelect={() => onSelect(s.key)}
-            flag={last && briefMarker === 'summit' ? 'summit' : last && briefMarker === 'camp' ? 'camp' : undefined}
+            flag={stopFlag}
           />
         );
       })}
+      {teaserPeak && !beyond && beyondPt && (
+        <div
+          aria-hidden
+          className="absolute right-3 sm:right-4 top-4 sm:top-5 z-10 pointer-events-none rounded-xl border border-dashed border-border/70 bg-card/65 backdrop-blur-[2px] px-2.5 py-1.5 text-right opacity-75"
+        >
+          <p className="text-ui-2xs font-medium text-muted-foreground leading-tight">{teaserPeak.label}</p>
+          {teaserPeak.sublabel && <p className="text-ui-3xs text-muted-foreground/70 mt-0.5">{teaserPeak.sublabel}</p>}
+        </div>
+      )}
       {beyond && beyondPt && (
         <Stop
           step={{ key: BEYOND_KEY, label: beyond.label, icon: Mountain, state: beyond.state, disabled: true }}
@@ -224,10 +306,10 @@ function Stop({ step, at, delay, draw, selected, onSelect, flag, labelAbove = fa
             <Tent className="w-3.5 h-3.5" /> Base camp
           </span>
         )}
-        {current && !flag && (
-          <span className={`absolute flex items-center pointer-events-none ${labelAbove ? 'top-full mt-2.5 flex-col-reverse' : 'bottom-full mb-2.5 flex-col'}`}>
+        {current && (
+          <span className={`absolute flex items-center pointer-events-none ${flag ? 'top-full mt-7 flex-col-reverse' : labelAbove ? 'top-full mt-2.5 flex-col-reverse' : 'bottom-full mb-2.5 flex-col'}`}>
             <span className="px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-ui-2xs font-semibold whitespace-nowrap shadow-sm">You are here</span>
-            <span className={`w-1.5 h-1.5 rotate-45 bg-primary ${labelAbove ? '-mb-[3px]' : '-mt-[3px]'}`} />
+            <span className={`w-1.5 h-1.5 rotate-45 bg-primary ${flag || labelAbove ? '-mb-[3px]' : '-mt-[3px]'}`} />
           </span>
         )}
         <button

@@ -21,7 +21,7 @@ export { hasOutput, canReach } from './engine/reach';
 export { StepDot, StepSegment, StepConnector } from './stage/StepDot';
 export { ActionBar, StepActions } from './stage/ActionBar';
 export { IdeaStepStage } from './stage/IdeaStepStage';
-export { ideaProgressSteps, ideaTrail, showsTrailhead, stopsToSummit, trailFromSummary } from './stage/ideaProgress';
+export { BUILD_CLIMB_STEPS, ideaLockedClimbSteps, ideaProgressSteps, ideaTrail, showsTrailhead, stopsToSummit, trailFromSummary } from './stage/ideaProgress';
 export { SummitTrail, type TrailSize, type TrailBeyond } from './stage/SummitTrail';
 export { ClimbRoute } from './stage/ClimbMap';
 export { StepDock } from './stage/StepDock';

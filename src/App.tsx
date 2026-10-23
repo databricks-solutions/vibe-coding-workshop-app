@@ -1323,7 +1323,6 @@ export default function App() {
         status: 'committed',
         ...(target === 'insights' ? {
           lockedAt: idea.lockedAt ?? new Date().toISOString(),
-          buildStage: 'data' as const,
         } : {}),
       });
       handleLoadSession(linkedSession);
@@ -1372,12 +1371,16 @@ export default function App() {
     }
 
     const now = new Date().toISOString();
+    const approved = target === 'insights' && questions.length && !idea.approved.includes('questions')
+      ? [...idea.approved, 'questions' as const]
+      : idea.approved;
     const newId = await createNewSession(id => updateIdea(idea.id, {
       sessionId: id,
       buildTarget: target,
       buildStatus: 'building',
       status: 'committed',
-      ...(target === 'insights' ? { lockedAt: idea.lockedAt ?? now, buildStage: 'data' as const, genieQuestions: questions, genieQuestionSources: sources, genieAlternates: alternates } : {}),
+      approved,
+      ...(target === 'insights' ? { lockedAt: idea.lockedAt ?? now, genieQuestions: questions, genieQuestionSources: sources, genieAlternates: alternates } : {}),
       decisions: [...idea.decisions, { at: now, text: `Started building in ${target === 'insights' ? 'Insights' : 'the Technical workflow'}` }],
     }), target);
     finishSessionLoading();

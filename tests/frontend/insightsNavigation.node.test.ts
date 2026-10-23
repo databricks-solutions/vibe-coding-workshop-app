@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { reviewTarget, reviewsInInsights } from '../../src/components/insights/reviewTarget.ts';
 import { INSIGHTS_STEPS, STEPS, stepsFor } from '../../src/components/journeykit/engine/types.ts';
+import { layoutTrail } from '../../src/components/journeykit/stage/trailGeometry.ts';
 
 test('Ideate and Insights walk the exact same 7-step trail including Questions for Genie', () => {
   const expected = ['spark', 'map', 'clarify', 'shape', 'questions', 'impact', 'brief'];
@@ -15,6 +16,26 @@ test('Ideate and Insights walk the exact same 7-step trail including Questions f
   assert.deepEqual(INSIGHTS_STEPS.map(s => s.key), expected);
   assert.deepEqual(stepsFor('ideate').map(s => s.key), expected);
   assert.deepEqual(stepsFor('insights').map(s => s.key), expected);
+});
+
+test('Ideate-to-Insights handoff shows ClimbRoute on IdeaLockedScreen with Base Camp and 3 build stops ahead', () => {
+  const locked = readFileSync(new URL('../../src/components/insights/screens/IdeaLockedScreen.tsx', import.meta.url), 'utf-8');
+  assert.match(locked, /<ClimbRoute/);
+  assert.match(locked, /steps=\{ideaLockedClimbSteps\(idea\)\}/);
+  assert.match(locked, /campKey="brief"/);
+  assert.match(locked, /analyze your data, build your solution, and deploy it/i);
+
+  const progress = readFileSync(new URL('../../src/components/journeykit/stage/ideaProgress.ts', import.meta.url), 'utf-8');
+  assert.match(progress, /Analyze your data/);
+  assert.match(progress, /label: 'Build'/);
+  assert.match(progress, /label: 'Deploy'/);
+  assert.match(progress, /Next climb:/);
+
+  const steps = STEPS.map(s => ({ key: s.key, label: s.label, icon: (() => null) as never, state: 'done' as const, optional: s.optional }));
+  const frame = { base: 70, top: 32, left: 8, right: 90, rightWithBeyond: 70, beyondX: 88, dip: 14 };
+  const active = layoutTrail(steps, frame, true, true);
+  assert.equal(active.progressPts.length, active.main.length + 1);
+  assert.deepEqual(active.progressPts.at(-1), active.beyond);
 });
 
 test('an Ideate idea built in Insights goes back inside the project, not to the Ideate one-pager', () => {

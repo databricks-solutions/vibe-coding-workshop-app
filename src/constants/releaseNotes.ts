@@ -47,6 +47,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.4',
+    date: '2026-10-23',
+    title: 'Consistent 7-step idea journey and clearer climb map into the build',
+    items: [
+      {
+        title: 'Consistent idea steps and a clearer handoff from base camp to build',
+        description: 'Ideate and Insights now share the same 7-step idea trail, with a horizon preview of the build during ideation and a clear view of the upcoming data, build, and deploy stages once base camp is reached.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'route',
+      },
+    ],
+  },
+  {
     version: '2.8.3',
     date: '2026-10-21',
     title: 'Subtle flow polish across Ideate and the Use Case Library',
