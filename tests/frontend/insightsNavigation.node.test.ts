@@ -7,6 +7,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { reviewTarget, reviewsInInsights } from '../../src/components/insights/reviewTarget.ts';
+import { INSIGHTS_STEPS, STEPS, stepsFor } from '../../src/components/journeykit/engine/types.ts';
+
+test('Ideate and Insights walk the exact same 7-step trail including Questions for Genie', () => {
+  const expected = ['spark', 'map', 'clarify', 'shape', 'questions', 'impact', 'brief'];
+  assert.deepEqual(STEPS.map(s => s.key), expected);
+  assert.deepEqual(INSIGHTS_STEPS.map(s => s.key), expected);
+  assert.deepEqual(stepsFor('ideate').map(s => s.key), expected);
+  assert.deepEqual(stepsFor('insights').map(s => s.key), expected);
+});
 
 test('an Ideate idea built in Insights goes back inside the project, not to the Ideate one-pager', () => {
   assert.equal(reviewsInInsights({ mode: 'ideate', buildTarget: 'insights' }), true);

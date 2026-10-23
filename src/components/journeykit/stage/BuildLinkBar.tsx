@@ -27,7 +27,10 @@ export function BuildLinkBar({ idea, readOnly }: { idea: Idea; readOnly?: boolea
     if (builtInInsights && reviewIdea({ ideaId: idea.id, to: 'idea' })) return;
     if (!insights) navigate(`/ideate/${idea.id}`);
   };
-  const update = () => (insights ? reviewIdea({ ideaId: idea.id, to: 'update' }) : navigate(updateBuildHref(idea)));
+  const update = () => {
+    if (builtInInsights && reviewIdea({ ideaId: idea.id, to: 'update' })) return;
+    navigate(updateBuildHref(idea));
+  };
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-card/60 px-4 py-2.5 animate-fade-in">

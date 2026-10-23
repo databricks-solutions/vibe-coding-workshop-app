@@ -181,7 +181,7 @@ export function getLeaderboardMessage(
 // Journey (up to 300) + AI quality (up to 600) + outcome (up to 100) = 1,000.
 
 export const IDEA_STEP_SCORES: Record<JourneyMode, Partial<Record<StepKey, number>>> = {
-  ideate: { spark: 25, map: 25, clarify: 60, shape: 30, impact: 60, brief: 50 },
+  ideate: { spark: 20, map: 20, clarify: 50, shape: 25, questions: 50, impact: 40, brief: 45 },
   insights: { spark: 20, map: 20, clarify: 50, shape: 25, questions: 50, impact: 40, brief: 45 },
 };
 
@@ -204,7 +204,7 @@ export const IDEA_TIERS: { key: IdeaTier; label: string; floor: number }[] = [
 export const IDEA_PHASES: Record<JourneyMode, { key: string; display: string; steps: StepKey[] }[]> = {
   ideate: [
     { key: 'understand', display: 'Problem understood', steps: ['spark', 'map', 'clarify'] },
-    { key: 'design', display: 'Approach designed', steps: ['shape', 'impact'] },
+    { key: 'design', display: 'Approach designed', steps: ['shape', 'questions', 'impact'] },
     { key: 'summit', display: 'Summit reached', steps: ['brief'] },
   ],
   insights: [

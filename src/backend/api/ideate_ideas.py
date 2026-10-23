@@ -50,7 +50,7 @@ except Exception:  # pragma: no cover
 
 NOT_SURE = "Not sure yet"
 IDEA_STEP_SCORES: Dict[str, Dict[str, int]] = {
-    "ideate": {"spark": 25, "map": 25, "clarify": 60, "shape": 30, "impact": 60, "brief": 50},
+    "ideate": {"spark": 20, "map": 20, "clarify": 50, "shape": 25, "questions": 50, "impact": 40, "brief": 45},
     "insights": {"spark": 20, "map": 20, "clarify": 50, "shape": 25, "questions": 50, "impact": 40, "brief": 45},
 }
 POINTS_PER_ITEM = 10

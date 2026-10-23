@@ -58,10 +58,18 @@ function load(): Idea[] {
   }
 }
 
-/** Ideas saved before the Impact step existed already sit at the Brief; treat Impact as skipped. */
+/** Ideas saved before Questions or Impact existed in their trail stay reachable without losing progress. */
 function withImpactStep(idea: Idea): Idea {
-  if (idea.approved.includes('impact') || !idea.approved.includes('shape') || idea.step !== 'brief') return idea;
-  return { ...idea, impact: idea.impact ?? skippedImpact(), approved: [...idea.approved, 'impact'] };
+  let next = idea;
+  if (!next.approved.includes('questions') && next.approved.includes('shape')) {
+    if (next.step === 'impact' && !next.impact && !next.approved.includes('impact')) {
+      next = { ...next, step: 'questions' };
+    } else if (next.genieQuestions?.length && (next.approved.includes('impact') || next.approved.includes('brief'))) {
+      next = { ...next, approved: [...next.approved, 'questions'] };
+    }
+  }
+  if (next.approved.includes('impact') || !next.approved.includes('shape') || next.step !== 'brief') return next;
+  return { ...next, impact: next.impact ?? skippedImpact(), approved: [...next.approved, 'impact'] };
 }
 
 let snapshot: Idea[] = typeof window !== 'undefined' ? load() : [];

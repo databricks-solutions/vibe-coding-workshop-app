@@ -11,7 +11,7 @@ import type { Assumption, ClarifyQuestion, Idea, IndustryBranch, IndustryLeaf, S
  */
 
 const AT = '2026-09-01T15:00:00.000Z';
-const ALL_STEPS: StepKey[] = ['spark', 'map', 'clarify', 'shape', 'impact', 'brief'];
+const ALL_STEPS: StepKey[] = ['spark', 'map', 'clarify', 'shape', 'questions', 'impact', 'brief'];
 const ALL_COVERED = ['business', 'user', 'functional', 'technical', 'nfr', 'quality'].map(key => ({ key, covered: true, gap: '' }));
 
 const leaf = (id: string, name: string, problem: string, valuePool: string, personas: string[], surfaces: string[]): IndustryLeaf =>
@@ -273,6 +273,7 @@ Sales lost to empty shelves on the top 500 fast movers, from about 3% to under 1
     'Placed on industry map: Store stockout early warning',
     'Answered clarifying questions',
     'Chose approach: Stockout Risk Board',
+    'Chose 4 questions for Genie',
     'Sized business impact',
     'Approved the brief',
     'Committed to this idea',
@@ -393,6 +394,18 @@ const CPG: Idea = {
     },
   ],
   chosenShapeId: 'copilot-promo-planner-copilot',
+  genieQuestions: [
+    'Which past promotions in this category had the highest ROI at this retailer?',
+    'Why does this draft promotion score below our $1.10 payback target?',
+    'Which promotions lost money last quarter and what mechanics did they use?',
+    'How did incremental gross profit per trade dollar trend by retailer this year?',
+  ],
+  genieQuestionSources: {
+    'Which past promotions in this category had the highest ROI at this retailer?': 'ai',
+    'Why does this draft promotion score below our $1.10 payback target?': 'ai',
+    'Which promotions lost money last quarter and what mechanics did they use?': 'ai',
+    'How did incremental gross profit per trade dollar trend by retailer this year?': 'ai',
+  },
   impact: {
     driver: 'cost_avoided',
     driverLabel: 'Trade spend saved on promotions that would not pay back',
@@ -516,6 +529,7 @@ Incremental gross profit per trade dollar, from about $0.80 to $1.10. Directiona
     'Placed on industry map: Trade promotion ROI',
     'Answered clarifying questions',
     'Chose approach: Promo Planner Copilot',
+    'Chose 4 questions for Genie',
     'Sized business impact',
     'Approved the brief',
     'Committed to this idea',
@@ -636,6 +650,18 @@ const AIRLINES: Idea = {
     },
   ],
   chosenShapeId: 'automation-turn-recovery-agent',
+  genieQuestions: [
+    'Which gate and crew swaps did the agent make for this arrival bank?',
+    'Why was this incoming turn flagged at risk of a late departure?',
+    'How many turn-caused late departures did we avoid at the hub this week?',
+    'Which gates or ground handlers had the most turn delays this month?',
+  ],
+  genieQuestionSources: {
+    'Which gate and crew swaps did the agent make for this arrival bank?': 'ai',
+    'Why was this incoming turn flagged at risk of a late departure?': 'ai',
+    'How many turn-caused late departures did we avoid at the hub this week?': 'ai',
+    'Which gates or ground handlers had the most turn delays this month?': 'ai',
+  },
   impact: {
     driver: 'cost_avoided',
     driverLabel: 'Fewer late departures from slow turns',
@@ -760,6 +786,7 @@ Departures late because of the turn, from about 2,000 a year at the hub to under
     'Placed on industry map: Turnaround and gate crew recovery',
     'Answered clarifying questions',
     'Chose approach: Turn Recovery Agent',
+    'Chose 4 questions for Genie',
     'Sized business impact',
     'Approved the brief',
     'Committed to this idea',

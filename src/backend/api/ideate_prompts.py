@@ -286,7 +286,7 @@ One press-release style sentence, followed by one short paragraph (PRFAQ style) 
 ## Problem
 ## Who It's For
 ## Chosen Shape
-Name the chosen option and why it beat the alternatives in one or two lines. Then one line starting **What we build:** listing every surface in "chosenShape.surfaces" (say Genie sits inside the app when "geniePlacement" is "in_app"), and one line starting **People can ask:** with the questions in "chosenShape.askExamples". If "chosenShape.noGenieWhy" is set, say why there is no Genie instead.
+Name the chosen option and why it beat the alternatives in one or two lines. Then one line starting **What we build:** listing every surface in "chosenShape.surfaces" (say Genie sits inside the app when "geniePlacement" is "in_app"), and one line starting **People can ask:** with the questions in "genieQuestions" (or "chosenShape.askExamples" if "genieQuestions" is not in the context). If "chosenShape.noGenieWhy" is set, say why there is no Genie instead.
 
 ## Success Metric
 State today's baseline and the target. If "businessImpact" is in the context, then state the annual value at full rollout and its hard vs soft split once, quoted exactly and labeled as a directional estimate.

@@ -51,9 +51,10 @@ def idea(**over):
         "industry": "Airlines",
         "status": "exploring",
         "step": "brief",
-        "approved": ["spark", "map", "clarify", "shape", "impact", "brief"],
+        "approved": ["spark", "map", "clarify", "shape", "questions", "impact", "brief"],
         "questions": [{"id": "q1"}, {"id": "q2"}, {"id": "q3"}],
         "answers": {"q1": "Schedulers", "q2": "Not sure yet", "q3": "Daily"},
+        "genieQuestions": ["Which crew swaps are delayed?", "Why is flight 102 waiting?", "How many swaps breached SLA?"],
         "map": {"placedLeafId": "leaf-1", "branches": []},
         "impact": {"answers": {"a": {"source": "you said"}, "b": {"source": "estimate"}}},
         "assumptions": [],
@@ -107,8 +108,8 @@ class Base(unittest.TestCase):
 class TestPoints(unittest.TestCase):
     def test_journey_points_follow_quality_of_answers(self):
         i = idea()
-        # spark 25 + map 25 + clarify 2 real answers (20) + shape 30 + impact 60*(0.5+0.25)=45 + brief 50
-        self.assertEqual(ii.journey_points(i), 25 + 25 + 20 + 30 + 45 + 50)
+        # spark 20 + map 20 + clarify 2 real answers (20) + shape 25 + questions 3 (30) + impact 40*(0.5+0.25)=30 + brief 45
+        self.assertEqual(ii.journey_points(i), 20 + 20 + 20 + 25 + 30 + 30 + 45)
 
     def test_skipped_impact_earns_nothing(self):
         self.assertEqual(ii.step_points(idea(impact={"skipped": True}), "impact"), 0)

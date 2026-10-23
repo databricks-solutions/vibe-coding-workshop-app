@@ -65,7 +65,7 @@ export const MODE_CONFIG: Record<JourneyMode, ModeConfig> = {
     phaseLabel: 'Shape your idea',
     thinking: THINKING,
     promise: PROMISE,
-    approveLabel: (step, prefilled) => (prefilled ? 'Looks right' : step === 'brief' ? 'Approve brief' : 'Looks good'),
+    approveLabel: (step, prefilled) => (prefilled ? 'Looks right' : step === 'brief' ? 'Approve brief' : step === 'questions' ? 'Use these questions' : 'Looks good'),
     briefOutcomes: true,
     caseSource: 'Ideate',
     trail: {

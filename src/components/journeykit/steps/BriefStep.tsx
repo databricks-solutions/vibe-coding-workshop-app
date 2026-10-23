@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Copy, Download, FileText, Hammer, History, Loader2, Pencil, Search, Send, ShieldCheck, Shuffle, TriangleAlert } from 'lucide-react';
 import { SubmitDialog } from '../ui/SubmitDialog';
@@ -37,6 +37,7 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   const idea = flow.idea!;
   const config = modeOf(idea);
   const navigate = useNavigate();
+  const location = useLocation();
   const streaming = flow.loading === 'brief';
   const text = streaming ? flow.briefDraft : idea.brief ?? flow.briefDraft;
   const { copied, handleCopy } = useCopyToClipboard();
@@ -50,7 +51,7 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   const sections = useMemo(() => splitSections(text), [text]);
   const collapsed = !streaming && !fullBrief && sections.length > PREVIEW_SECTIONS + 1;
   const visibleText = collapsed ? sections.slice(0, PREVIEW_SECTIONS + (sections[0].startsWith('##') ? 0 : 1)).join('') : text;
-  const openCase = () => (config.mode === 'ideate' ? navigate(`/ideate/${idea.id}/business-case`) : setCaseOpen(true));
+  const openCase = () => (config.mode === 'ideate' && location.pathname.startsWith('/ideate') ? navigate(`/ideate/${idea.id}/business-case`) : setCaseOpen(true));
   const shape = chosenShape(idea);
   const personas = placedLeaf(idea)?.personas ?? [];
   const figures = caseFigures(idea);
