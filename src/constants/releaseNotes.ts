@@ -58,6 +58,13 @@ export const RELEASES: Release[] = [
         audience: 'attendee',
         icon: 'route',
       },
+      {
+        title: 'Streamlined Workshop navigation',
+        description: 'The Workshop sidebar now orders Build Studio, Idea Studio, Hackathons, Leaderboard, and Learning Academy to match the natural workshop flow.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'palette',
+      },
     ],
   },
   {

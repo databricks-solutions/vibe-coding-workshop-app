@@ -214,9 +214,8 @@ export function AppSidebar({
       <nav className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${collapsed ? 'px-1.5' : 'px-2.5'} pb-3`}>
         <SidebarSectionLabel label="Workshop" collapsed={collapsed} />
         <div className="space-y-0.5">
-          {item({ to: sessionId ? `/?sessionId=${sessionId}` : '/', icon: WorkflowIcon, label: 'Workflow', active: path === '/' })}
-          {item({ to: '/skills', icon: <GraduationCap />, label: 'Learning Academy', active: path === '/skills' })}
-          {item({ to: '/leaderboard', icon: <Trophy />, label: 'Leaderboard', active: path === '/leaderboard' })}
+          {item({ to: sessionId ? `/?sessionId=${sessionId}` : '/', icon: WorkflowIcon, label: 'Build Studio', active: path === '/' })}
+          {item({ to: '/ideate', icon: <Lightbulb />, label: 'Idea Studio', active: path === '/ideate' || path.startsWith('/ideate/'), badge: <BetaChip /> })}
           {item({
             to: '/hackathons',
             icon: <Award />,
@@ -242,7 +241,8 @@ export function AppSidebar({
               {subLink('/hackathons/playbook', <BookOpen />, 'Playbook', path === '/hackathons/playbook')}
             </div>
           )}
-          {item({ to: '/ideate', icon: <Lightbulb />, label: 'Ideate', active: path === '/ideate' || path.startsWith('/ideate/'), badge: <BetaChip /> })}
+          {item({ to: '/leaderboard', icon: <Trophy />, label: 'Leaderboard', active: path === '/leaderboard' })}
+          {item({ to: '/skills', icon: <GraduationCap />, label: 'Learning Academy', active: path === '/skills' })}
         </div>
 
         <SidebarSectionLabel label="Admin" collapsed={collapsed} />
