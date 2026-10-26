@@ -82,7 +82,17 @@ export function buildContext(idea: Idea, includeDraftsFor?: StepKey): Record<str
       ...(also.length ? { alsoCovers: also.map(l => ({ branch: l.branch, capability: l.name, problem: l.problem })) } : {}),
     };
   }
-  if (ok('clarify')) ctx.answers = answeredPairs(idea);
+  if (ok('clarify')) {
+    ctx.answers = answeredPairs(idea);
+    if (idea.workflow && idea.workflow.length >= 2) {
+      ctx.workflow = idea.workflow.map(w => ({
+        actor: w.actor,
+        kind: w.kind,
+        action: w.action,
+        ...(w.handoff ? { handoff: w.handoff } : {}),
+      }));
+    }
+  }
   if (ok('shape') && shape) {
     ctx.chosenShape = shape;
     ctx.rejectedShapes = (idea.shapes ?? []).filter(s => s.id !== shape.id).map(s => s.title);

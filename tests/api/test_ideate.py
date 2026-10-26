@@ -145,6 +145,30 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual((f["dimension"], f["recommended"], f["multi"], f["isFollowup"]), ("business", 0, False, True))
         self.assertNotIn("maxPicks", f)
 
+    def test_followup_and_workflow_normalize_and_fail_open(self):
+        out = ideate._normalize("followup", {
+            "followup": None,
+            "workflow": [
+                {"actor": "Lakehouse", "kind": "system", "action": "Scores items in the App", "handoff": "Flags at-risk"},
+                {"actor": "Ramp controller", "kind": "persona", "action": "Sees turn risk in Lakebase", "handoff": "Clicks approve"},
+                {"actor": "Connecting passenger", "kind": "persona", "action": "Boards on time", "handoff": "Should be stripped"},
+            ],
+        })
+        self.assertIsNone(out["followup"])
+        wf = out["workflow"]
+        self.assertEqual(len(wf), 3)
+        self.assertEqual([w["kind"] for w in wf], ["system", "persona", "customer"])
+        self.assertEqual(wf[0]["actor"], "Automated alert")
+        self.assertEqual(wf[0]["action"], "Scores items")
+        self.assertEqual(wf[1]["action"], "Sees turn risk")
+        self.assertEqual(wf[0]["handoff"], "Flags at-risk")
+        self.assertNotIn("handoff", wf[-1])
+        # Fail-open when workflow has fewer than 2 valid steps or is malformed
+        short = ideate._normalize("followup", {"followup": None, "workflow": [{"actor": "Only one", "action": "Step"}]})
+        self.assertNotIn("workflow", short)
+        standalone = ideate._normalize("workflow", {"workflow": "not-a-list"})
+        self.assertEqual(standalone, {"workflow": []})
+
     def test_shape_keeps_one_recommendation_and_valid_value_fields(self):
         out = ideate._normalize("shape", {"options": [
             {"kind": "copilot", "title": "A", "value_lever": "cost_avoided", "value_size": "$$$", "hard_share": "Mostly Hard",

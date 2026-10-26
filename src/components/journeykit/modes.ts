@@ -52,7 +52,7 @@ const THINKING: Record<StepKey, string> = {
   clarify: 'Thinking of the right questions',
   shape: 'Sketching three different approaches',
   questions: 'Drafting questions people will ask',
-  impact: 'Working out what it could be worth',
+  impact: 'Modeling expected ROI and value drivers',
   brief: 'Writing your brief',
 };
 

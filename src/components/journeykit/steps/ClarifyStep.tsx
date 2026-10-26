@@ -3,6 +3,7 @@ import { Check, Loader2, Pencil } from 'lucide-react';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { QuestionCard } from '../ui/QuestionCard';
 import { AnswerTrail } from '../ui/AnswerTrail';
+import { WorkflowPlayback } from '../ui/WorkflowPlayback';
 import { NOT_SURE } from '../engine/types';
 
 export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
@@ -67,24 +68,35 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
       )}
 
       {!q && flow.loading !== 'followup' && (
-        <div className="space-y-2 animate-slide-up-fade">
-          <p className="text-ui-2xs uppercase tracking-wider font-semibold text-emerald-400">All set. Here's what you told me</p>
-          {questions.map((x, i) => (
-            <button
-              key={x.id}
-              disabled={flow.readOnly}
-              onClick={() => setEditing(i)}
-              className="group w-full flex items-start gap-3 text-left rounded-xl border border-border bg-card/60 px-4 py-3 hover:border-primary/40 animate-cascade-in"
-              style={{ animationDelay: `${i * 50}ms` }}
-            >
-              <Check className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
-              <span className="flex-1">
-                <span className="block text-ui-xs text-muted-foreground">{x.question}</span>
-                <span className={`block text-ui-base ${idea.answers[x.id] === NOT_SURE ? 'text-amber-400' : 'text-foreground'}`}>{idea.answers[x.id]}</span>
-              </span>
-              {!flow.readOnly && <Pencil className="w-3.5 h-3.5 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100" />}
-            </button>
-          ))}
+        <div className="space-y-5 animate-slide-up-fade">
+          {idea.workflow && idea.workflow.length >= 2 && (
+            <WorkflowPlayback
+              workflow={idea.workflow}
+              readOnly={flow.readOnly}
+              onChange={flow.updateWorkflow}
+            />
+          )}
+          <div className="space-y-2">
+            <p className="text-ui-2xs uppercase tracking-wider font-semibold text-emerald-400">All set. Here's what you told me</p>
+            <div className={idea.workflow && idea.workflow.length >= 2 ? 'grid gap-2 sm:grid-cols-2' : 'space-y-2'}>
+              {questions.map((x, i) => (
+                <button
+                  key={x.id}
+                  disabled={flow.readOnly}
+                  onClick={() => setEditing(i)}
+                  className="group w-full flex items-start gap-3 text-left rounded-xl border border-border bg-card/60 px-4 py-3 hover:border-primary/40 animate-cascade-in"
+                  style={{ animationDelay: `${i * 50}ms` }}
+                >
+                  <Check className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-ui-xs text-muted-foreground">{x.question}</span>
+                    <span className={`block text-ui-base ${idea.answers[x.id] === NOT_SURE ? 'text-amber-400' : 'text-foreground'}`}>{idea.answers[x.id]}</span>
+                  </span>
+                  {!flow.readOnly && <Pencil className="w-3.5 h-3.5 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

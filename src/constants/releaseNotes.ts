@@ -47,6 +47,27 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.5',
+    date: '2026-10-25',
+    title: 'Animated actor workflow playback and executive ROI framing in Idea Studio',
+    items: [
+      {
+        title: 'Animated customer-backwards workflow playback in Step 3',
+        description: 'Once clarifying questions are answered, Idea Studio plays back a step-by-step animated workflow showing how each actor interacts and how the outcome reaches the customer, with inline editing for any step.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Executive ROI & business value framing',
+        description: 'Step 6 now uses clear ROI and business impact terminology with industry benchmark estimates to size annual value and payback.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+    ],
+  },
+  {
     version: '2.8.4',
     date: '2026-10-23',
     title: 'Consistent 7-step idea journey and clearer climb map into the build',

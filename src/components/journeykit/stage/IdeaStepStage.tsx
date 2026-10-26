@@ -36,7 +36,7 @@ const THINKING_HELPER: Record<StepKey, string> = {
   clarify: 'Using what you already shared, so you only answer what matters.',
   shape: 'Balancing what it builds, the effort, and the value it could create.',
   questions: 'Turning your goals into questions your Genie should answer well.',
-  impact: 'Turning rough inputs into a practical value range.',
+  impact: 'Sizing pilot and full-rollout business impact from your inputs.',
   brief: 'Bringing your decisions together into a page you can share.',
 };
 

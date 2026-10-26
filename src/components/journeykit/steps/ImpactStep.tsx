@@ -7,7 +7,7 @@ import { caseFigures } from '../engine/ideaContext';
 import { RAMP, money, multiple, payback, pct, typicalRange, units } from '../engine/businessCase';
 import type { ImpactQuestion } from '../engine/types';
 
-const ESTIMATE = 'Not sure, estimate for me';
+const ESTIMATE = 'Use industry benchmark estimate';
 
 /** Reads the number out of a free-text answer: "1.5k" → 1500, "2 hours" → 120 (for minute questions), "30 to 45" → 37.5. */
 function parseNumber(text: string, unit: string): number | null {
@@ -169,7 +169,7 @@ function ImpactRecap({ flow, onEdit }: { flow: IdeaFlow; onEdit: (i: number) => 
     <div className="space-y-4 animate-slide-up-fade">
       <div className="flex flex-wrap items-center gap-2">
         <p className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-wider font-semibold text-emerald-400">
-          <TrendingUp className="w-3.5 h-3.5" /> Here's what it could be worth
+          <TrendingUp className="w-3.5 h-3.5" /> Projected ROI &amp; annual business value
         </p>
         <span className={`px-1.5 py-0.5 rounded text-ui-2xs font-medium ${CONFIDENCE[f.confidence].tone}`}>{CONFIDENCE[f.confidence].label}</span>
         {!flow.readOnly && <button

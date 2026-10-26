@@ -104,14 +104,48 @@ Schema:
 
     "followup": """{rules}
 
-TASK: Ambiguity sweep. Look at the user's answers. If any answer is vague, contradictory, or "Not sure yet" on something critical (whose pain, the success metric, the scale, or what a miss costs), ask ONE targeted follow-up question with options. For scale or cost, offer numeric ranges with units so the user can pick one. Otherwise return null.
+TASK: Ambiguity sweep and workflow playback.
+1. Look at the user's answers. If any answer is vague, contradictory, or "Not sure yet" on something critical (whose pain, the success metric, the scale, or what a miss costs), ask ONE targeted follow-up question with options. For scale or cost, offer numeric ranges with units so the user can pick one. Otherwise set "followup" to null.
+2. Also build "workflow": a 3 or 4 step sequence showing how the workflow happens from trigger to outcome, using the personas from "industryPlacement.personas" and the user's answers.
+   - Keep it 100% generic user-flow language: NEVER use platform, database, or product names like "Lakehouse", "Lakebase", "Data Warehouse", "DWH", "Unity Catalog", "Databricks", "Genie", "Dashboard", or "App" as an actor or inside the action text.
+   - Focus on human roles (e.g. "Store Manager", "Ramp Controller", "Replenishment Analyst") and the end customer. If an automated trigger or step is needed, use plain everyday words like "Automated alert" or "Smart assistant".
+   - Work backwards from the customer: whenever this use case directly or indirectly affects an end customer (shopper, passenger, patient, guest, borrower, client, policyholder), the customer MUST appear as an actor with "kind": "customer" (typically the final step showing how it helps them, or first and last if they trigger it).
+   - "kind" is one of: "persona" (internal team role), "system" (generic automated alert or assistant), or "customer" (end customer).
+   - "actor": short role name (1 to 3 words, matching the industry's roles).
+   - "action": one short concrete line (under 10 words) of what happens at this step.
+   - "handoff": 2 or 3 words on the arrow to the next actor (e.g. "Clicks approve", "Sends order", "Stocks shelf"), or "" on the last step.
+   - If a multi-step actor workflow does not make sense for this idea, return "workflow": [].
 
 Schema:
 {{
-  "followup": {{"dimension": "business", "question": "Short question?", "why": "What the answer decides", "options": ["A", "B", "C"], "recommended": -1}}
-}}
-or
-{{ "followup": null }}""",
+  "followup": {{"dimension": "business", "question": "Short question?", "why": "What the answer decides", "options": ["A", "B", "C"], "recommended": -1}} or null,
+  "workflow": [
+    {{"actor": "Replenishment analyst", "kind": "persona", "action": "Sees 48-hour stockout risk and approves top reorders", "handoff": "Sends order"}},
+    {{"actor": "Store manager", "kind": "persona", "action": "Receives priority restock list before the morning rush", "handoff": "Refills shelf"}},
+    {{"actor": "Shopper", "kind": "customer", "action": "Finds everyday fast-moving items on the shelf", "handoff": ""}}
+  ]
+}}""",
+
+    "workflow": """{rules}
+
+TASK: Build or refine the 3 or 4 step actor workflow showing how this idea plays out from trigger to customer outcome, applying any user feedback.
+- Keep it 100% generic user-flow language: NEVER use platform, database, or product names like "Lakehouse", "Lakebase", "Data Warehouse", "DWH", "Unity Catalog", "Databricks", "Genie", "Dashboard", or "App" as an actor or inside the action text.
+- Focus on human roles (e.g. "Store Manager", "Ramp Controller", "Replenishment Analyst") and the end customer. If an automated trigger or step is needed, use plain everyday words like "Automated alert" or "Smart assistant".
+- Work backwards from the customer: whenever this use case directly or indirectly affects an end customer (shopper, passenger, patient, guest, borrower, client, policyholder), the customer MUST appear as an actor with "kind": "customer" (typically the final step showing how it helps them, or first and last if they trigger it).
+- "kind" is one of: "persona" (internal team role), "system" (generic automated alert or assistant), or "customer" (end customer).
+- "actor": short role name (1 to 3 words, matching the industry's roles).
+- "action": one short concrete line (under 10 words) of what happens at this step.
+- "handoff": 2 or 3 words on the arrow to the next actor (e.g. "Clicks approve", "Sends alert"), or "" on the last step.
+- If a multi-step actor workflow does not make sense for this idea, return "workflow": [].
+
+Schema:
+{{
+  "workflow": [
+    {{"actor": "Ramp controller", "kind": "persona", "action": "Reviews gate swap flagged 60 minutes ahead", "handoff": "Clicks approve"}},
+    {{"actor": "Crew lead", "kind": "persona", "action": "Moves ramp crew to the new gate before arrival", "handoff": "Turns aircraft"}},
+    {{"actor": "Passenger", "kind": "customer", "action": "Boards on time and makes tight connection", "handoff": ""}}
+  ]
+}}""",
 
     "shape": """{rules}
 

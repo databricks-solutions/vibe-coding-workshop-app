@@ -19,6 +19,7 @@ import type {
   ShapeOption,
   SparkResult,
   StepKey,
+  WorkflowNode,
 } from './types';
 
 type WithAssumptions<T> = T & { assumptions?: string[] };
@@ -55,7 +56,7 @@ function resetFrom(idea: Idea, step: StepKey): Partial<Idea> {
   };
   if (after('spark')) patch.spark = undefined;
   if (after('map')) patch.map = undefined;
-  if (after('clarify')) Object.assign(patch, { questions: undefined, answers: {}, followupChecked: false });
+  if (after('clarify')) Object.assign(patch, { questions: undefined, answers: {}, followupChecked: false, workflow: undefined });
   if (after('shape')) Object.assign(patch, { shapes: undefined, chosenShapeId: undefined });
   if (after('questions') && idea.genieQuestions) {
     // Questions from the approved use case are the user's starting point, so they survive a reset.
@@ -207,6 +208,13 @@ export function useIdeaFlow(ideaId: string) {
   const run = useCallback(async (step: StepKey, feedback?: string) => {
     const current = ideaRef.current;
     if (!current || readOnly) return;
+    // When all Clarify questions are answered, "Change something" refines the workflow playback rather than wiping the user's answers.
+    if (step === 'clarify' && feedback !== undefined && current.questions?.length && current.questions.every(q => current.answers[q.id])) {
+      logDecision(`Refined workflow on ${stepMeta(current, 'clarify').label}: "${feedback}"`);
+      const r = await call<{ workflow?: WorkflowNode[] }>('workflow', 'workflow', buildContext(current, 'clarify'), feedback);
+      if (r?.workflow?.length) revise('clarify', { workflow: r.workflow }, 'Refined the workflow');
+      return;
+    }
     if (feedback !== undefined) {
       patch(resetFrom(current, step));
       logDecision(`Asked for changes on ${stepMeta(current, step).label}: "${feedback}"`);
@@ -232,7 +240,7 @@ export function useIdeaFlow(ideaId: string) {
     } else if (step === 'clarify') {
       const r = await call<{ questions: ClarifyQuestion[] }>('clarify', 'clarify', ctx, feedback);
       if (!r) return;
-      patch({ questions: r.questions, answers: {}, followupChecked: false });
+      patch({ questions: r.questions, answers: {}, followupChecked: false, workflow: undefined });
     } else if (step === 'shape') {
       const r = await call<WithAssumptions<{ options: ShapeOption[] }>>('shape', 'shape', ctx, feedback);
       if (!r) return;
@@ -248,7 +256,7 @@ export function useIdeaFlow(ideaId: string) {
       if (!r || ideaRef.current?.impact?.skipped) return;
       patch({ impact: { ...r, answers: {}, fallbackModel: lastFallback.current ?? undefined }, summary: undefined });
     }
-  }, [call, logDecision, mergeAssumptions, mergeQuestions, patch, readOnly, streamBrief]);
+  }, [call, logDecision, mergeAssumptions, mergeQuestions, patch, readOnly, revise, streamBrief]);
 
   // A use case's map is drafted in the background so it is ready by the time the user confirms step 1.
   const prefetched = useRef(false);
@@ -352,10 +360,25 @@ export function useIdeaFlow(ideaId: string) {
     const allDone = current.questions.every(q => answers[q.id]);
     if (allDone && !current.followupChecked) {
       patch({ followupChecked: true });
-      const r = await call<{ followup: ClarifyQuestion | null }>('followup', 'followup', buildContext({ ...current, answers }, 'clarify'));
+      const r = await call<{ followup: ClarifyQuestion | null; workflow?: WorkflowNode[] }>('followup', 'followup', buildContext({ ...current, answers }, 'clarify'));
+      if (r?.workflow?.length) patch({ workflow: r.workflow });
       if (r?.followup) patch(i => ({ questions: [...(i.questions ?? []), r.followup!] }));
+    } else if (allDone && current.followupChecked && !current.workflow?.length && !readOnly) {
+      // Non-blocking background generation if a follow-up question was just answered.
+      (async () => {
+        try {
+          const r = await apiClient.ideateStep<{ workflow?: WorkflowNode[] }>('workflow', buildContext({ ...current, answers }, 'clarify'));
+          if (r?.workflow?.length) patch({ workflow: r.workflow });
+        } catch {
+          // Fail-open: workflow playback is strictly optional.
+        }
+      })();
     }
-  }, [call, patch, revise]);
+  }, [call, patch, readOnly, revise]);
+
+  const updateWorkflow = useCallback((workflow: WorkflowNode[]) => {
+    revise('clarify', { workflow }, 'Adjusted the workflow');
+  }, [revise]);
 
   const setGenieQuestions = useCallback((list: string[]) => {
     revise('questions', i => ({
@@ -440,6 +463,7 @@ export function useIdeaFlow(ideaId: string) {
     generateSummary,
     setGenieQuestions,
     mergeQuestions,
+    updateWorkflow,
   };
 }
 

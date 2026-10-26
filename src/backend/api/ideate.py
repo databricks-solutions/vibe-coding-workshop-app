@@ -493,6 +493,76 @@ def _clarify_question(q: Dict[str, Any], qid: str) -> Dict[str, Any]:
     return out
 
 
+MAX_WORKFLOW_STEPS = 4
+CUSTOMER_KEYWORDS = ("customer", "passenger", "shopper", "patient", "guest", "borrower", "member", "traveler", "traveller", "buyer", "client", "policyholder", "diner", "subscriber", "consumer")
+SYSTEM_KEYWORDS = ("genie", "agent", "copilot", "dashboard", "databricks", "lakehouse", "lakebase", "model", "system", "ai", "automation", "alert", "board", "app", "assistant", "early warning")
+JARGON_ACTOR_PATTERNS = re.compile(
+    r"\b(?:databricks\s+app|ai/bi\s+dashboard|unity\s+catalog|declarative\s+pipelines?|model\s+serving|data\s+warehouse|lakehouse|lakebase|databricks|dwh|genie(?:\s+space)?|dashboard|app)\b",
+    re.IGNORECASE,
+)
+JARGON_ACTION_PATTERNS = re.compile(
+    r"\s+\b(?:in|on|via|through|inside|using|from)\s+(?:the\s+)?(?:databricks\s+app|ai/bi\s+dashboard|unity\s+catalog|lakehouse|lakebase|databricks|data\s+warehouse|dwh|genie(?:\s+space)?|app|dashboard)\b",
+    re.IGNORECASE,
+)
+
+
+def _scrub_workflow_actor(actor: str) -> str:
+    cleaned = JARGON_ACTOR_PATTERNS.sub("", actor).strip(" -–—:/,.")
+    if not cleaned:
+        return "Automated alert"
+    return re.sub(r"\s+", " ", cleaned)
+
+
+def _scrub_workflow_action(action: str) -> str:
+    cleaned = JARGON_ACTION_PATTERNS.sub("", action)
+    cleaned = JARGON_ACTOR_PATTERNS.sub("the system", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _infer_actor_kind(raw_actor: str, given: str) -> str:
+    low = raw_actor.lower()
+    if given == "customer" or any(k in low for k in CUSTOMER_KEYWORDS):
+        return "customer"
+    if given == "system" or any(k in low for k in SYSTEM_KEYWORDS):
+        return "system"
+    return "persona"
+
+
+def _normalize_workflow(raw: Any) -> List[Dict[str, Any]]:
+    """Fail-open normalization for the optional 2-4 step actor workflow."""
+    if not isinstance(raw, list):
+        return []
+    used: set = set()
+    steps: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict) or len(steps) >= MAX_WORKFLOW_STEPS:
+            continue
+        raw_actor = str(item.get("actor") or "").strip()
+        raw_action = str(item.get("action") or "").strip()
+        if not raw_actor or not raw_action:
+            continue
+        given_kind = str(item.get("kind") or "").strip().lower()
+        kind = _infer_actor_kind(raw_actor, given_kind)
+        actor = (_scrub_workflow_actor(raw_actor) if kind == "system" or JARGON_ACTOR_PATTERNS.search(raw_actor) else raw_actor)[:44]
+        action = _scrub_workflow_action(raw_action)[:110]
+        if not actor or not action:
+            continue
+        handoff = _scrub_workflow_action(str(item.get("handoff") or "").strip())[:28]
+        node: Dict[str, Any] = {
+            "id": _slug(f"{actor}-{len(steps) + 1}", used),
+            "actor": actor,
+            "kind": kind,
+            "action": action,
+        }
+        if handoff:
+            node["handoff"] = handoff
+        steps.append(node)
+    if len(steps) < 2:
+        return []
+    steps[-1].pop("handoff", None)
+    return steps
+
+
 def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     idea = idea or {}
     if step == "questions":
@@ -510,12 +580,18 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
         return {"questions": questions} if questions else None
     if step == "followup":
         f = data.get("followup")
-        if not isinstance(f, dict) or not f.get("question"):
-            return {"followup": None}
-        q = _clarify_question({"dimension": "business", **f}, _slug("followup-" + str(f.get("question")), set()))
-        q["multi"] = False
-        q.pop("maxPicks", None)
-        return {"followup": {**q, "isFollowup": True}}
+        workflow = _normalize_workflow(data.get("workflow"))
+        out_followup: Dict[str, Any] = {"followup": None}
+        if isinstance(f, dict) and f.get("question"):
+            q = _clarify_question({"dimension": "business", **f}, _slug("followup-" + str(f.get("question")), set()))
+            q["multi"] = False
+            q.pop("maxPicks", None)
+            out_followup["followup"] = {**q, "isFollowup": True}
+        if workflow:
+            out_followup["workflow"] = workflow
+        return out_followup
+    if step == "workflow":
+        return {"workflow": _normalize_workflow(data.get("workflow"))}
     if step == "shape":
         used = set()
         options = []

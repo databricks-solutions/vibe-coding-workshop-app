@@ -84,6 +84,11 @@ const RETAIL: Idea = {
     scope: 'Place orders automatically; Cover fresh and perishables',
   },
   followupChecked: true,
+  workflow: [
+    { id: 'retail-1', actor: 'Replenishment analyst', kind: 'persona', action: 'Reviews 48-hour stockout risk board and approves top reorders', handoff: 'Sends order' },
+    { id: 'retail-2', actor: 'Store manager', kind: 'persona', action: 'Receives priority aisle refill list before the morning rush', handoff: 'Stocks shelf' },
+    { id: 'retail-3', actor: 'Shopper', kind: 'customer', action: 'Finds everyday fast movers in stock on the shelf' },
+  ],
   shapes: [
     {
       id: 'insight-stockout-risk-board',
@@ -341,6 +346,11 @@ const CPG: Idea = {
     scope: 'Change list prices; Settle retailer deductions',
   },
   followupChecked: true,
+  workflow: [
+    { id: 'cpg-1', actor: 'Key account manager', kind: 'persona', action: 'Drafts next quarter promo mechanic and depth in the planner', handoff: 'Scores ROI' },
+    { id: 'cpg-2', actor: 'RGM analyst', kind: 'persona', action: 'Validates payback score and suggested discount depth', handoff: 'Shares offer' },
+    { id: 'cpg-3', actor: 'Retailer buyer', kind: 'customer', action: 'Agrees a promotion that drives category lift and margin' },
+  ],
   shapes: [
     {
       id: 'copilot-promo-planner-copilot',
@@ -597,6 +607,11 @@ const AIRLINES: Idea = {
     scope: 'Change flight crew assignments; Rebook passengers; Cover outstations',
   },
   followupChecked: true,
+  workflow: [
+    { id: 'air-1', actor: 'Ramp controller', kind: 'persona', action: 'Sees turn at risk 60 minutes ahead with drafted gate swap', handoff: 'Approves swap' },
+    { id: 'air-2', actor: 'Hub duty manager', kind: 'persona', action: 'Clears any escalated gate or ramp crew conflict in one tap', handoff: 'Moves crew' },
+    { id: 'air-3', actor: 'Passenger', kind: 'customer', action: 'Boards at the updated gate and departs on time' },
+  ],
   shapes: [
     {
       id: 'copilot-turn-recovery-copilot',

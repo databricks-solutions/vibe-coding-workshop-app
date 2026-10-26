@@ -45,7 +45,7 @@ export const STEPS: StepMeta[] = [
   { key: 'clarify', label: 'A few questions', hint: 'A few quick questions', detail: 'Answer a handful of multiple-choice questions so the plan fits how your team really works.', minutes: 2 },
   { key: 'shape', label: 'Pick an approach', hint: 'Three ways to bring it to life', detail: 'Compare three ways to build it, with the effort and value of each, and pick one.', minutes: 2 },
   { key: 'questions', label: 'Questions for Genie', hint: 'What should people be able to ask?', detail: 'List the questions people should be able to ask. Your Genie is tested on them.', minutes: 2 },
-  { key: 'impact', label: "What it's worth", hint: 'What could it be worth?', detail: 'Optional. Rough answers turn into a yearly value range for your business case. You can skip it.', optional: true, minutes: 2 },
+  { key: 'impact', label: 'ROI & business value', hint: 'Estimate your ROI & business impact', detail: 'Optional. Size the expected annual ROI, payback period, and value drivers for your business case.', optional: true, minutes: 2 },
   { key: 'brief', label: 'Your brief', hint: 'Your decision-ready one-pager', detail: 'Everything you decided, on one page you can share and submit for approval.', minutes: 2 },
 ];
 
@@ -128,6 +128,20 @@ export interface ClarifyQuestion {
   /** Maximum selections for a multi question; absent means every option may be picked. */
   maxPicks?: number;
   isFollowup?: boolean;
+}
+
+export type WorkflowActorKind = 'persona' | 'system' | 'customer';
+
+export interface WorkflowNode {
+  id: string;
+  /** Role or actor name, e.g. "Ramp Coordinator", "Crew Copilot", "Passenger". */
+  actor: string;
+  /** 'persona' (internal team role), 'system' (AI / Databricks surface), or 'customer' (end customer). */
+  kind: WorkflowActorKind;
+  /** One short sentence (under 10 words) of what happens at this step. */
+  action: string;
+  /** Optional 2-3 word verb on the arrow to the next actor, e.g. "Clicks approve", "Notifies". */
+  handoff?: string;
 }
 
 export type ShapeKind = 'copilot' | 'automation' | 'insight' | 'ask' | 'monitor' | 'signal';
@@ -403,6 +417,8 @@ export interface Idea {
   questions?: ClarifyQuestion[];
   answers: Record<string, string>;
   followupChecked?: boolean;
+  /** Optional 2-4 step animated actor-to-customer workflow playback validated in Step 3. */
+  workflow?: WorkflowNode[];
   shapes?: ShapeOption[];
   chosenShapeId?: string;
   impact?: Impact;
