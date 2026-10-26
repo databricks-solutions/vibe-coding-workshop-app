@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=../../../schema/usecase.schema.json
+#
+# Contributed use case. Copied from the sample. To submit your own:
+#
+#   python scripts/contrib/new_usecase.py --contributor <your_id> --slug <your_slug>
+#
+# Then edit usecase.yaml and description.md, run
+#   python scripts/contrib/validate.py
+# and open a pull request. The full guide is contrib/README.md.
+#
+# Every contribution ships switched off. An admin turns it on in the Library
+# (Configuration > Library) before attendees see it in the workshop.
+
+schema_version: 1
+
+# Permanent id: must match this folder's name. Lowercase, digits, underscores, max 48.
+slug: genie_demo
+
+# Card title (max 80) and the one line shown under it (max 200).
+title: "Genie Demo"
+summary: A demo Genie-powered application built with the Vibe Coding Workshop..
+
+# Semantic version. Bump it on every change and add a changelog entry below.
+# A certification only shows while it matches this version.
+version: 1.0.0
+
+# active | deprecated (still listed, with a Deprecated badge) | withdrawn (hidden,
+# but sessions that already use it keep working). Never delete a folder.
+status: active
+
+# Other registered contributors who share credit (their ids).
+co_contributors: []
+
+# The people who wrote it.
+authors: []
+
+# Where attendees find it. `home` is a collection id such as sample, retail,
+# cpg or travel. If an install doesn't have it, the use case lands in the
+# Partner & Community collection, where every contribution also appears.
+collections:
+  home: sample
+  also: []
+  # Optional outcome-map column inside the home collection.
+  category: null
+  display_order: 99
+
+tags: []
+
+# Images live next to this file. png, jpg or webp, max 1 MB each, no SVG.
+media:
+  cover: null
+  screenshots: []
+
+# Optional featured recording or document. YouTube links render a thumbnail;
+# Google Docs/Sheets/Slides and other HTTPS links render a compact provider card.
+featured_resource:
+  label: Watch the workshop walkthrough
+  url: https://www.youtube.com/watch?v=MUa5kbIV1Lc
+
+# https only.
+links: []
+
+changelog:
+  - version: 1.0.0
+    date: 2026-10-26
+    notes: First version.

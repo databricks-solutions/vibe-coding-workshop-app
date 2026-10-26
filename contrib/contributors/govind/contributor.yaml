@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=../../schema/contributor.schema.json
+#
+# Contributor registration. Copied from the sample. Register yourself, your company,
+# your group or your partner organization:
+#
+#   python scripts/contrib/new_contributor.py --id acme --type company --name "Acme Analytics"
+#
+# One contributor.yaml per contributor. Every use case you submit lives under
+# contrib/usecases/<id>/. Maintainers review this file, especially `type` and
+# `can_certify`, so expect a quick check on your first PR.
+
+schema_version: 1
+
+# Permanent id: lowercase letters, digits and underscores, max 32 characters.
+# It must match this folder's name and becomes part of every use case key.
+id: govind
+
+# Who you are:
+#   partner    - an official partner organization (maintainers confirm this)
+#   company    - any other organization: customer, ISV, consultancy
+#   individual - a single person
+#   group      - several people: a user group, hackathon team, collective
+type: individual
+
+display_name: "Govind Pandey"
+description: "Govind Pandey use cases for the Vibe Coding Workshop."
+
+# Optional. https only.
+
+# Optional square image in this folder: png, jpg or webp, max 1 MB.
+
+# GitHub user, or org/team, that reviews changes to your use cases.
+
+# For companies and groups: the people behind the contributions.
+members: []
+
+# Lets you certify use cases. Granted by maintainers only; the sample
+# contributor may only certify the sample use case.
+can_certify: false
+
