@@ -170,6 +170,9 @@ async def derive_profile(template: str) -> Optional[Dict[str, Any]]:
                 system_prompt=DERIVE_PROMPT,
                 max_tokens=400,
                 temperature=0.3,
+                feature="insights",
+                action="use-case-preview",
+                detail="value-profile",
             ),
             timeout=LLM_TIMEOUT_S,
         )

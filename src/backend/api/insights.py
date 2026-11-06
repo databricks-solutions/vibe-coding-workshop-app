@@ -107,6 +107,9 @@ async def _suggest(template: str) -> List[str]:
                 system_prompt=SUGGEST_PROMPT,
                 max_tokens=400,
                 temperature=0.3,
+                feature="insights",
+                action="use-case-preview",
+                detail="questions",
             ),
             timeout=LLM_TIMEOUT_S,
         )

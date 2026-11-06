@@ -1212,6 +1212,15 @@ class AIGenerateRequest(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
 
 
+_AI_TELEMETRY_FIELDS = {
+    "hackathon_description": "hackathon-description",
+    "hackathon_short": "hackathon-short",
+    "team_description": "team-description",
+    "submission_description": "submission-description",
+    "judge_feedback": "judge-feedback",
+}
+
+
 def _build_ai_prompt(field: str, ctx: Dict[str, Any]) -> str:
     """Turn a field + context into a focused instruction for the LLM.
 
@@ -1286,7 +1295,12 @@ async def hackathon_ai_generate(body: AIGenerateRequest, request: Request) -> Di
     _ = _resolve_user(request)  # ensure caller is resolvable / logged
     prompt = _build_ai_prompt(body.field, body.context)
     result = await call_databricks_serving_endpoint(
-        prompt=prompt, max_tokens=512, temperature=0.8
+        prompt=prompt,
+        max_tokens=512,
+        temperature=0.8,
+        feature="hackathon",
+        action="ai-generate",
+        detail=_AI_TELEMETRY_FIELDS.get(body.field, "other"),
     )
     text = (result.get("response") or "").strip()
     available = bool(text) and not text.startswith("[Error]")

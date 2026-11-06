@@ -679,6 +679,9 @@ async def ideate_step(body: IdeateStepRequest, request: Request):
             max_tokens=ANALYSIS_MAX_TOKENS if body.step in ANALYSIS_STEPS else 2500,
             temperature=STEP_TEMPERATURE.get(body.step, DEFAULT_TEMPERATURE),
             endpoint_name=endpoint,
+            feature="idea-studio",
+            action="step",
+            detail=body.step,
         )
         text = (result.get("response") or "").strip()
         if not text or text.startswith("[Error]") or text.startswith("[Mock Response"):
@@ -710,8 +713,17 @@ async def ideate_brief(body: IdeateBriefRequest, request: Request):
         {"role": "system", "content": brief_prompt_for(_mode(body.idea))},
         {"role": "user", "content": _context_block(body.idea, body.feedback, extra)},
     ]
+    detail = "revise" if body.current_brief and body.feedback else "generate"
     return StreamingResponse(
-        _stream_with_retry(messages, max_tokens=4000, temperature=0.5, section_tag="ideate_brief"),
+        _stream_with_retry(
+            messages,
+            max_tokens=4000,
+            temperature=0.5,
+            section_tag="ideate_brief",
+            feature="idea-studio",
+            action="brief",
+            detail=detail,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
@@ -733,6 +745,9 @@ async def _catalog_template(body: IdeateSubmitRequest) -> str:
         system_prompt=CATALOG_PROMPT,
         max_tokens=3000,
         temperature=0.4,
+        feature="idea-studio",
+        action="submit",
+        detail="catalog",
     )
     text = (result.get("response") or "").strip()
     if text and not text.startswith("[Error]") and not text.startswith("[Mock Response"):

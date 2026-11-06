@@ -316,7 +316,14 @@ def _parse(text: str) -> Optional[Dict[str, Any]]:
     return out if isinstance(out, dict) else None
 
 
-async def _ask(system_prompt: str, prompt: str, max_tokens: int) -> Dict[str, Any]:
+async def _ask(
+    system_prompt: str,
+    prompt: str,
+    max_tokens: int,
+    *,
+    action: str = "data-fit",
+    detail: str = "analysis",
+) -> Dict[str, Any]:
     from src.backend.api.routes import call_databricks_serving_endpoint, resolve_endpoint
     analysis = os.getenv("IDEATE_ANALYSIS_ENDPOINT", "").strip()
     endpoint = await asyncio.to_thread(resolve_endpoint, analysis) if analysis else None
@@ -327,6 +334,9 @@ async def _ask(system_prompt: str, prompt: str, max_tokens: int) -> Dict[str, An
             max_tokens=max_tokens,
             temperature=0,
             endpoint_name=endpoint,
+            feature="insights",
+            action=action,
+            detail=detail,
         ),
         timeout=LLM_TIMEOUT_S,
     )
@@ -385,7 +395,13 @@ async def blueprint_pick(body: PickRequest):
         return hit
     listing = "\n".join(f"- {s}: {label}" for s, label in models.items())
     try:
-        reply = await _ask(PICK_PROMPT, f"USE CASE:\n{context}\n\nMODELS:\n{listing}", 2000)
+        reply = await _ask(
+            PICK_PROMPT,
+            f"USE CASE:\n{context}\n\nMODELS:\n{listing}",
+            2000,
+            action="blueprint-pick",
+            detail="gallery",
+        )
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Matching took too long.")
     raw = _parse(reply["text"]) or {}

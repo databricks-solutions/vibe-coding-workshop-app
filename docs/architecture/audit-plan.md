@@ -12,16 +12,15 @@ captures a different facet; none is a complete record on its own.
 | Surface | What it captures | Owner | Retention |
 |---------|------------------|-------|-----------|
 | `system.access.audit` | Every Databricks SDK call from V2V, identified by User-Agent string built in `src/backend/identity.py` | Databricks platform | Per workspace policy (typically 1 year) |
-| `system.serving.endpoint_usage` | Every model-serving invocation, with `usage_context` dict from `identity.py` | Databricks platform | Per workspace policy |
+| `system.serving.endpoint_usage` | Model-serving invocation metadata, including model/endpoint fields and the V2V User-Agent | Databricks platform | Per workspace policy |
 | App stdout / stderr (captured by Apps platform) | Python `logging` output from `app.py`, `services/lakebase.py`, `api/routes.py` | Databricks Apps | Short rolling window |
 | **Lakebase `audit_log` table** | App-internal user actions on sessions, prompts, leaderboard | V2V | **❌ Does not exist today** — see gap #1 |
 
 ## Identity attribution
 
 The **critical attribution rule** for V2V: every outbound call is made by
-the App SP, but the *user* responsible for the call is identified only by
-the User-Agent and `usage_context` constructed in `identity.py`. There is
-no second principal at the data plane.
+the App SP. The User-Agent identifies the product and bounded workflow
+context, not the end user. There is no second principal at the data plane.
 
 ### What `identity.py` stamps
 
@@ -33,27 +32,24 @@ User-Agent: vibe-to-value-workshop/<VERSION>
             [section/<sanitized_section_tag>]
             [industry/<sanitized_industry>]
             [usecase/<sanitized_use_case>]
+            [feature/<bounded_feature>]
+            [action/<bounded_action>]
+            [detail/<bounded_detail>]
             [project/<auto-detected-repo-name>]   ← added by tag_client()
 ```
 
-```python
-usage_context = {
-    "product":  "vibe-to-value-workshop",
-    "version":  "<VERSION>",
-    "section":  "<sanitized_section_tag>",     # optional
-    "industry": "<sanitized_industry>",        # optional
-    "usecase":  "<sanitized_use_case>",        # optional
-}
-```
+Values pass through `_sanitize()` which collapses to `[a-zA-Z0-9._-]` and
+caps length at 60 characters. Feature/action/detail values are selected from
+bounded server-side enums. Prompts, model output, emails, IDs, attachments,
+URLs, and arbitrary customer text are never added.
 
-Both pass through `_sanitize()` which collapses to `[a-zA-Z0-9._-]` and
-caps length at 60 characters. This is the lower bound of attribution —
-nothing further can be reconstructed.
+`identity.py` still contains a `build_usage_context()` helper, but strict
+Foundation Model chat schemas reject `extra_params`. The runtime therefore
+does not send custom `usage_context`; telemetry is header-only.
 
 ### What `identity.py` does NOT stamp (gap)
 
 - No `user/<email>` token in User-Agent
-- No `user` key in `usage_context`
 - No correlation ID linking a stream of SDK calls to an originating
   inbound request
 
@@ -73,12 +69,27 @@ Lakebase `sessions` table to recover the user. This is fragile because
 SELECT request_time, status_code, request_metadata.workspace_id,
        served_entity_id, usage_context, user_agent
 FROM system.serving.endpoint_usage
-WHERE usage_context['product'] = 'vibe-to-value-workshop'
+WHERE user_agent LIKE 'vibe-to-value-workshop/%'
   AND request_time >= current_timestamp() - INTERVAL 1 HOUR
 ORDER BY request_time DESC;
 ```
 
-### Q2 — V2V SDK calls grouped by section / use case
+### Q2 — V2V calls grouped by feature / action / detail
+
+```sql
+SELECT
+  regexp_extract(user_agent, 'feature/([^ ]+)', 1) AS feature,
+  regexp_extract(user_agent, 'action/([^ ]+)', 1) AS action,
+  regexp_extract(user_agent, 'detail/([^ ]+)', 1) AS detail,
+  COUNT(*) AS calls
+FROM system.serving.endpoint_usage
+WHERE user_agent LIKE 'vibe-to-value-workshop/%'
+  AND request_time >= current_timestamp() - INTERVAL 7 DAYS
+GROUP BY 1, 2, 3
+ORDER BY calls DESC;
+```
+
+### Q3 — Workshop model calls grouped by step / use case
 
 ```sql
 SELECT
@@ -92,7 +103,20 @@ GROUP BY 1, 2
 ORDER BY calls DESC;
 ```
 
-### Q3 — Distinguishing workshop installations
+### Q4 — Workshop versions in use
+
+```sql
+SELECT
+  regexp_extract(user_agent, 'vibe-to-value-workshop/([^ ]+)', 1) AS version,
+  COUNT(*) AS calls
+FROM system.serving.endpoint_usage
+WHERE user_agent LIKE 'vibe-to-value-workshop/%'
+  AND request_time >= current_timestamp() - INTERVAL 30 DAYS
+GROUP BY 1
+ORDER BY calls DESC;
+```
+
+### Q5 — Distinguishing workshop installations
 
 `tag_client()` auto-detects the project name from the git remote, so two
 installations of V2V running in different workspaces are distinguishable:
@@ -108,7 +132,7 @@ GROUP BY 1
 ORDER BY calls DESC;
 ```
 
-### Q4 — Hot endpoints by rate-limit rejections
+### Q6 — Hot endpoints by rate-limit rejections
 
 V2V's middleware emits a 429 when `RATE_LIMIT_PER_MIN` is exceeded. The
 Apps platform captures HTTP status codes:

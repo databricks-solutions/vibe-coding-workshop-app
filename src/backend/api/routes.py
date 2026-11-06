@@ -1867,6 +1867,9 @@ async def _stream_with_retry(
     section_tag: Optional[str] = None,
     industry: Optional[str] = None,
     use_case: Optional[str] = None,
+    feature: Optional[str] = None,
+    action: Optional[str] = None,
+    detail: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream LLM response as SSE events with automatic retry on transient errors.
@@ -1905,7 +1908,14 @@ async def _stream_with_retry(
     workspace_host = client.config.host.rstrip("/")
     url = f"{workspace_host}/serving-endpoints/{endpoint}/invocations"
 
-    ua = build_user_agent(section_tag=section_tag, industry=industry, use_case=use_case)
+    ua = build_user_agent(
+        section_tag=section_tag,
+        industry=industry,
+        use_case=use_case,
+        feature=feature,
+        action=action,
+        detail=detail,
+    )
 
     yield _sse_event({"type": "start", "model": endpoint})
 
@@ -7148,7 +7158,16 @@ async def _stream_usecase_generation(
         logger.warning(f"[UseCase Builder] Payload {payload_estimate} bytes exceeds 3.8MB safety limit, falling back to text-only")
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_text}]
 
-    async for event in _stream_with_retry(messages, max_tokens=LLM_MAX_OUTPUT_TOKENS, temperature=0.5):
+    mode = "refine" if request_body.mode == "refine" and request_body.current_draft else "generate"
+    detail = "multimodal" if all_images else "text"
+    async for event in _stream_with_retry(
+        messages,
+        max_tokens=LLM_MAX_OUTPUT_TOKENS,
+        temperature=0.5,
+        feature="use-case-builder",
+        action=mode,
+        detail=detail,
+    ):
         yield event
 
 

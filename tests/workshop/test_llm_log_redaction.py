@@ -645,6 +645,53 @@ def _drain_stream(monkeypatch, outcomes, auth_exc=None):
 _DONE = _FakeStreamResponse(200, lines=["data: [DONE]"])
 
 
+def test_stream_telemetry_changes_only_user_agent_header(monkeypatch):
+    seen = {}
+
+    class _Client:
+        def __init__(self, *args, **kwargs):  # noqa: ARG002
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def stream(self, method, url, json=None, headers=None):  # noqa: ARG002
+            seen["json"] = json
+            seen["headers"] = headers
+            return _FakeStreamCM(_DONE)
+
+    monkeypatch.setattr(llm, "_workspace_client", _StreamClient())
+    monkeypatch.setenv("DATABRICKS_ENDPOINT_FALLBACK", "false")
+    monkeypatch.setattr(llm, "SERVING_ENDPOINT_NAME", "databricks-claude-sonnet-5-5")
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+
+    messages = [{"role": "user", "content": "hi"}]
+
+    async def _run():
+        return [
+            event async for event in routes._stream_with_retry(
+                messages,
+                max_tokens=10,
+                temperature=0.5,
+                feature="use-case-builder",
+                action="refine",
+                detail="text",
+            )
+        ]
+
+    events = asyncio.run(_run())
+
+    assert any('"type": "done"' in event for event in events)
+    assert seen["json"] == {"messages": messages, "max_tokens": 10, "stream": True}
+    user_agent = seen["headers"]["User-Agent"]
+    assert "feature/use-case-builder" in user_agent
+    assert "action/refine" in user_agent
+    assert "detail/text" in user_agent
+
+
 @pytest.mark.parametrize("outcomes,auth_exc,expect_error", [
     ([_FakeStreamResponse(400, body=f'{{"message": "{ERR_MARKER}"}}'.encode())], None, True),
     ([_FakeStreamResponse(503, body=f"busy {ERR_MARKER}".encode())] * 3, None, True),
@@ -734,12 +781,57 @@ R8_INTENTIONAL_EDITS = {
     "src/backend/api/routes.py": [
         ("    ep_lower = endpoint.lower()", None),
         ('    if "mini" not in ep_lower:', "    if _supports_temperature(endpoint):"),
+        (
+            "    use_case: Optional[str] = None,",
+            "    use_case: Optional[str] = None,\n"
+            "    feature: Optional[str] = None,\n"
+            "    action: Optional[str] = None,\n"
+            "    detail: Optional[str] = None,",
+        ),
+        (
+            "    ua = build_user_agent(section_tag=section_tag, industry=industry, use_case=use_case)",
+            "    ua = build_user_agent(\n"
+            "        section_tag=section_tag,\n"
+            "        industry=industry,\n"
+            "        use_case=use_case,\n"
+            "        feature=feature,\n"
+            "        action=action,\n"
+            "        detail=detail,\n"
+            "    )",
+        ),
     ],
     "src/backend/services/llm.py": [
         ("        ep_lower = endpoint.lower()", None),
         (
             '        if "mini" not in ep_lower:',
             '        if temperature is not None and _supports_temperature(endpoint):',
+        ),
+        (
+            "    system_prompt: str = None",
+            "    system_prompt: str = None,\n"
+            "    feature: str = None,\n"
+            "    action: str = None,\n"
+            "    detail: str = None,",
+        ),
+        (
+            '            openai_request_body["temperature"] = temperature',
+            '            openai_request_body["temperature"] = temperature\n'
+            "\n"
+            "        request_headers = None\n"
+            "        if feature or action or detail:\n"
+            "            from src.backend.identity import build_user_agent\n"
+            "            request_headers = {\n"
+            '                "User-Agent": build_user_agent(\n'
+            "                    feature=feature,\n"
+            "                    action=action,\n"
+            "                    detail=detail,\n"
+            "                )\n"
+            "            }",
+        ),
+        (
+            "                    body=openai_request_body",
+            "                    body=openai_request_body,\n"
+            '                    **({"headers": request_headers} if request_headers else {}),',
         ),
     ],
 }

@@ -1297,6 +1297,9 @@ async def score_idea(idea_id: str, request: Request):
             system_prompt=JUDGE_PROMPT,
             max_tokens=1500,
             temperature=0.0,
+            feature="idea-studio",
+            action="score",
+            detail="judge",
         )
         text = (result.get("response") or "").strip()
         if not text or text.startswith("[Error]") or text.startswith("[Mock Response"):

@@ -195,7 +195,10 @@ async def call_databricks_serving_endpoint(
     endpoint_name: str = None,
     max_tokens: int = 4000,  # Full response length
     temperature: float = 0.5,  # Lower temp = faster generation
-    system_prompt: str = None
+    system_prompt: str = None,
+    feature: str = None,
+    action: str = None,
+    detail: str = None,
 ) -> Dict[str, Any]:
     """
     Call a Databricks Model Serving endpoint using the SDK's API client.
@@ -382,6 +385,17 @@ async def call_databricks_serving_endpoint(
         }
         if temperature is not None and _supports_temperature(endpoint):
             openai_request_body["temperature"] = temperature
+
+        request_headers = None
+        if feature or action or detail:
+            from src.backend.identity import build_user_agent
+            request_headers = {
+                "User-Agent": build_user_agent(
+                    feature=feature,
+                    action=action,
+                    detail=detail,
+                )
+            }
         
         
         try:
@@ -395,7 +409,8 @@ async def call_databricks_serving_endpoint(
                 lambda: client.api_client.do(
                     method="POST",
                     path=f"/serving-endpoints/{endpoint}/invocations",
-                    body=openai_request_body
+                    body=openai_request_body,
+                    **({"headers": request_headers} if request_headers else {}),
                 )
             )
             

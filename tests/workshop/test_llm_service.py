@@ -169,9 +169,11 @@ def test_e5_llm_seam_works_offline_with_helpers_patched_on_llm(monkeypatch):
 class _RecordingApiClient:
     def __init__(self):
         self.bodies = []
+        self.headers = []
 
-    def do(self, method, path, body):  # noqa: ARG002 — mimics the SDK signature
+    def do(self, method, path, body, headers=None):  # noqa: ARG002 — mimics the SDK signature
         self.bodies.append(body)
+        self.headers.append(headers)
         return {"choices": [{"message": {"content": "ok"}}], "model": "ep"}
 
 
@@ -208,6 +210,34 @@ def test_temperature_float_includes_field(monkeypatch):
     # The "mini" rule is unchanged: no temperature for a *mini* endpoint, float or None.
     assert _sent_body(monkeypatch, "gpt-4o-mini", temperature=0.7) == {"messages": MESSAGES, "max_tokens": 50}
     assert _sent_body(monkeypatch, "gpt-4o-mini", temperature=None) == {"messages": MESSAGES, "max_tokens": 50}
+
+
+def test_telemetry_changes_only_user_agent_header(monkeypatch):
+    api_client = _RecordingApiClient()
+    client = type("_Client", (_FakeClient,), {"api_client": api_client})()
+    monkeypatch.setattr(llm, "DATABRICKS_SDK_AVAILABLE", True)
+    monkeypatch.setattr(llm, "get_workspace_client", lambda: client)
+
+    result = asyncio.run(
+        llm.call_databricks_serving_endpoint(
+            "hi",
+            endpoint_name="databricks-claude-sonnet-5-5",
+            max_tokens=50,
+            temperature=None,
+            system_prompt="sys",
+            feature="hackathon",
+            action="ai-generate",
+            detail="submission-description",
+        )
+    )
+
+    assert result["response"] == "ok"
+    assert api_client.bodies == [{"messages": MESSAGES, "max_tokens": 50}]
+    assert len(api_client.headers) == 1
+    user_agent = api_client.headers[0]["User-Agent"]
+    assert "feature/hackathon" in user_agent
+    assert "action/ai-generate" in user_agent
+    assert "detail/submission-description" in user_agent
 
 
 def _base_routes_source():
@@ -248,6 +278,34 @@ E6_INTENTIONAL_EDITS = {
         ),
     ],
     "call_databricks_serving_endpoint": [
+        # Additive User-Agent telemetry; request bodies and responses stay unchanged.
+        (
+            "    system_prompt: str = None",
+            "    system_prompt: str = None,\n"
+            "    feature: str = None,\n"
+            "    action: str = None,\n"
+            "    detail: str = None,",
+        ),
+        (
+            '            openai_request_body["temperature"] = temperature',
+            '            openai_request_body["temperature"] = temperature\n'
+            "\n"
+            "        request_headers = None\n"
+            "        if feature or action or detail:\n"
+            "            from src.backend.identity import build_user_agent\n"
+            "            request_headers = {\n"
+            '                "User-Agent": build_user_agent(\n'
+            "                    feature=feature,\n"
+            "                    action=action,\n"
+            "                    detail=detail,\n"
+            "                )\n"
+            "            }",
+        ),
+        (
+            "                    body=openai_request_body",
+            "                    body=openai_request_body,\n"
+            '                    **({"headers": request_headers} if request_headers else {}),',
+        ),
         # D-27
         (
             '        logger.info(f"  Response repr: {repr(query_response)[:500]}")',

@@ -71,6 +71,9 @@ def build_user_agent(
     section_tag: Optional[str] = None,
     industry: Optional[str] = None,
     use_case: Optional[str] = None,
+    feature: Optional[str] = None,
+    action: Optional[str] = None,
+    detail: Optional[str] = None,
 ) -> str:
     """Build a User-Agent string with optional per-request workflow context.
 
@@ -94,6 +97,12 @@ def build_user_agent(
         parts.append(f"industry/{_sanitize(industry)}")
     if use_case:
         parts.append(f"usecase/{_sanitize(use_case)}")
+    if feature:
+        parts.append(f"feature/{_sanitize(feature)}")
+    if action:
+        parts.append(f"action/{_sanitize(action)}")
+    if detail:
+        parts.append(f"detail/{_sanitize(detail)}")
 
     return " ".join(parts)
 
