@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, BadgeCheck, Check, Database, FileUp, FlaskConical, Info, Loader2, Plus, ShieldCheck, Sparkles, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, Check, Database, ExternalLink, FileUp, FlaskConical, HelpCircle, Info, Loader2, Plus, ShieldCheck, Sparkles, TriangleAlert, X } from 'lucide-react';
 import type { DataSource } from '../brief';
 import { useBlueprintCatalog, useInstalledModels } from '../blueprint/blueprintApi';
 import type { ModelHint } from '../blueprint/industryMap';
@@ -8,19 +8,20 @@ import { useModelPick } from '../blueprint/useModelPick';
 import { MiniConstellation } from '../blueprint/MiniConstellation';
 import {
   addToLocation, isSourceId, locationEntries, matchTables, removeFromLocation, sourcesIn, useApprovedSources, useCheckedSources,
-  type ApprovedSource, type CheckedSource,
+  useSourceTaxonomy, type ApprovedSource, type CheckedSource,
 } from '../sources/sourcesApi';
 import type { ReactNode } from 'react';
 import { FadeIn, GhostButton, Headline, PrimaryButton } from '../../journeykit';
 import { CatalogSchemaPicker } from '../sources/CatalogSchemaPicker';
+import { ServicePopover } from '../../ServicePopover';
 
 type Option = { id: DataSource; icon: typeof Database | null; title: string; body: string; tag?: string; footnote?: string; slug?: string; loading?: boolean };
 
 const OPTIONS: Option[] = [
   {
     id: 'existing', icon: Database,
-    title: 'Already in Databricks',
-    body: 'Point Genie at tables you already have. Nothing gets moved or copied.',
+    title: 'Use data already in Databricks',
+    body: 'Start from governed schemas, then narrow to business domains, subdomains, and tables. Nothing gets moved or copied.',
   },
   {
     id: 'upload', icon: FileUp,
@@ -95,6 +96,12 @@ function SourceChip({ source: s, tables, on, added, certifiedOnly, onToggle, onR
   const failed = !loading && !s.readable;
   const certified = s.certifiedCount ?? 0;
   const noneCertified = certifiedOnly && !loading && !failed && s.tableCount > 0 && certified === 0;
+  const taxonomy = useSourceTaxonomy(s.id, on && !loading && !failed);
+  const provenance = taxonomy.data?.provenance === 'model'
+    ? 'Model domains'
+    : taxonomy.data?.provenance === 'tags'
+      ? 'Tagged business domains'
+      : 'Suggested business areas';
   return (
     <div className={`relative rounded-xl border transition-colors ${on ? 'border-primary/60 bg-primary/[0.06]' : 'border-border bg-card hover:border-foreground/25'}`}>
       <button onClick={onToggle} aria-pressed={on} title={s.note || s.id} className="w-full text-left px-3 py-2.5">
@@ -131,6 +138,26 @@ function SourceChip({ source: s, tables, on, added, certifiedOnly, onToggle, onR
           <span className="block text-ui-xs text-primary/90 mt-1 pl-6">Matches your questions: {tables.join(', ')}</span>
         ) : (
           <span className="block text-ui-xs text-muted-foreground/80 mt-1 pl-6">No obvious table matches. Explore to let the AI check.</span>
+        )}
+        {taxonomy.loading && (
+          <span className="flex items-center gap-1.5 text-ui-xs text-muted-foreground mt-2 pl-6">
+            <Loader2 className="w-3 h-3 animate-spin" /> Reading domain and subdomain metadata…
+          </span>
+        )}
+        {taxonomy.data && (
+          <span className="block mt-2 pl-6">
+            <span className="block text-ui-xs font-medium text-foreground">
+              {provenance} · {taxonomy.data.domainCount} domain{taxonomy.data.domainCount === 1 ? '' : 's'}
+              {taxonomy.data.subdomainCount > 0 && ` · ${taxonomy.data.subdomainCount} subdomains`}
+            </span>
+            <span className="flex flex-wrap gap-1 mt-1">
+              {taxonomy.data.domains.slice(0, 4).map(d => (
+                <span key={d.name} className="px-1.5 py-0.5 rounded-md bg-secondary text-ui-2xs text-foreground/80">
+                  {d.label} · {d.tableCount}
+                </span>
+              ))}
+            </span>
+          </span>
         )}
       </button>
       {onRemove && (
@@ -293,11 +320,21 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
                           {approvedLoading ? (
                             <><Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Loading your sources <span className="opacity-70">· reading tables and certification from Unity Catalog</span></>
                           ) : matches.length > 0 ? (
-                            <><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Sources <span className="opacity-70">· pick one or more to explore their tables</span></>
+                            <><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Governed schemas <span className="opacity-70">· pick one or more to explore domains, subdomains, and tables</span></>
                           ) : (
                             <>Know where it is? <span className="opacity-70">· optional, add a catalog and schema to scan</span></>
                           )}
                         </p>
+                        <div className="flex flex-wrap items-center gap-3 mb-3 text-ui-xs">
+                          <ServicePopover serviceKey="discoverDomains" position="right">
+                            <button type="button" className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline">
+                              <HelpCircle className="w-3.5 h-3.5" /> What are Domains &amp; Subdomains?
+                            </button>
+                          </ServicePopover>
+                          <a href="https://docs.databricks.com/aws/en/uc-semantics/domains" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                            Databricks documentation <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {approvedLoading && [0, 1, 2, 3].map(i => (
                             <div key={i} aria-hidden className="min-h-[96px] rounded-xl border border-border bg-card px-3 py-2.5 space-y-2 animate-pulse">
@@ -423,7 +460,7 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
 
       <FadeIn delay={0.3} className="flex justify-end pt-2">
         <PrimaryButton size="lg" disabled={!value} onClick={onNext}>
-          {value === 'blueprint' ? 'Next: explore the model' : explorable ? 'Next: explore your tables' : 'Next: your plan'} <ArrowRight className="w-4 h-4" />
+          {value === 'blueprint' ? 'Next: explore the model' : explorable ? 'Next: explore domains & tables' : 'Next: your plan'} <ArrowRight className="w-4 h-4" />
         </PrimaryButton>
       </FadeIn>
     </div>

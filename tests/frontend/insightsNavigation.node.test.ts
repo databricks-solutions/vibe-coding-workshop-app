@@ -55,8 +55,8 @@ test('the header bar asks the open project first and only falls back to Ideate w
   assert.match(handoff, /cancelable: true/);
 });
 
-test('a locked idea goes back to where its data was chosen', () => {
-  assert.equal(reviewTarget('idea', '2026-10-19T16:00:00Z'), 'data');
+test('a locked idea opens the seven idea steps directly', () => {
+  assert.equal(reviewTarget('idea', '2026-10-19T16:00:00Z'), 'idea');
 });
 
 test('update build still opens the locked idea summary', () => {
@@ -78,4 +78,24 @@ test('short function words are stop words for the area match', () => {
   const block = src.slice(src.indexOf('const STOP = ['), src.indexOf('];', src.indexOf('const STOP = [')));
   const stop = new Set([...block.matchAll(/'([^']+)'/g)].map(m => m[1]));
   for (const w of ['if', 'so', 'then', 'but', 'as', 'while']) assert.ok(stop.has(w), `${w} should be a stop word`);
+});
+
+test('users can add questions beyond the recommended six and each new question is validated', () => {
+  const flow = readFileSync(new URL('../../src/components/journeykit/engine/useIdeaFlow.ts', import.meta.url), 'utf-8');
+  assert.match(flow, /RECOMMENDED_GENIE_QUESTIONS = 6/);
+  assert.match(flow, /MAX_GENIE_QUESTIONS = 10/);
+  assert.match(flow, /validateIdeaQuestion/);
+  assert.match(flow, /validatingQuestions/);
+  const editor = readFileSync(new URL('../../src/components/journeykit/ui/QuestionListEditor.tsx', import.meta.url), 'utf-8');
+  assert.match(editor, /Add another question/);
+  assert.match(editor, /Use clearer wording/);
+  assert.doesNotMatch(editor, /That is plenty to start with/);
+});
+
+test('related ideas compare as a metric matrix with optional full screen and show more columns', () => {
+  const comparison = readFileSync(new URL('../../src/components/journeykit/ui/SimilarIdeasComparison.tsx', import.meta.url), 'utf-8');
+  assert.match(comparison, /AI next-best action/);
+  assert.match(comparison, /Full screen/);
+  assert.match(comparison, /Show \$\{matches\.length - 1\} more related idea/);
+  assert.match(comparison, /ComparisonRowLabels/);
 });

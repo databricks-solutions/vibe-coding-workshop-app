@@ -47,6 +47,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.9.0',
+    date: '2026-11-08',
+    title: 'Idea Studio decision guidance, collaboration, and governed review',
+    items: [
+      {
+        title: 'Idea Studio update',
+        description: 'Idea Studio now connects decisions to action-ready questions, detects related ideas with AI-guided comparison, improves journey navigation and governed data discovery, and gives reviewers a complete evidence-first view of ownership, overlap, ROI, and next actions.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+    ],
+  },
+  {
     version: '2.8.5',
     date: '2026-10-25',
     title: 'Animated actor workflow playback and executive ROI framing in Idea Studio',

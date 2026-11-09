@@ -3,26 +3,61 @@ import { apiClient } from '../../../api/client';
 import { refreshReviews, type ReviewChange } from './useIdeas';
 import type { Idea } from './types';
 
-interface Reviewer { canReview: boolean; email: string | null; everyone: boolean }
+export type IdeaStudioVersion = 'v1' | 'v2';
+interface Reviewer {
+  canReview: boolean;
+  email: string | null;
+  everyone: boolean;
+  ideaStudioVersion: IdeaStudioVersion;
+}
 
-const NOBODY: Reviewer = { canReview: false, email: null, everyone: false };
+const NOBODY: Reviewer = { canReview: false, email: null, everyone: false, ideaStudioVersion: 'v1' };
+const VERSION_CHANGED_EVENT = 'idea-studio-version-changed';
 let reviewer: Promise<Reviewer> | null = null;
+
+function loadReviewer() {
+  reviewer ??= apiClient.ideaReviewCapability()
+    .then(r => ({
+      canReview: !!r.canReview,
+      email: r.email?.toLowerCase() ?? null,
+      everyone: r.reviewPolicy !== 'allowlist',
+      ideaStudioVersion: r.ideaStudioVersion === 'v2' ? 'v2' as const : 'v1' as const,
+    }))
+    .catch(() => { reviewer = null; return NOBODY; });
+  return reviewer;
+}
+
+/** Re-read capabilities after an admin changes the Idea Studio version. */
+export function invalidateIdeaCapabilities() {
+  reviewer = null;
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(VERSION_CHANGED_EVENT));
+}
 
 /** Who is signed in and whether they may approve. Reports "not a reviewer" until the server answers. */
 export function useReviewer(): Reviewer {
   const [me, setMe] = useState<Reviewer>(NOBODY);
   useEffect(() => {
-    reviewer ??= apiClient.ideaReviewCapability()
-      .then(r => ({ canReview: !!r.canReview, email: r.email?.toLowerCase() ?? null, everyone: r.reviewPolicy !== 'allowlist' }))
-      .catch(() => { reviewer = null; return NOBODY; });
     let alive = true;
-    void reviewer.then(v => alive && setMe(v));
-    return () => { alive = false; };
+    const refresh = (force = false) => {
+      if (force) reviewer = null;
+      void loadReviewer().then(v => alive && setMe(v));
+    };
+    const onVersionChanged = () => refresh();
+    const onFocus = () => refresh(true);
+    refresh();
+    window.addEventListener(VERSION_CHANGED_EVENT, onVersionChanged);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      alive = false;
+      window.removeEventListener(VERSION_CHANGED_EVENT, onVersionChanged);
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
   return me;
 }
 
 export const useCanReview = () => useReviewer().canReview;
+export const useIdeaStudioVersion = () => useReviewer().ideaStudioVersion;
 
 /** "jane.doe@corp.com" reads as "Jane Doe". */
 export function personName(email?: string | null) {

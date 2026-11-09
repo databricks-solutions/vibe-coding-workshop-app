@@ -46,6 +46,8 @@ const RETAIL: Idea = {
     industryAlternatives: [],
     valueHypothesis: 'More sales on fast movers because replenishment acts a day or two before the shelf goes empty, not after the complaint.',
     businessLine: 'revenue',
+    aliases: ['Stockout Prediction', 'On-Shelf Availability'],
+    primaryEntity: 'store / SKU / 48-hour window',
   },
   map: {
     branches: [
@@ -105,6 +107,8 @@ const RETAIL: Idea = {
       surfaces: ['Genie', 'Dashboard'],
       geniePlacement: 'genie_space',
       askExamples: ['Which items will run out at my stores in the next 48 hours?', 'Why is oat milk flagged at store 112?', 'How much did empty shelves cost the region last week?'],
+      decisionStyle: 'Live outlook · You decide',
+      cadence: 'Hourly · 48h ahead',
       recommended: true,
       recommendedWhy: 'Most of the value for the least build, and analysts keep placing the orders.',
     },
@@ -123,6 +127,8 @@ const RETAIL: Idea = {
       surfaces: ['App', 'Genie', 'Dashboard', 'Lakebase'],
       geniePlacement: 'in_app',
       askExamples: ['Which suggested orders are still waiting for me?', 'Why is the suggested order for store 87 so high?'],
+      decisionStyle: 'Recommends · You confirm',
+      cadence: 'Before each order',
     },
     {
       id: 'automation-auto-replenishment-agent',
@@ -139,6 +145,8 @@ const RETAIL: Idea = {
       surfaces: ['Agent', 'App', 'Genie', 'Dashboard', 'Lakebase'],
       geniePlacement: 'in_app',
       askExamples: ['Which emergency orders did the agent raise today?', 'Why did it skip store 87?'],
+      decisionStyle: 'Acts within limits',
+      cadence: 'Hourly · 48h ahead',
     },
   ],
   chosenShapeId: 'insight-stockout-risk-board',
@@ -153,6 +161,12 @@ const RETAIL: Idea = {
     'Why is this item flagged at this store?': 'ai',
     'How much did empty shelves cost each region last week?': 'ai',
     'Which stores have the most at-risk fast movers this week?': 'ai',
+  },
+  questionDetails: {
+    'Which items will run out at my stores in the next 48 hours?': { kind: 'look_ahead', drivesAction: 'Bring forward the next replenishment order', metrics: ['stockout risk', 'hours to empty'], dimensions: ['store', 'SKU', 'hour'] },
+    'Why is this item flagged at this store?': { kind: 'what_to_do', drivesAction: 'Confirm reorder quantity or check the count', metrics: ['on-hand variance', 'sales velocity'], dimensions: ['store', 'SKU'] },
+    'How much did empty shelves cost each region last week?': { kind: 'look_back', drivesAction: 'Prioritize high-loss regions for rollout', metrics: ['lost sales', 'stockout hours'], dimensions: ['region', 'week'] },
+    'Which stores have the most at-risk fast movers this week?': { kind: 'track_live', drivesAction: 'Focus analyst attention on the riskiest stores', metrics: ['at-risk item count'], dimensions: ['store', 'week'] },
   },
   impact: {
     driver: 'revenue_uplift',
@@ -266,6 +280,11 @@ Sales lost to empty shelves on the top 500 fast movers, from about 3% to under 1
     killCriterion: 'Fewer than half of the flagged items would really have run out.',
     sponsor: 'VP of Supply Chain',
     unlocksNext: ['Demand forecasting', 'Promotion planning'],
+    keyResults: [
+      { kr: 'Early-warning precision', target: '≥80% at a 48-hour horizon' },
+      { kr: 'Lost sales on flagged items', target: '-30% within 8 weeks' },
+      { kr: 'False-alert rate', target: '<20% in the pilot' },
+    ],
   },
   assumptions: [
     ...accepted('retail', 'spark', ['The top 500 items drive most of the lost sales.']),
@@ -308,6 +327,8 @@ const CPG: Idea = {
     industryAlternatives: [],
     valueHypothesis: 'Less trade spend lost on promotions that do not pay back, because the losers are dropped or redesigned before they run.',
     businessLine: 'cost',
+    aliases: ['Promotion Effectiveness', 'Trade Spend Optimization'],
+    primaryEntity: 'retailer / category / promotion',
   },
   map: {
     branches: [
@@ -367,6 +388,8 @@ const CPG: Idea = {
       surfaces: ['App', 'Genie', 'Dashboard', 'Lakebase'],
       geniePlacement: 'in_app',
       askExamples: ['Which of my promotions last quarter lost money?', 'What depth paid back best for 12-packs at this retailer?', 'Why does this draft score below break-even?'],
+      decisionStyle: 'Recommends · You confirm',
+      cadence: 'Before each proposal',
       recommended: true,
       recommendedWhy: 'Catches losing promotions before they are agreed, while the account manager still owns the deal.',
     },
@@ -385,6 +408,8 @@ const CPG: Idea = {
       surfaces: ['Agent', 'App', 'Genie', 'Dashboard'],
       geniePlacement: 'in_app',
       askExamples: ['Which promotions did the agent block this week?', 'Why was the June feature at this retailer blocked?'],
+      decisionStyle: 'Acts within limits',
+      cadence: 'At approval time',
     },
     {
       id: 'insight-trade-spend-roi-board',
@@ -401,6 +426,8 @@ const CPG: Idea = {
       surfaces: ['Genie', 'Dashboard'],
       geniePlacement: 'genie_space',
       askExamples: ['Which mechanics paid back best last year?', 'How did trade ROI trend by retailer this quarter?'],
+      decisionStyle: 'Live outlook · You decide',
+      cadence: 'Weekly review',
     },
   ],
   chosenShapeId: 'copilot-promo-planner-copilot',
@@ -415,6 +442,12 @@ const CPG: Idea = {
     'Why does this draft promotion score below our $1.10 payback target?': 'ai',
     'Which promotions lost money last quarter and what mechanics did they use?': 'ai',
     'How did incremental gross profit per trade dollar trend by retailer this year?': 'ai',
+  },
+  questionDetails: {
+    'Which past promotions in this category had the highest ROI at this retailer?': { kind: 'look_back', drivesAction: 'Reuse the mechanics that paid back', metrics: ['promotion ROI'], dimensions: ['retailer', 'category', 'mechanic'] },
+    'Why does this draft promotion score below our $1.10 payback target?': { kind: 'what_to_do', drivesAction: 'Change discount depth or promotion mechanic', metrics: ['expected payback', 'incremental margin'], dimensions: ['retailer', 'promotion'] },
+    'Which promotions lost money last quarter and what mechanics did they use?': { kind: 'track_live', drivesAction: 'Stop repeating losing mechanics', metrics: ['net promotion margin'], dimensions: ['quarter', 'mechanic'] },
+    'How did incremental gross profit per trade dollar trend by retailer this year?': { kind: 'look_ahead', drivesAction: 'Prioritize retailer negotiations with upside', metrics: ['incremental gross profit per trade dollar'], dimensions: ['retailer', 'month'] },
   },
   impact: {
     driver: 'cost_avoided',
@@ -527,6 +560,11 @@ Incremental gross profit per trade dollar, from about $0.80 to $1.10. Directiona
     killCriterion: 'Finance cannot confirm the payback scores on last year\'s 50 biggest events.',
     sponsor: 'VP of Revenue Growth Management',
     unlocksNext: ['Promotion demand forecasting', 'Joint business planning'],
+    keyResults: [
+      { kr: 'Draft score calibration', target: '≥80% agreement with Finance' },
+      { kr: 'Losing promotions', target: '-15% within one planning cycle' },
+      { kr: 'Payback', target: '≥$1.10 gross profit per trade dollar' },
+    ],
   },
   assumptions: [
     ...accepted('cpg', 'spark', ['Most trade spend goes through a few key retailers.']),
@@ -569,6 +607,8 @@ const AIRLINES: Idea = {
     industryAlternatives: ['Airports'],
     valueHypothesis: 'Fewer delay minutes at the hub because gates and ramp crews are moved before a late turn starts, not after.',
     businessLine: 'cost',
+    aliases: ['Turn Recovery', 'Gate and Crew Replanning'],
+    primaryEntity: 'flight turn / gate / 60-min window',
   },
   map: {
     branches: [
@@ -628,6 +668,8 @@ const AIRLINES: Idea = {
       surfaces: ['App', 'Genie', 'Dashboard'],
       geniePlacement: 'in_app',
       askExamples: ['Which turns are at risk in the next hour?', 'Why is the 14:20 to Denver at risk?'],
+      decisionStyle: 'Recommends · You confirm',
+      cadence: 'Real-time · 60m ahead',
     },
     {
       id: 'automation-turn-recovery-agent',
@@ -644,6 +686,8 @@ const AIRLINES: Idea = {
       surfaces: ['Agent', 'App', 'Genie', 'Dashboard', 'Lakebase'],
       geniePlacement: 'in_app',
       askExamples: ['Which gate swaps did the agent make this morning?', 'Why was crew B moved to gate C14?', 'How many late departures did we avoid this week?'],
+      decisionStyle: 'Acts within limits',
+      cadence: 'Real-time · 60m ahead',
       recommended: true,
       recommendedWhy: 'An arrival bank moves too fast for people to approve every swap; limits and escalation keep it safe.',
     },
@@ -662,6 +706,8 @@ const AIRLINES: Idea = {
       surfaces: ['Genie', 'Dashboard'],
       geniePlacement: 'genie_space',
       askExamples: ['Which turns ran late most often this month?', 'What is the average turn time by aircraft type?'],
+      decisionStyle: 'Live outlook · You decide',
+      cadence: 'Every 15 minutes',
     },
   ],
   chosenShapeId: 'automation-turn-recovery-agent',
@@ -676,6 +722,12 @@ const AIRLINES: Idea = {
     'Why was this incoming turn flagged at risk of a late departure?': 'ai',
     'How many turn-caused late departures did we avoid at the hub this week?': 'ai',
     'Which gates or ground handlers had the most turn delays this month?': 'ai',
+  },
+  questionDetails: {
+    'Which gate and crew swaps did the agent make for this arrival bank?': { kind: 'track_live', drivesAction: 'Review exceptions before the bank begins', metrics: ['swap count', 'conflict count'], dimensions: ['arrival bank', 'gate'] },
+    'Why was this incoming turn flagged at risk of a late departure?': { kind: 'look_ahead', drivesAction: 'Approve a gate or ramp-crew swap', metrics: ['turn risk', 'predicted delay minutes'], dimensions: ['flight turn', 'gate', 'time window'] },
+    'How many turn-caused late departures did we avoid at the hub this week?': { kind: 'look_back', drivesAction: 'Expand the guardrails proven in the pilot', metrics: ['avoided late departures'], dimensions: ['hub', 'week'] },
+    'Which gates or ground handlers had the most turn delays this month?': { kind: 'what_to_do', drivesAction: 'Adjust staffing or handler coverage', metrics: ['turn delay minutes'], dimensions: ['gate', 'ground handler', 'month'] },
   },
   impact: {
     driver: 'cost_avoided',
@@ -789,6 +841,11 @@ Departures late because of the turn, from about 2,000 a year at the hub to under
     killCriterion: 'The duty manager overrides more than one in five swaps.',
     sponsor: 'SVP of Airport Operations',
     unlocksNext: ['Gate and stand planning', 'Missed connection prediction'],
+    keyResults: [
+      { kr: 'Turn-risk precision', target: '≥80% at a 60-minute horizon' },
+      { kr: 'Turn-caused late departures', target: '-12% within 10 weeks' },
+      { kr: 'Unsafe swaps', target: 'Zero guardrail violations' },
+    ],
   },
   assumptions: [
     ...accepted('airlines', 'spark', ['Most turn delays come from gate or crew conflicts, not the aircraft.']),

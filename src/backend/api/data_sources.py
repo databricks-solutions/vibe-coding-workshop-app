@@ -1121,6 +1121,40 @@ async def source_digest(sources: str, request: Request, certified: bool = False)
     return _gzip_json(request, await load_source_digest(sources, certified_only=certified), max_age=600)
 
 
+@router.get("/data-sources/taxonomy", summary="Lazy domain and subdomain summary for one Unity Catalog schema")
+async def source_taxonomy(source: str):
+    """Domain-led summary loaded only after a source is selected.
+
+    The provenance is explicit: gallery-model domains, governed table tags, or
+    join-inferred business areas. We never claim inferred areas are Discover
+    Domains.
+    """
+    cat, sch = split_source(source)
+    digest = await load_source_digest(f"{cat}.{sch}", certified_only=False)
+    methods = set((digest.get("trust") or {}).get("areasBy") or [])
+    if digest.get("models"):
+        provenance = "model"
+    elif "tags" in methods:
+        provenance = "tags"
+    else:
+        provenance = "inferred"
+    domains = [{
+        "name": a.get("name", ""),
+        "label": a.get("label", ""),
+        "tableCount": len(a.get("tableIds") or []),
+        "subdomains": list(a.get("subdomains") or []),
+        "workspaceUrl": a.get("schemaUrl") or "",
+    } for a in digest.get("areas") or []]
+    return {
+        "source": source,
+        "provenance": provenance,
+        "domains": domains,
+        "domainCount": len(domains),
+        "subdomainCount": sum(len(d["subdomains"]) for d in domains),
+        "docsUrl": "https://docs.databricks.com/aws/en/uc-semantics/domains",
+    }
+
+
 @router.get("/data-sources/cache-stats", summary="Hit, miss and size counters for the Insights caches")
 async def cache_stats():
     return insights_cache.stats()

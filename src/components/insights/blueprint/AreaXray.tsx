@@ -32,12 +32,17 @@ export function AreaXray({ digest, area: name, inFocus, onToggleFocus, onSelect,
   }, [digest, name]);
 
   if (!area) return null;
+  const groupingLabel = digest.models?.length
+    ? 'Model domain'
+    : digest.trust.areasBy?.includes('tags')
+      ? 'Tagged business domain'
+      : 'Suggested business area';
 
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden">
       <div className="flex items-start justify-between gap-3 p-5 pb-3">
         <div className="min-w-0">
-          <p className="text-ui-xs font-medium uppercase tracking-wider text-muted-foreground">{area.division || 'Business area'}</p>
+          <p className="text-ui-xs font-medium uppercase tracking-wider text-muted-foreground">{area.division || groupingLabel}</p>
           <h3 className="text-ui-xl font-semibold text-foreground">{area.label}</h3>
         </div>
         <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary" aria-label="Close">
@@ -84,8 +89,11 @@ export function AreaXray({ digest, area: name, inFocus, onToggleFocus, onSelect,
         </div>
 
         {area.subdomains.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {area.subdomains.map(s => <span key={s} className="px-2 py-0.5 rounded-full border border-border text-ui-xs text-foreground/80">{s}</span>)}
+          <div>
+            <p className="text-ui-xs font-semibold text-foreground/90 mb-1.5">Subdomains</p>
+            <div className="flex flex-wrap gap-1.5">
+              {area.subdomains.map(s => <span key={s} className="px-2 py-0.5 rounded-full border border-border text-ui-xs text-foreground/80">{s}</span>)}
+            </div>
           </div>
         )}
 
@@ -150,6 +158,9 @@ export function AreaXray({ digest, area: name, inFocus, onToggleFocus, onSelect,
             {l.label} <ArrowUpRight className="w-3 h-3" />
           </a>
         ))}
+        <a href="https://docs.databricks.com/aws/en/uc-semantics/domains" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary">
+          Domains &amp; Subdomains docs <ArrowUpRight className="w-3 h-3" />
+        </a>
       </div>
     </div>
   );

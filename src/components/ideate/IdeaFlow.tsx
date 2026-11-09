@@ -37,6 +37,11 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
               <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">{flow.readOnly ? 'Ideas' : 'My ideas'}</span>
             </Link>
             <Lightbulb className="w-4 h-4 text-primary shrink-0" />
+            {flow.ideaStudioVersion === 'v2' && (
+              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                Decision-Guided · v2
+              </span>
+            )}
             <p className="flex-1 text-ui-base font-semibold text-foreground truncate">{idea.title}</p>
             <div className="flex items-center gap-2 shrink-0">
               {!flow.readOnly && <SaveStatus />}

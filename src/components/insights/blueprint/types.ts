@@ -127,6 +127,8 @@ export interface BlueprintDigest {
     siloedTables: number;
     /** Every source is on the admin's approved list. */
     certified?: boolean;
+    /** How domain groupings were obtained for governed sources. */
+    areasBy?: Array<'model' | 'tags' | 'joins' | string>;
   };
   /** catalog.schema ids, set for approved data sources. */
   sources?: string[];

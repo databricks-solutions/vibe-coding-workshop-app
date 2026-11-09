@@ -173,6 +173,7 @@ export const PARAM_KEY_TO_CATEGORY: Record<string, ParamLocation> = {
   // Participant Experience
   company_brand_url: { category: CATEGORY_IDS.participant },
   coding_assistants_config: { category: CATEGORY_IDS.participant },
+  idea_studio_version: { category: CATEGORY_IDS.participant },
 
   // Agent Tools - SQL MCP
   agent_tool_sql_mcp_enabled: { category: CATEGORY_IDS.agentTools, subgroup: 'SQL MCP' },

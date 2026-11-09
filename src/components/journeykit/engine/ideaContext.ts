@@ -97,8 +97,15 @@ export function buildContext(idea: Idea, includeDraftsFor?: StepKey): Record<str
     ctx.chosenShape = shape;
     ctx.rejectedShapes = (idea.shapes ?? []).filter(s => s.id !== shape.id).map(s => s.title);
   }
-  if (ok('questions') && idea.genieQuestions?.length) ctx.genieQuestions = idea.genieQuestions;
-  else if (idea.genieQuestions?.length) ctx.providedQuestions = idea.genieQuestions;
+  if (ok('questions') && idea.genieQuestions?.length) {
+    ctx.genieQuestions = idea.genieQuestions;
+    if (idea.questionDetails) {
+      const details = Object.fromEntries(
+        idea.genieQuestions.filter(q => idea.questionDetails?.[q]).map(q => [q, idea.questionDetails![q]]),
+      );
+      if (Object.keys(details).length) ctx.questionDetails = details;
+    }
+  } else if (idea.genieQuestions?.length) ctx.providedQuestions = idea.genieQuestions;
   const figures = ok('impact') ? caseFigures(idea) : null;
   if (figures) ctx.businessImpact = { scope: idea.impact!.scope, ...figuresAsContext(figures) };
   if (ok('brief') && idea.brief) ctx.brief = idea.brief;
@@ -116,14 +123,21 @@ export function matchingContext(idea: Idea | null | undefined): string {
   if (!idea) return '';
   const uc = idea.useCaseContext;
   const shape = chosenShape(idea);
+  const activeDetails = (idea.genieQuestions ?? []).flatMap(q => (idea.questionDetails?.[q] ? [idea.questionDetails[q]] : []));
+  const metrics = [...new Set(activeDetails.flatMap(d => d.metrics ?? []))];
+  const dimensions = [...new Set(activeDetails.flatMap(d => d.dimensions ?? []))];
   return [
     idea.title,
+    idea.spark?.aliases?.length && `Also known as: ${idea.spark.aliases.join(', ')}`,
     idea.spark?.industry && `Industry: ${idea.spark.industry}`,
+    idea.spark?.primaryEntity && `Decision grain: ${idea.spark.primaryEntity}`,
     idea.spark?.statement ?? idea.seed,
     idea.sourceUseCase && `Use case: ${idea.sourceUseCase.label}`,
     uc?.summary,
     uc?.personas?.length && `Personas: ${uc.personas.map(p => `${p.name} (${p.role})`).join(', ')}`,
     uc?.entities?.length && `Data it uses: ${uc.entities.join(', ')}`,
+    metrics.length && `Required metrics: ${metrics.join(', ')}`,
+    dimensions.length && `Required dimensions: ${dimensions.join(', ')}`,
     ...answeredPairs(idea).filter(a => a.answer !== NOT_SURE).map(a => `${a.question} ${a.answer}`),
     shape && `Chosen approach: ${shape.title}. ${shape.value}`,
     idea.brief?.slice(0, MATCHING_BRIEF_CHARS),

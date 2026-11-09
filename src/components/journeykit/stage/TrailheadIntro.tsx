@@ -6,6 +6,7 @@ import { ideaMinutes, modeOf } from '../modes';
 import { FadeIn, GhostButton, Headline, PrimaryButton } from '../ui/primitives';
 import { ClimbRoute } from './ClimbMap';
 import { ideaProgressSteps, ideaTrail } from './ideaProgress';
+import type { IdeaStudioVersion } from '../engine/approval';
 
 const CLIMB_POINTS = 300;
 
@@ -14,7 +15,7 @@ const CLIMB_POINTS = 300;
  * is and where the top is before they take the first step. The first step keeps working in the
  * background while they read.
  */
-export function TrailheadIntro({ idea, onStart }: { idea: Idea; onStart: () => void }) {
+export function TrailheadIntro({ idea, onStart, ideaStudioVersion = 'v1' }: { idea: Idea; onStart: () => void; ideaStudioVersion?: IdeaStudioVersion }) {
   const config = modeOf(idea);
   const steps = ideaProgressSteps(idea, null).map((s, i) => ({ ...s, state: i === 0 ? 'current' as const : s.state, disabled: i > 0 }));
   const stops = stepsOf(idea).length;
@@ -33,6 +34,19 @@ export function TrailheadIntro({ idea, onStart }: { idea: Idea; onStart: () => v
       <FadeIn delay={0.05}>
         <ClimbRoute steps={steps} animateIn {...ideaTrail(idea)} />
       </FadeIn>
+
+      {ideaStudioVersion === 'v2' && (
+        <FadeIn delay={0.18}>
+          <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] px-4 py-3">
+            <p className="text-ui-2xs uppercase tracking-wider font-semibold text-primary">Decision-Guided · v2</p>
+            <div className="grid gap-2 sm:grid-cols-3 mt-2 text-ui-sm text-muted-foreground">
+              <span><strong className="text-foreground">1.</strong> Decision grain & lead time</span>
+              <span><strong className="text-foreground">2.</strong> Action-linked questions</span>
+              <span><strong className="text-foreground">3.</strong> Measurable Key Results</span>
+            </div>
+          </div>
+        </FadeIn>
+      )}
 
       <FadeIn delay={0.25} className="flex flex-wrap items-center gap-3">
         <PrimaryButton size="lg" onClick={onStart} autoFocus>

@@ -12,10 +12,11 @@ interface IdeaStageProps {
   tools?: ReactNode;
   onBackFromFirst?: () => void;
   onChangeUseCase?: () => void;
+  onContinueAfterBrief?: () => void;
 }
 
 /** Insights' idea phase: the exact Ideate steps, inside the Insights progress. Keyed by idea id by the caller. */
-export function IdeaStage({ ideaId, industryId, tools, onBackFromFirst, onChangeUseCase }: IdeaStageProps) {
+export function IdeaStage({ ideaId, industryId, tools, onBackFromFirst, onChangeUseCase, onContinueAfterBrief }: IdeaStageProps) {
   const flow = useIdeaFlow(ideaId);
   if (!flow.idea) return null;
   return (
@@ -28,6 +29,7 @@ export function IdeaStage({ ideaId, industryId, tools, onBackFromFirst, onChange
         unavailable={<ClassicFallback flow={flow} industryId={industryId} />}
         onBackFromFirst={onBackFromFirst}
         onChangeUseCase={flow.idea.sourceUseCase ? onChangeUseCase : undefined}
+        onContinueAfterBrief={onContinueAfterBrief}
       />
     </JourneyScreen>
   );

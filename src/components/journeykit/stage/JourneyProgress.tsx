@@ -32,6 +32,8 @@ interface JourneyProgressProps {
   phases?: ProgressPhase[];
   steps?: ProgressStep[];
   onSelectStep?: (key: string) => void;
+  /** Opens a completed/current high-level phase in phased journeys. */
+  onSelectPhase?: (key: string) => void;
   /** Muted note after the last phase, e.g. "then 4 build chapters". */
   trailing?: string;
   /** `trail` draws the steps as a climb (see SummitTrail). */
@@ -142,7 +144,7 @@ function mobileSummary(phases: ProgressPhase[]) {
 }
 
 /** The one progress bar for every guided flow: same markers, colours and motion everywhere. */
-export function JourneyProgress({ phases, steps, onSelectStep, trailing, variant = 'track', trailSize = 'md', briefMarker, beyond }: JourneyProgressProps) {
+export function JourneyProgress({ phases, steps, onSelectStep, onSelectPhase, trailing, variant = 'track', trailSize = 'md', briefMarker, beyond }: JourneyProgressProps) {
   if (variant === 'trail') {
     const flat = steps ?? phases?.flatMap(p => p.steps ?? []) ?? [];
     return (
@@ -169,14 +171,29 @@ export function JourneyProgress({ phases, steps, onSelectStep, trailing, variant
             <li key={p.key} className={`flex items-center gap-2 ${expanded ? 'flex-1 min-w-0' : anyExpanded || last ? 'shrink-0' : 'flex-1 min-w-0'}`}>
               {expanded ? (
                 <div className="flex items-center gap-2.5 flex-1 min-w-0 rounded-full border border-primary/15 bg-primary/[0.05] pl-3 pr-1.5 py-1">
-                  <span className="text-ui-xs font-semibold uppercase tracking-wider text-primary whitespace-nowrap">{p.label}</span>
+                  <button
+                    type="button"
+                    disabled={!onSelectPhase}
+                    onClick={() => onSelectPhase?.(p.key)}
+                    className="text-ui-xs font-semibold uppercase tracking-wider text-primary whitespace-nowrap disabled:cursor-default"
+                    title={`Open ${p.label}`}
+                  >
+                    {p.label}
+                  </button>
                   <CompactTrack steps={p.steps!} onSelect={onSelectStep} />
                 </div>
               ) : (
-                <span className="flex items-center gap-2 shrink-0" aria-current={p.state === 'current' ? 'step' : undefined}>
+                <button
+                  type="button"
+                  disabled={!onSelectPhase || p.state === 'upcoming'}
+                  onClick={() => onSelectPhase?.(p.key)}
+                  title={p.state === 'upcoming' ? `${p.label} is not available yet` : `Open ${p.label}`}
+                  className="flex items-center gap-2 shrink-0 rounded-full px-1 py-0.5 transition-colors enabled:hover:bg-secondary/60 disabled:cursor-default"
+                  aria-current={p.state === 'current' ? 'step' : undefined}
+                >
                   <StepDot icon={p.icon} state={p.state} size="sm" />
                   <span className={`text-ui-sm font-medium whitespace-nowrap ${p.state === 'current' ? 'text-foreground' : 'text-muted-foreground'}`}>{p.label}</span>
-                </span>
+                </button>
               )}
               {!last && <StepConnector done={p.state === 'done'} className={anyExpanded ? 'flex-none w-6 lg:w-10' : ''} />}
             </li>

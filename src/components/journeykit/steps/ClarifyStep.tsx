@@ -54,7 +54,14 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
           recommended={q.recommended}
           multi={q.multi}
           maxPicks={q.maxPicks}
-          eyebrow={q.isFollowup && <p className="text-ui-2xs uppercase tracking-wider font-semibold text-amber-400 mb-1">One quick follow-up</p>}
+          eyebrow={q.isFollowup
+            ? <p className="text-ui-2xs uppercase tracking-wider font-semibold text-amber-400 mb-1">One quick follow-up</p>
+            : flow.ideaStudioVersion === 'v2' && q.dimension === 'trigger'
+              ? <p className="text-ui-2xs uppercase tracking-wider font-semibold text-primary mb-1">Decision trigger & lead time</p>
+              : undefined}
+          hint={flow.ideaStudioVersion === 'v2' && q.dimension === 'business'
+            ? 'Align this KPI with your executive sponsor. A shared priority makes the idea easier to approve.'
+            : undefined}
           confirmLabel={editing !== null || lastOpen ? 'Done' : 'Next'}
           onPick={pick}
           onNotSure={() => pick(NOT_SURE)}
@@ -73,6 +80,7 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
             <WorkflowPlayback
               workflow={idea.workflow}
               readOnly={flow.readOnly}
+              decisionGuided={flow.ideaStudioVersion === 'v2'}
               onChange={flow.updateWorkflow}
             />
           )}

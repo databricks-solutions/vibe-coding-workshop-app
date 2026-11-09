@@ -563,6 +563,57 @@ export interface IdeaScoreResponse {
 export type IdeaReviewStatus = 'draft' | 'pending' | 'changes_requested' | 'rejected' | 'approved';
 export type IdeaReviewDecision = 'approve' | 'changes_requested' | 'reject';
 
+export interface SimilarIdeaMatch {
+  id: string;
+  title: string;
+  industry: string;
+  status: string;
+  similarity: number;
+  proximity: 'strong' | 'possible';
+  sharedSignals: string[];
+  owner: { email: string; displayName: string; avatar?: string; isCurrentUser?: boolean };
+  valuePerYear?: number | null;
+  updatedAt?: string | null;
+  matcherVersion: string;
+}
+
+export interface SimilarIdeasResponse {
+  matches: SimilarIdeaMatch[];
+  matcherVersion: string;
+  fingerprint: string;
+}
+
+export interface QuestionValidationResult {
+  valid: boolean;
+  duplicate: boolean;
+  kind: 'look_back' | 'track_live' | 'look_ahead' | 'what_to_do';
+  drivesAction: string;
+  metrics: string[];
+  dimensions: string[];
+  clearerQuestion: string;
+  message: string;
+  aiAssisted: boolean;
+}
+
+export type IdeaNextBestAction = 'join_existing' | 'contact_owner' | 'differentiate_scope' | 'continue_separately';
+
+export interface IdeaComparisonResult {
+  recommendedMatchId: string;
+  nextBestAction: IdeaNextBestAction;
+  recommendation: string;
+  rationale: string;
+  missingEvidence: string[];
+  comparisons: Array<{
+    id: string;
+    overlap: string[];
+    differences: string[];
+    summary: string;
+  }>;
+  aiAssisted: boolean;
+  fallback: boolean;
+  cached?: boolean;
+}
+
 export interface IdeaReviewMetadataResponse {
   status: IdeaReviewStatus;
   revision: number;
@@ -596,6 +647,16 @@ export interface IdeaReviewItem {
     summary?: unknown;
     valuePerYear?: number | null;
   };
+  overlappingIdeas?: SimilarIdeaMatch[];
+  overlapDecision?: {
+    action: 'continue_independently';
+    reasonCode: string;
+    reasonText?: string;
+    similarIdeaIds: string[];
+    matcherVersion: string;
+    fingerprint: string;
+    acknowledgedAt: string;
+  } | null;
 }
 
 export interface IdeaReviewDetail extends IdeaReviewItem {
@@ -2181,6 +2242,23 @@ class ApiClient {
     return { data: body.data as T, model: body.model ?? '', fallback: !!body.fallback };
   }
 
+  async validateIdeaQuestion(
+    question: string,
+    existingQuestions: string[],
+    idea: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<QuestionValidationResult> {
+    const response = await fetch(`${this.baseUrl}/ideate/questions/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, existing_questions: existingQuestions, idea }),
+      signal,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    return body as QuestionValidationResult;
+  }
+
   /** Submit a committed idea to the use case catalog. It lands inactive until an admin turns it on. */
   async ideateSubmit(params: {
     idea_id?: string;
@@ -2224,6 +2302,33 @@ class ApiClient {
     return body;
   }
 
+  async findSimilarIdeas(params: {
+    idea_id?: string;
+    idea?: Record<string, unknown>;
+    text?: string;
+    title?: string;
+    industry?: string;
+  }): Promise<SimilarIdeasResponse> {
+    return this.fetch('/ideate/ideas/similar', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async compareSimilarIdeas(params: {
+    idea_id?: string;
+    idea?: Record<string, unknown>;
+    text?: string;
+    title?: string;
+    industry?: string;
+    match_ids: string[];
+  }): Promise<IdeaComparisonResult> {
+    return this.fetch('/ideate/ideas/compare', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
   async ideaDelete(id: string): Promise<void> {
     await fetch(`${this.baseUrl}/ideate/ideas/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
@@ -2245,7 +2350,12 @@ class ApiClient {
   }
 
   /** Whether the signed-in user may review ideas. */
-  async ideaReviewCapability(): Promise<{ canReview: boolean; email?: string | null; reviewPolicy?: 'authenticated' | 'allowlist' }> {
+  async ideaReviewCapability(): Promise<{
+    canReview: boolean;
+    email?: string | null;
+    reviewPolicy?: 'authenticated' | 'allowlist';
+    ideaStudioVersion?: 'v1' | 'v2';
+  }> {
     return this.fetch('/ideate/reviews/capability');
   }
 

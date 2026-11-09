@@ -31,12 +31,14 @@ import {
   ChevronRight,
   Search,
   X,
+  Lightbulb,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { CodingAssistantsConfigEditor } from './CodingAssistantsConfigEditor';
 import { ApprovedDataSourcesEditor } from './ApprovedDataSourcesEditor';
 import { invalidDataSourceRows, parseDataSources } from './dataSourcesConfig';
 import { sourcesApi } from '../insights/sources/sourcesApi';
+import { invalidateIdeaCapabilities } from '../journeykit/engine/approval';
 import { parseCodingAssistantsConfig } from '../../constants/codingAssistants';
 import {
   CATEGORY_ORDER,
@@ -72,7 +74,27 @@ const paramIcons: Record<string, React.ElementType> = {
   endpoint: Bot,
   assistant_config: ListChecks,
   data_sources: Database,
+  idea_studio_version: Lightbulb,
 };
+
+const IDEA_STUDIO_VERSION_OPTIONS: Array<{
+  value: 'v1' | 'v2';
+  title: string;
+  badge?: string;
+  description: string;
+}> = [
+  {
+    value: 'v1',
+    title: 'Version 1 · Classic',
+    badge: 'Default',
+    description: 'Fast 7-step ideation focused on problem clarity, approach, Genie questions, and business ROI.',
+  },
+  {
+    value: 'v2',
+    title: 'Version 2 · Decision-Guided',
+    description: 'Adds subtle decision-to-action guidance: operational lead-time triggers, action-linked Genie questions, and measurable Key Results.',
+  },
+];
 
 /** Why a custom-editor value cannot be saved yet, or null when it can. */
 function saveBlockedReason(paramType: string, value: string | undefined): string | null {
@@ -192,6 +214,7 @@ export function WorkshopParametersConfig({ onToast }: WorkshopParametersConfigPr
       ));
       setHasChanges(prev => ({ ...prev, [paramKey]: false }));
       if (paramKey === 'approved_data_sources') sourcesApi.reset();
+      if (paramKey === 'idea_studio_version') invalidateIdeaCapabilities();
       onToast(data.message || 'Parameter saved successfully', 'success');
     } catch (error) {
       console.error('Error saving parameter:', error);
@@ -417,18 +440,51 @@ export function WorkshopParametersConfig({ onToast }: WorkshopParametersConfigPr
               </p>
             )}
 
-            {param.param_type === 'assistant_config' || param.param_type === 'data_sources' ? (
+            {param.param_type === 'assistant_config' || param.param_type === 'data_sources' || param.param_type === 'idea_studio_version' || param.param_key === 'idea_studio_version' ? (
               <div className="space-y-2">
                 {param.param_type === 'assistant_config' ? (
                   <CodingAssistantsConfigEditor
                     value={editedValues[param.param_key] || ''}
                     onChange={(next) => handleValueChange(param.param_key, next)}
                   />
-                ) : (
+                ) : param.param_type === 'data_sources' ? (
                   <ApprovedDataSourcesEditor
                     value={editedValues[param.param_key] || ''}
                     onChange={(next) => handleValueChange(param.param_key, next)}
                   />
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Idea Studio version">
+                    {IDEA_STUDIO_VERSION_OPTIONS.map((opt) => {
+                      const currentVal = (editedValues[param.param_key] || 'v1').trim().toLowerCase() === 'v2' ? 'v2' : 'v1';
+                      const selected = currentVal === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => handleValueChange(param.param_key, opt.value)}
+                          className={`text-left rounded-lg border p-3 transition-all ${
+                            selected
+                              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                              : 'border-border bg-background/60 hover:border-primary/40 hover:bg-secondary/40'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-foreground">{opt.title}</span>
+                            {opt.badge && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary text-muted-foreground">
+                                {opt.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                            {opt.description}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
                 <div className="flex items-center gap-2">
                   {isChanged && (

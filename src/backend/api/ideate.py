@@ -84,6 +84,12 @@ class IdeateBriefRequest(BaseModel):
     current_brief: Optional[str] = Field(default=None, max_length=MAX_BRIEF_CHARS)
 
 
+class QuestionValidateRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+    existing_questions: List[str] = []
+    idea: Dict[str, Any] = {}
+
+
 def _guard(request: Request, idea: Dict[str, Any]) -> Optional[JSONResponse]:
     """A bounded idea, and a per-user rate limit on LLM calls (identified users only, so a shared fallback identity is never throttled)."""
     user = _get_session_user(request)
@@ -148,29 +154,68 @@ def _mode(idea: Dict[str, Any]) -> str:
     return "insights" if idea.get("mode") == "insights" else "ideate"
 
 
+def get_idea_studio_version() -> str:
+    """Active Idea Studio version ('v1' default or 'v2' when configured in Workshop Parameters)."""
+    try:
+        from src.backend.api.routes import get_workshop_parameters_sync
+        val = (get_workshop_parameters_sync().get("idea_studio_version") or "").strip().lower()
+        if val in ("v1", "v2"):
+            return val
+    except Exception:
+        pass
+    env_val = os.getenv("IDEA_STUDIO_VERSION", "v1").strip().lower()
+    return "v2" if env_val == "v2" else "v1"
+
+
+QUESTION_KINDS = {
+    "look_back": "look_back",
+    "diagnostic": "look_back",
+    "track_live": "track_live",
+    "monitoring": "track_live",
+    "look_ahead": "look_ahead",
+    "predictive": "look_ahead",
+    "what_to_do": "what_to_do",
+    "prescriptive": "what_to_do",
+}
+
+
 def _normalize_questions(data: Dict[str, Any], provided: Any) -> Optional[Dict[str, Any]]:
     """Provided questions first and verbatim, then new ones, deduped and capped."""
     out: List[str] = []
     seen: set = set()
+    key_to_text: Dict[str, str] = {}
 
-    def add(q: str, verbatim: bool) -> None:
+    def _q_key(s: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+
+    def add(q: str, verbatim: bool) -> Optional[str]:
         text = q.strip() if verbatim else re.sub(r"^(?:[-*•]|\d+[.)])\s*", "", re.sub(r"\s+", " ", q).strip())
         if not text:
-            return
+            return None
         if not verbatim and not text.endswith("?"):
             text = text.rstrip(".") + "?"
-        key = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
-        if key in seen or len(out) >= MAX_GENIE_QUESTIONS:
-            return
+        key = _q_key(text)
+        if not key or key in seen or len(out) >= MAX_GENIE_QUESTIONS:
+            return key_to_text.get(key)
         seen.add(key)
         out.append(text)
+        key_to_text[key] = text
+        return text
 
     for q in provided if isinstance(provided, list) else []:
         if isinstance(q, str):
             add(q, True)
+
+    inline_details: List[Dict[str, Any]] = []
     for q in data.get("questions") or []:
         if isinstance(q, str):
             add(q, False)
+        elif isinstance(q, dict):
+            q_str = str(q.get("question") or q.get("q") or "").strip()
+            if q_str:
+                add(q_str, False)
+                inline_details.append(q)
+
     if not out:
         return None
     main = list(out)
@@ -178,7 +223,50 @@ def _normalize_questions(data: Dict[str, Any], provided: Any) -> Optional[Dict[s
     for q in data.get("alternates") or []:
         if isinstance(q, str) and len(out) < MAX_GENIE_ALTERNATES:
             add(q, False)
-    return {"questions": main, "alternates": out}
+        elif isinstance(q, dict) and len(out) < MAX_GENIE_ALTERNATES:
+            q_str = str(q.get("question") or q.get("q") or "").strip()
+            if q_str:
+                add(q_str, False)
+
+    explicit_details = [
+        item for item in (data.get("question_details") or data.get("questionDetails") or [])
+        if isinstance(item, dict)
+    ]
+    raw_details = explicit_details or inline_details
+
+    details_map: Dict[str, Dict[str, Any]] = {}
+    for index, item in enumerate(raw_details):
+        raw_q = str(item.get("question") or item.get("q") or "").strip()
+        raw_key = _q_key(raw_q)
+        canonical = key_to_text.get(raw_key) if raw_key else None
+        if not canonical and raw_key:
+            fuzzy = [q for q in main if raw_key in _q_key(q) or _q_key(q) in raw_key]
+            canonical = fuzzy[0] if len(fuzzy) == 1 else None
+        if not canonical and len(raw_details) == len(main) and index < len(main):
+            canonical = main[index]
+        if not canonical or canonical not in main:
+            continue
+        raw_kind = str(item.get("kind") or item.get("type") or "").strip().lower()
+        kind = QUESTION_KINDS.get(raw_kind)
+        drives = str(item.get("drives_action") or item.get("drivesAction") or "").strip()[:120]
+        metrics = _as_str_list(item.get("metrics") or item.get("needs_metrics") or item.get("needsMetrics"), 3)
+        dimensions = _as_str_list(item.get("dimensions") or item.get("needs_dimensions") or item.get("needsDimensions"), 4)
+        detail_entry: Dict[str, Any] = {}
+        if kind:
+            detail_entry["kind"] = kind
+        if drives:
+            detail_entry["drivesAction"] = drives
+        if metrics:
+            detail_entry["metrics"] = metrics
+        if dimensions:
+            detail_entry["dimensions"] = dimensions
+        if detail_entry:
+            details_map[canonical] = detail_entry
+
+    res: Dict[str, Any] = {"questions": main, "alternates": out}
+    if details_map:
+        res["questionDetails"] = details_map
+    return res
 
 
 def _context_block(idea: Dict[str, Any], feedback: Optional[str], extra: str = "") -> str:
@@ -205,6 +293,99 @@ def _parse_json(text: str) -> Optional[Dict[str, Any]]:
         return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
         return None
+
+
+def _question_kind_fallback(question: str) -> str:
+    q = question.lower()
+    if re.search(r"\b(should|recommend|next best|what action|what should|how should|need to do|assign|prioriti[sz]e)\b", q):
+        return "what_to_do"
+    if re.search(r"\b(now|current|currently|still|live|real[ -]?time|today|right now|open)\b", q):
+        return "track_live"
+    if re.search(r"\b(next|likely|forecast|predict|risk|will|ahead|upcoming|in the next)\b", q):
+        return "look_ahead"
+    return "look_back"
+
+
+@router.post("/ideate/questions/validate", summary="Validate and enrich one user-authored Genie question")
+async def validate_ideate_question(body: QuestionValidateRequest, request: Request):
+    blocked = _guard(request, body.idea)
+    if blocked:
+        return blocked
+    question = re.sub(r"\s+", " ", body.question).strip()
+    key = re.sub(r"[^a-z0-9]+", " ", question.lower()).strip()
+    existing = {re.sub(r"[^a-z0-9]+", " ", q.lower()).strip() for q in body.existing_questions if isinstance(q, str)}
+    if key in existing:
+        return {
+            "valid": False,
+            "duplicate": True,
+            "kind": _question_kind_fallback(question),
+            "drivesAction": "",
+            "metrics": [],
+            "dimensions": [],
+            "clearerQuestion": "",
+            "message": "This question is already in your set.",
+            "aiAssisted": False,
+        }
+
+    fallback = {
+        "valid": len(question) >= 12,
+        "duplicate": False,
+        "kind": _question_kind_fallback(question),
+        "drivesAction": "",
+        "metrics": [],
+        "dimensions": [],
+        "clearerQuestion": "",
+        "message": "Question added. Add a decision, measure, or time window if you want it to be more testable.",
+        "aiAssisted": False,
+    }
+    system = """You validate one business question that will be tested in a Databricks Genie.
+Preserve the user's intent. Return ONLY JSON:
+{
+  "valid": true,
+  "kind": "look_back|track_live|look_ahead|what_to_do",
+  "drives_action": "under 14 words",
+  "metrics": ["up to 3 business measures"],
+  "dimensions": ["up to 4 grains or slices"],
+  "clearer_question": "optional clearer wording ending in ?; blank when original is already clear",
+  "message": "one concise validation note"
+}
+Classification rules: historical/diagnostic=look_back; current/live/real-time monitoring=track_live; future/risk/prediction=look_ahead; recommendation/action=what_to_do. Never invent exact metric values."""
+    prompt = json.dumps({
+        "question": question,
+        "existingQuestions": body.existing_questions[:10],
+        "idea": body.idea,
+    }, ensure_ascii=False, default=str)
+    try:
+        result = await call_databricks_serving_endpoint(
+            prompt=prompt[:MAX_CONTEXT_CHARS],
+            system_prompt=system,
+            max_tokens=700,
+            temperature=0.1,
+            feature="idea-studio",
+            action="validate",
+            detail="question",
+        )
+        parsed = _parse_json((result.get("response") or "").strip())
+        if not parsed:
+            raise ValueError("question validation was not JSON")
+        kind = QUESTION_KINDS.get(str(parsed.get("kind") or "").strip().lower()) or fallback["kind"]
+        clearer = re.sub(r"\s+", " ", str(parsed.get("clearer_question") or parsed.get("clearerQuestion") or "")).strip()[:500]
+        if clearer and not clearer.endswith("?"):
+            clearer = clearer.rstrip(".") + "?"
+        return {
+            "valid": bool(parsed.get("valid", True)),
+            "duplicate": False,
+            "kind": kind,
+            "drivesAction": str(parsed.get("drives_action") or parsed.get("drivesAction") or "").strip()[:120],
+            "metrics": _as_str_list(parsed.get("metrics"), 3),
+            "dimensions": _as_str_list(parsed.get("dimensions"), 4),
+            "clearerQuestion": clearer if clearer.lower() != question.lower() else "",
+            "message": str(parsed.get("message") or "").strip()[:220],
+            "aiAssisted": True,
+        }
+    except Exception as e:
+        logger.info(f"[Ideate] question validation fallback: {e}")
+        return fallback
 
 
 def _slug(text: str, used: set) -> str:
@@ -391,7 +572,12 @@ def _normalize_summary(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         for r in (data.get("risks") or [])[:3]
         if isinstance(r, dict) and r.get("risk")
     ]
-    return {
+    key_results = [
+        {"kr": text(kr.get("kr"))[:90], "target": text(kr.get("target"))[:80]}
+        for kr in (data.get("key_results") or data.get("keyResults") or [])[:3]
+        if isinstance(kr, dict) and text(kr.get("kr")) and text(kr.get("target"))
+    ]
+    out: Dict[str, Any] = {
         "subtitle": text(data.get("subtitle")),
         "problemToday": text(data.get("problem_today")),
         "whoItsFor": text(data.get("who_its_for")),
@@ -409,6 +595,9 @@ def _normalize_summary(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "sponsor": text(data.get("sponsor")),
         "unlocksNext": _as_str_list(data.get("unlocks_next"), 2),
     }
+    if key_results:
+        out["keyResults"] = key_results
+    return out
 
 
 def _catalog_industries() -> Dict[str, str]:
@@ -605,7 +794,9 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
             share = str(o.get("hard_share", "")).strip().lower()
             is_rec = bool(o.get("recommended")) and not recommended
             recommended = recommended or is_rec
-            options.append({
+            decision_style = str(o.get("decision_style") or o.get("decisionStyle") or "").strip()[:48]
+            cadence = str(o.get("cadence") or o.get("decision_cadence") or "").strip()[:40]
+            opt_entry: Dict[str, Any] = {
                 "id": _slug(kind + "-" + o.get("title", ""), used),
                 "kind": kind,
                 "title": str(o.get("title", "")).strip(),
@@ -620,7 +811,12 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
                 **_shape_build(kind, o),
                 "recommended": is_rec,
                 "recommendedWhy": str(o.get("recommended_why", "")).strip() if is_rec else "",
-            })
+            }
+            if decision_style:
+                opt_entry["decisionStyle"] = decision_style
+            if cadence:
+                opt_entry["cadence"] = cadence
+            options.append(opt_entry)
         return {"options": options, "assumptions": _as_str_list(data.get("assumptions"))} if options else None
     if step == "challenge":
         pushbacks = _as_str_list(data.get("pushbacks"), 3)
@@ -640,7 +836,9 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
         if not data.get("statement"):
             return None
         industry = str(data.get("industry", "")).strip()
-        return {
+        aliases = _as_str_list(data.get("aliases"), 3)
+        primary_entity = str(data.get("primary_entity") or data.get("primaryEntity") or "").strip()[:80]
+        spark_out: Dict[str, Any] = {
             "title": str(data.get("title", "")).strip(),
             "statement": str(data.get("statement", "")).strip(),
             "valueHypothesis": str(data.get("value_hypothesis", "")).strip(),
@@ -650,6 +848,11 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
             "catalogIndustry": str(data.get("catalog_industry") or "").strip() or None,
             "assumptions": _as_str_list(data.get("assumptions")),
         }
+        if aliases:
+            spark_out["aliases"] = aliases
+        if primary_entity:
+            spark_out["primaryEntity"] = primary_entity
+        return spark_out
     return data
 
 
@@ -661,7 +864,8 @@ async def ideate_step(body: IdeateStepRequest, request: Request):
     if blocked:
         return blocked
 
-    system_prompt = build_step_system_prompt(body.step, _mode(body.idea))
+    version = get_idea_studio_version()
+    system_prompt = build_step_system_prompt(body.step, _mode(body.idea), version=version)
     extra = f"CURRENT STEP: {body.idea.get('currentStep', '')}" if body.step == "challenge" else ""
     catalog: Dict[str, str] = {}
     if body.step == "spark":
@@ -709,8 +913,9 @@ async def ideate_brief(body: IdeateBriefRequest, request: Request):
     extra = ""
     if body.current_brief and body.feedback:
         extra = f"CURRENT BRIEF (revise it, keep what works):\n{body.current_brief[:MAX_CONTEXT_CHARS]}"
+    version = get_idea_studio_version()
     messages = [
-        {"role": "system", "content": brief_prompt_for(_mode(body.idea))},
+        {"role": "system", "content": brief_prompt_for(_mode(body.idea), version=version)},
         {"role": "user", "content": _context_block(body.idea, body.feedback, extra)},
     ]
     detail = "revise" if body.current_brief and body.feedback else "generate"

@@ -105,6 +105,24 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
                   <p className="text-ui-sm text-muted-foreground mt-2 break-words">{s.value}</p>
                   {isRec && s.recommendedWhy && <p className="text-ui-xs text-primary/90 mt-2 break-words">{s.recommendedWhy}</p>}
 
+                  {flow.ideaStudioVersion === 'v2' && (s.decisionStyle || s.cadence) && (
+                    <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
+                      <p className="text-ui-2xs uppercase tracking-wider font-semibold text-primary">How decisions happen</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {s.decisionStyle && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-ui-xs font-medium text-primary">
+                            <MessagesSquare className="w-3.5 h-3.5" /> {s.decisionStyle}
+                          </span>
+                        )}
+                        {s.cadence && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-ui-xs text-muted-foreground">
+                            <Clock className="w-3.5 h-3.5" /> {s.cadence}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-3 space-y-2">
                     <p className="text-ui-2xs uppercase tracking-wider font-semibold text-muted-foreground">What you'll build</p>
                     <SurfaceChips surfaces={build.visible} />

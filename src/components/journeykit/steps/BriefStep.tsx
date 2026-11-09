@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Copy, Download, FileText, Hammer, History, Loader2, Pencil, Search, Send, ShieldCheck, Shuffle, TriangleAlert } from 'lucide-react';
+import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Copy, Crosshair, Download, FileText, Hammer, History, Loader2, Pencil, Search, Send, ShieldCheck, Shuffle, Target, TriangleAlert } from 'lucide-react';
 import { SubmitDialog } from '../ui/SubmitDialog';
 import { ReviewDialog } from '../ui/ReviewDialog';
 import { ApprovalTracker } from '../ui/ApprovalTracker';
@@ -55,6 +55,38 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   const shape = chosenShape(idea);
   const personas = placedLeaf(idea)?.personas ?? [];
   const figures = caseFigures(idea);
+  const detailedQuestions = (idea.genieQuestions ?? []).filter(q => !!idea.questionDetails?.[q]).length;
+  const v2Summary = flow.ideaStudioVersion === 'v2' && (idea.spark?.primaryEntity || shape?.decisionStyle || detailedQuestions > 0) ? (
+    <section className="rounded-2xl border border-primary/25 bg-primary/[0.04] p-4 sm:p-5" aria-label="Decision-Guided summary">
+      <p className="text-ui-2xs uppercase tracking-wider font-semibold text-primary">Decision-Guided summary · v2</p>
+      <div className="grid gap-3 mt-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-border/70 bg-card/70 p-3">
+          <p className="flex items-center gap-1.5 text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground"><Crosshair className="w-3.5 h-3.5" /> Decision grain</p>
+          <p className="text-ui-sm font-medium text-foreground mt-1">{idea.spark?.primaryEntity || 'Defined in the brief'}</p>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card/70 p-3">
+          <p className="flex items-center gap-1.5 text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground"><Clock className="w-3.5 h-3.5" /> Decision mode</p>
+          <p className="text-ui-sm font-medium text-foreground mt-1">{[shape?.decisionStyle, shape?.cadence].filter(Boolean).join(' · ') || 'Defined by the chosen approach'}</p>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card/70 p-3">
+          <p className="flex items-center gap-1.5 text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground"><Target className="w-3.5 h-3.5" /> Action-linked questions</p>
+          <p className="text-ui-sm font-medium text-foreground mt-1">{detailedQuestions} of {idea.genieQuestions?.length ?? 0} carry action and data guidance</p>
+        </div>
+      </div>
+      {!!idea.summary?.keyResults?.length && (
+        <div className="mt-3 border-t border-primary/15 pt-3">
+          <p className="text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground">Key Results</p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {idea.summary.keyResults.map((kr, index) => (
+              <span key={index} className="rounded-lg bg-card border border-border px-2.5 py-1.5 text-ui-xs text-foreground">
+                <strong className="text-primary">{kr.kr}:</strong> {kr.target}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  ) : null;
 
   const done = useMemo(() => {
     const heads = (text.match(/^##\s+(.+)$/gm) ?? []).map(h => h.replace(/^##\s+/, '').toLowerCase());
@@ -99,6 +131,7 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   if (approved && !streaming && !flow.readOnly) {
     return (
       <div className="space-y-8 relative">
+        {v2Summary}
         <InlineBusinessCase flow={flow} onOpenFull={() => setCaseOpen(true)} />
 
         <details className="group rounded-2xl border border-border bg-card/60">
@@ -210,6 +243,8 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
         )}
         <PersonaStack names={personas} />
       </div>
+
+      {v2Summary}
 
       {streaming && (
         <div className="flex flex-wrap gap-1.5 animate-fade-in">

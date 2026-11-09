@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowUpRight, BadgeCheck, Check, ChevronDown, Database, Info, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, BadgeCheck, Check, ChevronDown, Database, HelpCircle, Info, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { FadeIn, GhostButton, SecondaryButton } from '../../journeykit';
 import { ErrorState, ExplorerHeader, LoadingState, ModelExplorer, type ExplorerCopy, type ExplorerPick } from '../blueprint/ModelExplorer';
 import type { BlueprintDigest, SourceChoice } from '../blueprint/types';
 import { sourceKey, sourcesApi, useApprovedSources, useCheckedSources, useSourceDigest, type ApprovedSource } from './sourcesApi';
 import { CatalogSchemaPicker } from './CatalogSchemaPicker';
 import { certifiedHint, scopeLabel, type CertifiedHint } from './certifiedScope';
+import { ServicePopover } from '../../ServicePopover';
 
 interface SourceScreenProps {
   questions: string[];
@@ -268,8 +269,8 @@ export function SourceScreen({ questions, context, sources, initialChoice, certi
       </FadeIn>
 
       <ExplorerHeader
-        eyebrow="Your governed data"
-        title="Explore your tables"
+        eyebrow="Unity Catalog · Domains & Subdomains"
+        title="Explore your domains & tables"
         picker={<SourcePicker approved={approved} value={sources} onChange={s => { onSourcesChange(s); setAttempt(0); }} />}
         why={d && (
           <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -291,8 +292,20 @@ export function SourceScreen({ questions, context, sources, initialChoice, certi
             )}
           </span>
         )}
-        description={d ? d.description : 'The governed tables you already have, read live from Unity Catalog: business areas, connections, and how they answer your questions.'}
-        pill={d && <CatalogPill digest={d} />}
+        description={d ? d.description : 'Your governed data, read live from Unity Catalog and organized by model domains, governed tags, or clearly labelled inferred business areas.'}
+        pill={d && (
+          <span className="flex flex-wrap items-center gap-2">
+            <CatalogPill digest={d} />
+            <ServicePopover serviceKey="discoverDomains" position="right">
+              <button type="button" className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border border-border bg-card text-ui-xs font-medium text-primary hover:border-primary/40">
+                <HelpCircle className="w-3.5 h-3.5" /> Domains &amp; Subdomains
+              </button>
+            </ServicePopover>
+            <a href="https://docs.databricks.com/aws/en/uc-semantics/domains" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ui-xs text-muted-foreground hover:text-foreground">
+              Docs <ArrowUpRight className="w-3 h-3" />
+            </a>
+          </span>
+        )}
       />
 
       {body}

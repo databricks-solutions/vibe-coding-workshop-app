@@ -1235,6 +1235,34 @@ DEFAULT_APPROVED_DATA_SOURCES_JSON = json.dumps([
     {"catalog": "samples", "schema": "wanderbricks", "label": "Wanderbricks (sample)"},
 ])
 
+# Idea Studio flow version ("v1" classic default vs "v2" decision-guided).
+DEFAULT_IDEA_STUDIO_VERSION = "v1"
+_runtime_param_overrides: Dict[str, str] = {}
+
+
+def _bootstrap_idea_studio_version_if_missing() -> None:
+    """Self-healing insert of the idea_studio_version row; idempotent via ON CONFLICT."""
+    schema = get_schema()
+    sql = f"""
+        INSERT INTO {schema}.workshop_parameters
+            (param_key, param_label, param_value, param_description, param_type,
+             display_order, is_required, is_active, allow_session_override,
+             inserted_at, updated_at, created_by)
+        VALUES
+            ('idea_studio_version',
+             'Idea Studio',
+             %s,
+             'Controls the Idea Studio flow version across the workshop. Version 1 (Classic) is the default; Version 2 (Decision-Guided) adds operational decision triggers, action-linked Genie questions, and measurable Key Results.',
+             'idea_studio_version',
+             30, FALSE, TRUE, FALSE,
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'system-bootstrap')
+        ON CONFLICT (param_key) DO NOTHING
+    """
+    try:
+        execute_insert(sql, (DEFAULT_IDEA_STUDIO_VERSION,))
+    except Exception as e:
+        logger.warning(f"[Config API] idea_studio_version bootstrap skipped: {e}")
+
 
 def _bootstrap_approved_data_sources_if_missing() -> None:
     """Self-healing insert of the approved_data_sources row; idempotent via ON CONFLICT."""
@@ -1365,6 +1393,7 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'external_mcp_connection': '',
             'databricks_cli_profile': DEFAULT_DATABRICKS_CLI_PROFILE,
             'approved_data_sources': DEFAULT_APPROVED_DATA_SOURCES_JSON,
+            'idea_studio_version': _runtime_param_overrides.get('idea_studio_version') or os.getenv('IDEA_STUDIO_VERSION', DEFAULT_IDEA_STUDIO_VERSION),
         }
     
     out = {row['param_key']: row['param_value'] for row in results}
@@ -1373,6 +1402,7 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
     out.setdefault('coding_assistants_config', DEFAULT_CODING_ASSISTANTS_CONFIG_JSON)
     out.setdefault('databricks_cli_profile', DEFAULT_DATABRICKS_CLI_PROFILE)
     out.setdefault('approved_data_sources', DEFAULT_APPROVED_DATA_SOURCES_JSON)
+    out.setdefault('idea_studio_version', _runtime_param_overrides.get('idea_studio_version') or os.getenv('IDEA_STUDIO_VERSION', DEFAULT_IDEA_STUDIO_VERSION))
     return out
 
 
@@ -4712,6 +4742,17 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_active=True,
                 allow_session_override=False
             ),
+            WorkshopParameter(
+                param_key="idea_studio_version",
+                param_label="Idea Studio",
+                param_value=_runtime_param_overrides.get("idea_studio_version") or os.getenv("IDEA_STUDIO_VERSION", DEFAULT_IDEA_STUDIO_VERSION),
+                param_description="Controls the Idea Studio flow version across the workshop. Version 1 (Classic) is the default; Version 2 (Decision-Guided) adds operational decision triggers, action-linked Genie questions, and measurable Key Results.",
+                param_type="idea_studio_version",
+                display_order=30,
+                is_required=False,
+                is_active=True,
+                allow_session_override=False
+            ),
         ]
     
     # Self-heal: existing deployments that were seeded before these params
@@ -4726,6 +4767,9 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
         needs_reread = True
     if not any(row.get('param_key') == 'approved_data_sources' for row in results):
         _bootstrap_approved_data_sources_if_missing()
+        needs_reread = True
+    if not any(row.get('param_key') == 'idea_studio_version' for row in results):
+        _bootstrap_idea_studio_version_if_missing()
         needs_reread = True
     if needs_reread:
         results = execute_query(sql)
@@ -4787,9 +4831,26 @@ async def update_workshop_parameter(param_key: str, update: WorkshopParameterUpd
             if entry['id'] in seen_ids:
                 raise HTTPException(status_code=400, detail=f"coding_assistants_config has duplicate id '{entry['id']}'")
             seen_ids.add(entry['id'])
-    
+    elif param_key == 'idea_studio_version':
+        cleaned = (update.param_value or '').strip().lower()
+        if cleaned not in ('v1', 'v2'):
+            raise HTTPException(status_code=400, detail="idea_studio_version must be 'v1' or 'v2'")
+        update.param_value = cleaned
+        _runtime_param_overrides['idea_studio_version'] = cleaned
+
+    if not is_lakebase_configured() and param_key == 'idea_studio_version':
+        return {
+            "success": True,
+            "message": f"Parameter '{param_key}' updated successfully",
+            "param_key": param_key,
+            "param_value": update.param_value,
+        }
+
     schema = get_schema()
-    
+
+    if param_key == 'idea_studio_version':
+        _bootstrap_idea_studio_version_if_missing()
+
     # Check if parameter exists
     check_sql = f"""
         SELECT param_id FROM {schema}.workshop_parameters

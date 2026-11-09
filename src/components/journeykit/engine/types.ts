@@ -85,6 +85,10 @@ export interface SparkResult {
   /** Which money line moves and why, in the industry's terms. */
   valueHypothesis?: string;
   businessLine?: 'cost' | 'revenue' | 'risk' | 'capacity' | null;
+  /** Optional industry synonyms (v2). */
+  aliases?: string[];
+  /** Operational unit/grain a decision acts on (v2), e.g. "platform / station / 30-min window". */
+  primaryEntity?: string;
 }
 
 export interface IndustryLeaf {
@@ -168,6 +172,10 @@ export interface ShapeOption {
   noGenieWhy?: string;
   recommended?: boolean;
   recommendedWhy?: string;
+  /** Plain-English phrase on how decisions happen (v2), e.g. "Recommends · You confirm". */
+  decisionStyle?: string;
+  /** Decision cadence or lead time (v2), e.g. "Real-time (30m ahead)". */
+  cadence?: string;
 }
 
 export type GeniePlacement = 'in_app' | 'genie_space';
@@ -188,6 +196,29 @@ export interface GapResult {
 export interface Decision {
   at: string;
   text: string;
+}
+
+/** Saved setup choices so Data/Model/Plan can survive refresh, exit, and resume. */
+export interface InsightsSetupDraft {
+  dataSource: 'existing' | 'upload' | 'sample' | 'blueprint' | null;
+  dataLocation: string;
+  includeUncertified: boolean;
+  blueprint: unknown | null;
+  source: unknown | null;
+  preferredSlug: string | null;
+  name: string;
+  addOns: string[] | null;
+  updatedAt: string;
+}
+
+export interface OverlapDecision {
+  action: 'continue_independently';
+  reasonCode: string;
+  reasonText?: string;
+  similarIdeaIds: string[];
+  matcherVersion: string;
+  fingerprint: string;
+  acknowledgedAt: string;
 }
 
 export type ImpactDriver = 'time_saved' | 'cost_avoided' | 'revenue_uplift';
@@ -290,6 +321,20 @@ export interface CaseSummary {
   killCriterion?: string;
   sponsor?: string;
   unlocksNext?: string[];
+  /** Optional measurable target outcomes (v2). */
+  keyResults?: { kr: string; target: string }[];
+}
+
+export type QuestionKind = 'look_back' | 'track_live' | 'look_ahead' | 'what_to_do';
+
+export interface QuestionDetail {
+  kind?: QuestionKind;
+  drivesAction?: string;
+  metrics?: string[];
+  dimensions?: string[];
+  /** Optional AI suggestion; the user's original wording remains canonical until accepted. */
+  clearerQuestion?: string;
+  validationMessage?: string;
 }
 
 export interface CatalogRef {
@@ -381,6 +426,8 @@ export interface Idea {
   genieQuestionSources?: Record<string, QuestionSource>;
   /** Extra questions the AI suggested that the user can add with one tap. */
   genieAlternates?: string[];
+  /** Optional per-question decision metadata (v2): kind, action lever, and silent metrics/dimensions. */
+  questionDetails?: Record<string, QuestionDetail>;
   /** Set when an Insights idea is locked and handed to the build. */
   lockedAt?: string;
   /** Which workflow builds this idea; set when it is handed to a build. */
@@ -389,6 +436,10 @@ export interface Idea {
   buildStatus?: 'building' | 'later';
   /** Insights stage to open the build at; `studio` once this idea has set up its project. */
   buildStage?: 'data' | 'studio';
+  /** In-progress Insights setup, saved before the build itself is created. */
+  setupDraft?: InsightsSetupDraft;
+  /** Owner's explicit reason for proceeding after a related-idea warning. */
+  overlapDecision?: OverlapDecision;
   /** Bumped each time an approved answer changes. */
   revision?: number;
   /** Owner/reviewer approval required before a revision may start or update a build. */

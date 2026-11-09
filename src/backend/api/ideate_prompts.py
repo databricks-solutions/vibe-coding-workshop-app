@@ -466,10 +466,69 @@ def rules_for(mode: str = "ideate") -> str:
     return SHARED_RULES.replace(IDEATE_SURFACES, INSIGHTS_RULES)
 
 
-def build_step_system_prompt(step: str, mode: str = "ideate") -> str:
+V2_STEP_ADDITIONS = {
+    "spark": """
+
+Version 2 Decision-Guided additions:
+- Also return "aliases": up to 3 short industry synonyms for this capability (e.g. ["Congestion Forecasting", "Dwell-Time Management"]), and "primary_entity": the operational unit/grain a decision acts on in 3 to 6 words (e.g. "platform / station / 30-min window" or "store / SKU / day").""",
+
+    "map": """
+
+Version 2 Decision-Guided additions:
+- When marking 1 or 2 leaves with "adjacent": true, prioritize capabilities that share the same operational grain or foundational data feeds so the pilot data unlocks them directly.""",
+
+    "clarify": """
+
+Version 2 Decision-Guided additions:
+- For question 5 (dimension "trigger"), ask about the operational lead time or early-warning signal needed to act before the problem hits (e.g. "30 to 60 minutes before a peak arrival bank", "48 hours before a shelf runs out", "When dwell variance crosses threshold"), rather than generic project timing.""",
+
+    "followup": """
+
+Version 2 Decision-Guided additions:
+- In "workflow", anchor the first step on the early-warning signal and lead time from the user's answers, the middle step(s) on the concrete operational action lever (e.g. reallocate platform, deploy crew, reorder stock), and the final step on the customer outcome.""",
+
+    "workflow": """
+
+Version 2 Decision-Guided additions:
+- Anchor the first step on the early-warning signal and lead time, the middle step(s) on the concrete operational action lever, and the final step on the customer outcome.""",
+
+    "shape": """
+
+Version 2 Decision-Guided additions:
+- For each option in "options", also return:
+  - "decision_style": a short plain-English phrase (under 5 words) on how decisions happen, e.g. "Recommends · You confirm" for copilot, "Acts within limits" for automation, or "Live outlook · You decide" for insight/ask/monitor/signal.
+  - "cadence": when or how often it runs in plain words (under 5 words), e.g. "Real-time (30m ahead)", "Hourly check", "Before each shift".""",
+
+    "questions": """
+
+Version 2 Decision-Guided additions:
+- Cover a natural decision progression across "questions": looking back at patterns ("look_back"), tracking live status ("track_live"), looking ahead at risk ("look_ahead"), and deciding what action to take ("what_to_do"). Include at least one "look_ahead" or "what_to_do" question.
+- Extend the response schema with "question_details", containing exactly one object for each item in "questions", in the same order:
+  {"question": "Exact question text?", "kind": "look_back | track_live | look_ahead | what_to_do", "drives_action": "Short plain-English action lever under 10 words, e.g. Deploy platform staff before peak crowding", "metrics": ["1 or 2 measures needed"], "dimensions": ["2 or 3 grain dimensions needed"]}
+- The final JSON object must therefore contain all three keys: "questions", "alternates", and "question_details".""",
+
+    "summary": """
+
+Version 2 Decision-Guided additions:
+- Also return "key_results": 2 or 3 measurable target outcomes pairing signal/lead-time quality with operational KPI movement:
+  [{"kr": "Short outcome name, e.g. Congestion peak prediction", "target": "Short target, e.g. >=80% precision at 30-min horizon"}]
+- Add "key_results" at the top level of the response JSON alongside "metric", "what_we_build", and the other summary fields.""",
+}
+
+V2_BRIEF_ADDITION = """
+
+Version 2 Decision-Guided additions:
+- In ## Success Metric, after today's baseline and target, include 2 or 3 concise bulleted **Key Results** (pairing lead-time/signal quality with operational KPI movement) before **Pilot success:** and **Stop if:**.
+- If "questionDetails" or "confirmedIntent.primaryEntity" is in the context, use its measures, grain dimensions, and action levers so the brief names the exact decision grain and required metrics."""
+
+
+def build_step_system_prompt(step: str, mode: str = "ideate", version: str = "v1") -> str:
     template = INSIGHTS_STEP_OVERRIDES.get(step, STEP_PROMPTS[step]) if mode == "insights" else STEP_PROMPTS[step]
-    return template.format(rules=rules_for(mode), value_fields=SHAPE_VALUE_RULES,
+    base = template.format(rules=rules_for(mode), value_fields=SHAPE_VALUE_RULES,
                            genie_fields=SHAPE_GENIE_RULES_INSIGHTS if mode == "insights" else SHAPE_GENIE_RULES)
+    if version == "v2" and step in V2_STEP_ADDITIONS:
+        return base + V2_STEP_ADDITIONS[step]
+    return base
 
 
 BRIEF_INSIGHTS_PROMPT = f"""{rules_for("insights").replace("- Return ONLY a single valid JSON object matching the schema. No prose, no code fences.", "")}
@@ -508,8 +567,9 @@ Bullets. Include any assumption the user has not confirmed.
 Rules: be specific, use the industry's vocabulary, no filler, no emoji, Markdown only, no preamble."""
 
 
-def brief_prompt_for(mode: str = "ideate") -> str:
-    return BRIEF_INSIGHTS_PROMPT if mode == "insights" else BRIEF_PROMPT
+def brief_prompt_for(mode: str = "ideate", version: str = "v1") -> str:
+    base = BRIEF_INSIGHTS_PROMPT if mode == "insights" else BRIEF_PROMPT
+    return base + V2_BRIEF_ADDITION if version == "v2" else base
 
 
 JUDGE_PROMPT = """You are a demanding but fair investment reviewer scoring a business idea that a workshop participant shaped into a brief. Score how strong, specific, well thought through, and well written it is, using ONLY the material provided.

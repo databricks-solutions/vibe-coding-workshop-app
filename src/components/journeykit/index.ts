@@ -7,7 +7,7 @@ export * from './engine/ideaContext';
 export * from './engine/businessCase';
 export { useIdeas, useSyncState, flushIdea, setIdeaScore, setIdeaReview, refreshReviews, normalizeIdea, type ReviewChange, type SyncState } from './engine/useIdeas';
 export { nextNudge, welcomeBack, type Nudge } from './engine/encouragement';
-export { useIdeaFlow, MAX_GENIE_QUESTIONS, type IdeaFlow } from './engine/useIdeaFlow';
+export { useIdeaFlow, MAX_GENIE_QUESTIONS, RECOMMENDED_GENIE_QUESTIONS, type IdeaFlow } from './engine/useIdeaFlow';
 export { seedFromUseCase } from './engine/seedFromUseCase';
 export * from './engine/handoff';
 export { SWITCHED_ADD_ONS, enabledAddOns, useEnabledAddOns, type SwitchedAddOn } from './engine/buildRecipes';
@@ -44,10 +44,21 @@ export { PointsChip } from './ui/PointsChip';
 export { TierBadge } from './ui/TierBadge';
 export { Scorecard, StoredScorecard } from './ui/Scorecard';
 export { SubmitDialog } from './ui/SubmitDialog';
+export { SimilarIdeasGate } from './ui/SimilarIdeasGate';
 export { ReviewDialog } from './ui/ReviewDialog';
 export { ApprovalTracker } from './ui/ApprovalTracker';
-export { isApproved, personName, submitterOf, useCanReview, useReviewRefresh, useReviewer } from './engine/approval';
-export { BusinessCaseView, BusinessCaseSheet } from './ui/BusinessCase';
+export {
+  invalidateIdeaCapabilities,
+  isApproved,
+  personName,
+  submitterOf,
+  useCanReview,
+  useIdeaStudioVersion,
+  useReviewRefresh,
+  useReviewer,
+  type IdeaStudioVersion,
+} from './engine/approval';
+export { BusinessCaseView, BusinessCaseSheet, CaseDocument } from './ui/BusinessCase';
 export { BusinessCaseButton } from './ui/BusinessCaseButton';
 export { SurfaceChips } from './ui/SurfaceChips';
 export { IndustryBadge } from './ui/IndustryBadge';

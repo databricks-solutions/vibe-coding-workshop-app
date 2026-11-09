@@ -114,12 +114,12 @@ export function BusinessCaseView({ flow, leading, onBackToFlow, onAddNumbers }: 
             )}
             <div className="overflow-x-auto pb-4">
               <div className="w-[8.5in] mx-auto space-y-6">
-                <CaseDocument idea={idea} summary={summary} figures={figures} />
+                <CaseDocument idea={idea} summary={summary} figures={figures} decisionGuided={flow.ideaStudioVersion === 'v2'} />
               </div>
             </div>
             {createPortal(
               <div className="bc-print">
-                <CaseDocument idea={idea} summary={summary} figures={figures} />
+                <CaseDocument idea={idea} summary={summary} figures={figures} decisionGuided={flow.ideaStudioVersion === 'v2'} />
               </div>,
               document.body,
             )}
@@ -209,7 +209,7 @@ export function InlineBusinessCase({ flow, onOpenFull }: { flow: IdeaFlow; onOpe
       </div>
       <div className="overflow-x-auto rounded-2xl border border-border bg-secondary/30 p-3 sm:p-5">
         <div className="w-[8.5in] mx-auto">
-          <CaseDocument idea={idea} summary={summary} figures={figures} appendix={false} />
+          <CaseDocument idea={idea} summary={summary} figures={figures} appendix={false} decisionGuided={flow.ideaStudioVersion === 'v2'} />
         </div>
       </div>
     </section>
@@ -218,7 +218,7 @@ export function InlineBusinessCase({ flow, onOpenFull }: { flow: IdeaFlow; onOpe
 
 const DATE = new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 
-function CaseDocument({ idea, summary, figures, appendix = true }: { idea: Idea; summary: CaseSummary; figures: CaseFigures | null; appendix?: boolean }) {
+export function CaseDocument({ idea, summary, figures, appendix = true, decisionGuided = false }: { idea: Idea; summary: CaseSummary; figures: CaseFigures | null; appendix?: boolean; decisionGuided?: boolean }) {
   const config = modeOf(idea);
   const pages = figures && appendix ? 2 : 1;
   const scope = idea.impact?.scope;
@@ -242,7 +242,7 @@ function CaseDocument({ idea, summary, figures, appendix = true }: { idea: Idea;
           <Section title="Who it's for"><p>{summary.whoItsFor}</p></Section>
         </div>
 
-        {summary.metric.label && <MetricBand metric={summary.metric} source={config.caseSource} />}
+        {summary.metric.label && <MetricBand metric={summary.metric} keyResults={decisionGuided ? summary.keyResults : undefined} source={config.caseSource} />}
 
         <Section title="What we'll build" className="mt-4"><p>{summary.whatWeBuild}</p></Section>
 
@@ -436,22 +436,37 @@ function ValueStack({ figures: f, story }: { figures: CaseFigures; story?: strin
   );
 }
 
-function MetricBand({ metric, source }: { metric: CaseSummary['metric']; source: string }) {
+function MetricBand({ metric, keyResults, source }: { metric: CaseSummary['metric']; keyResults?: CaseSummary['keyResults']; source: string }) {
   return (
-    <div className="mt-4 rounded-lg bg-teal-50 border border-teal-100 px-4 py-3 flex items-center gap-6">
-      <div className="flex-1">
-        <Eyebrow>{metric.label}</Eyebrow>
-        <p className="text-[10px] text-neutral-500 mt-0.5">Baseline and target from the {source} session.</p>
+    <div className="mt-4 rounded-lg bg-teal-50 border border-teal-100 px-4 py-3 space-y-2.5">
+      <div className="flex items-center gap-6">
+        <div className="flex-1">
+          <Eyebrow>{metric.label}</Eyebrow>
+          <p className="text-[10px] text-neutral-500 mt-0.5">Baseline and target from the {source} session.</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[9px] uppercase tracking-wider text-neutral-500">Today</p>
+          <p className="text-[18px] font-bold text-neutral-900">{metric.today}</p>
+        </div>
+        <ArrowRight className="w-4 h-4 text-teal-600" />
+        <div>
+          <p className="text-[9px] uppercase tracking-wider text-neutral-500">Target</p>
+          <p className="text-[18px] font-bold text-teal-700">{metric.target}</p>
+        </div>
       </div>
-      <div className="text-right">
-        <p className="text-[9px] uppercase tracking-wider text-neutral-500">Today</p>
-        <p className="text-[18px] font-bold text-neutral-900">{metric.today}</p>
-      </div>
-      <ArrowRight className="w-4 h-4 text-teal-600" />
-      <div>
-        <p className="text-[9px] uppercase tracking-wider text-neutral-500">Target</p>
-        <p className="text-[18px] font-bold text-teal-700">{metric.target}</p>
-      </div>
+      {keyResults && keyResults.length > 0 && (
+        <div className="pt-2 border-t border-teal-200/70">
+          <p className="text-[9px] uppercase tracking-[0.14em] font-semibold text-teal-700">Key Results</p>
+          <div className="grid grid-cols-3 gap-2 mt-1.5">
+          {keyResults.map((kr, idx) => (
+            <div key={idx} className="rounded-md border border-teal-200 bg-white/70 px-2.5 py-2 text-[10px] text-neutral-700">
+              <span className="block font-semibold text-teal-800">{kr.kr}</span>
+              <span>{kr.target}</span>
+            </div>
+          ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

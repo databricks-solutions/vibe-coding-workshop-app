@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { calculateIdeaScore } from '../../constants/scoring';
-import { apiClient } from '../../api/client';
-import { ArrowRight, BookOpenCheck, Check, CheckCircle2, Clock, Copy, Hammer, HelpCircle, History, Inbox, Lightbulb, Menu, MoreHorizontal, Pencil, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { apiClient, type SimilarIdeaMatch } from '../../api/client';
+import { ArrowRight, BookOpenCheck, Check, CheckCircle2, Clock, Copy, Hammer, HelpCircle, History, Inbox, Lightbulb, Loader2, Menu, MoreHorizontal, Pencil, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import { Modal } from '../library/ui';
 import {
-  ApprovalTracker, ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, ReviewDialog, SAMPLES, STEP_ART, SubmitDialog, SummitTrail,
+  ApprovalTracker, ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, ReviewDialog, SAMPLES, SimilarIdeasGate, STEP_ART, SubmitDialog, SummitTrail,
   isApproved, personName, useReviewRefresh, useReviewer, SurfaceChips, TierBadge, VoiceTextarea,
-  caseFigures, chosenShape, ideaProgressSteps, ideaTrail, isBuilding, money, needsBuildUpdate, openBuildHref, shapeBuild, startBuildHref, stepMeta, stepsOf, useEnabledAddOns, useIdeas,
+  caseFigures, chosenShape, ideaProgressSteps, ideaTrail, isBuilding, money, needsBuildUpdate, openBuildHref, shapeBuild, startBuildHref, stepMeta, stepsOf, useEnabledAddOns, useIdeas, useIdeaStudioVersion,
   type Idea, type IdeaStatus,
 } from '../journeykit';
 
@@ -83,6 +83,7 @@ const insightsBuildHref = (idea: Idea) =>
   `${startBuildHref(idea)}&target=insights${idea.sessionId && idea.buildTarget !== 'insights' ? '&fresh=1' : ''}`;
 
 export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
+  const ideaStudioVersion = useIdeaStudioVersion();
   const { ideas, createIdea, updateIdea, deleteIdea, duplicateIdea } = useIdeas();
   useEnabledAddOns();
   const navigate = useNavigate();
@@ -101,6 +102,14 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
   const [coach, setCoach] = useState<Coach | null>(null);
   const [pulse, setPulse] = useState<{ id: string; n: number } | null>(null);
   const [queueCount, setQueueCount] = useState(0);
+  const [checkingSimilar, setCheckingSimilar] = useState(false);
+  const [similarGate, setSimilarGate] = useState<{
+    matches: SimilarIdeaMatch[];
+    fingerprint: string;
+    matcherVersion: string;
+    text: string;
+    industry: string;
+  } | null>(null);
 
   const spotlight = (next: Coach) => {
     setCoach(next);
@@ -160,10 +169,31 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
     return () => clearInterval(t);
   }, [seed]);
 
-  const start = () => {
-    if (!seed.trim()) return;
-    const idea = createIdea(seed.trim(), industry.trim());
+  const createFromSeed = (text: string, pickedIndustry: string, overlapDecision?: Idea['overlapDecision']) => {
+    const idea = createIdea(text, pickedIndustry);
+    if (overlapDecision) updateIdea(idea.id, {
+      overlapDecision,
+      decisions: [...idea.decisions, { at: new Date().toISOString(), text: 'Continued independently after reviewing related ideas' }],
+    });
     navigate(`/ideate/${idea.id}`);
+  };
+
+  const start = async () => {
+    const text = seed.trim();
+    if (!text || checkingSimilar) return;
+    setCheckingSimilar(true);
+    try {
+      const result = await apiClient.findSimilarIdeas({ text, industry: industry.trim() });
+      if (result.matches.length) {
+        setSimilarGate({ ...result, text, industry: industry.trim() });
+        return;
+      }
+    } catch {
+      // Similarity guidance must never block creating an idea.
+    } finally {
+      setCheckingSimilar(false);
+    }
+    createFromSeed(text, industry.trim());
   };
 
   const values = useMemo(() => new Map(ideas.map(i => [i.id, caseFigures(i)?.value.expected ?? 0])), [ideas]);
@@ -208,11 +238,21 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
             <p className="flex items-center gap-2 text-ui-sm font-medium text-primary">
               <Lightbulb className="w-4 h-4" /> Ideate
               <span className="px-1.5 py-0.5 rounded text-ui-2xs font-semibold uppercase tracking-wide bg-amber-500/15 text-amber-400">Beta</span>
+              {ideaStudioVersion === 'v2' && (
+                <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                  Decision-Guided · v2
+                </span>
+              )}
             </p>
             <h1 className="text-ui-3xl font-semibold text-foreground leading-tight mt-2">Say the messy version.<br />I'll ask the questions.</h1>
             <p className="text-ui-base text-muted-foreground mt-3 max-w-md">
               A few short steps turn a rough idea into a one-page brief and a business case you can submit. You pick, the AI does the heavy lifting.
             </p>
+            {ideaStudioVersion === 'v2' && (
+              <p className="text-ui-xs text-muted-foreground mt-2 max-w-lg">
+                V2 connects the decision grain and lead time to action-ready Genie questions and measurable Key Results.
+              </p>
+            )}
           </div>
           <img src={ART.hero} alt="" width={320} height={213} className="hidden md:block w-full rounded-3xl" />
         </div>
@@ -245,8 +285,8 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
               className="flex-1 min-w-[10rem] bg-secondary/50 rounded-xl px-3 py-2 text-ui-sm outline-none border border-transparent focus:border-primary/40"
               onKeyDown={e => e.key === 'Enter' && start()}
             />
-            <PrimaryButton onClick={start} disabled={!seed.trim()}>
-              Start ideating <ArrowRight className="w-4 h-4" />
+            <PrimaryButton onClick={() => void start()} disabled={!seed.trim() || checkingSimilar}>
+              {checkingSimilar ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking related work…</> : <>Start ideating <ArrowRight className="w-4 h-4" /></>}
             </PrimaryButton>
           </div>
         </div>
@@ -345,6 +385,26 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
         }}
       />
       {submitting && <SubmitDialog idea={ideas.find(i => i.id === submitting.id) ?? submitting} onClose={() => setSubmitting(null)} />}
+      {similarGate && (
+        <SimilarIdeasGate
+          matches={similarGate.matches}
+          mode="create"
+          currentDraft={{ text: similarGate.text, industry: similarGate.industry }}
+          onClose={() => setSimilarGate(null)}
+          onContinue={(reasonCode, reasonText) => {
+            createFromSeed(similarGate.text, similarGate.industry, {
+              action: 'continue_independently',
+              reasonCode,
+              reasonText,
+              similarIdeaIds: similarGate.matches.map(m => m.id),
+              matcherVersion: similarGate.matcherVersion,
+              fingerprint: similarGate.fingerprint,
+              acknowledgedAt: new Date().toISOString(),
+            });
+            setSimilarGate(null);
+          }}
+        />
+      )}
       {reviewing && (
         <ReviewDialog
           idea={ideas.find(i => i.id === reviewing.id) ?? reviewing}

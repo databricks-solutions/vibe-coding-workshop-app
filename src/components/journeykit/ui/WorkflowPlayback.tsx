@@ -7,6 +7,7 @@ import type { WorkflowActorKind, WorkflowNode } from '../engine/types';
 interface WorkflowPlaybackProps {
   workflow: WorkflowNode[];
   readOnly?: boolean;
+  decisionGuided?: boolean;
   onChange?: (workflow: WorkflowNode[]) => void;
 }
 
@@ -45,7 +46,7 @@ function cleanActionText(action: string): string {
  * Flows horizontally in one line and wraps cleanly to a second line when space is tight,
  * with zero arrow overlap and distinct inclusive avatars.
  */
-export function WorkflowPlayback({ workflow, readOnly = false, onChange }: WorkflowPlaybackProps) {
+export function WorkflowPlayback({ workflow, readOnly = false, decisionGuided = false, onChange }: WorkflowPlaybackProps) {
   const reduce = useReducedMotion();
   const [playKey, setPlayKey] = useState(0);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -184,6 +185,7 @@ export function WorkflowPlayback({ workflow, readOnly = false, onChange }: Workf
           const nodeDelay = reduce ? 0 : i * STEP_BEAT;
           const lineDelay = reduce ? 0 : i * STEP_BEAT + 0.22;
           const nextIsCustomer = steps[i + 1]?.kind === 'customer';
+          const decisionStage = i === 0 ? 'Early-warning signal' : isLast ? 'Customer outcome' : 'Action lever';
 
           return (
             <Fragment key={node.id || i}>
@@ -222,6 +224,11 @@ export function WorkflowPlayback({ workflow, readOnly = false, onChange }: Workf
                   )}
 
                   <div className="min-w-0 flex-1">
+                    {decisionGuided && (
+                      <span className="block text-ui-3xs font-semibold uppercase tracking-wider text-primary mb-0.5">
+                        {i + 1} · {decisionStage}
+                      </span>
+                    )}
                     <span
                       className={`block text-ui-3xs font-semibold uppercase tracking-wider ${
                         isCustomer

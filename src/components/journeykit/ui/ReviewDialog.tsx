@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, CheckCircle2, Hammer, Loader2, RotateCcw, ShieldCheck, X } from 'lucide-react';
-import { apiClient, type IdeaReviewDecision } from '../../../api/client';
+import { ArrowRight, Check, CheckCircle2, Hammer, Loader2, Maximize2, RotateCcw, ShieldCheck, X } from 'lucide-react';
+import { apiClient, type IdeaReviewDecision, type IdeaReviewDetail } from '../../../api/client';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent.utils';
 import { setIdeaReview } from '../engine/useIdeas';
 import { caseFigures } from '../engine/ideaContext';
@@ -10,6 +10,7 @@ import { money } from '../engine/businessCase';
 import type { Idea, IdeaReview } from '../engine/types';
 import { submitterOf, useReviewer } from '../engine/approval';
 import { ApprovalTracker } from './ApprovalTracker';
+import { ReviewDossier } from '../../review/ReviewDossier';
 const NOTE_HINT: Record<Exclude<IdeaReviewDecision, 'approve'>, string> = {
   changes_requested: 'What should the owner change before you approve? For example: tighten the value estimate, name the data source…',
   reject: 'Why is this not moving forward? The owner sees this and can revise and resubmit.',
@@ -33,6 +34,8 @@ export function ReviewDialog({ idea, onClose, onStartBuild, onDecided }: Props) 
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<IdeaReviewDecision | null>(null);
+  const [dossier, setDossier] = useState<IdeaReviewDetail | null>(null);
+  const [dossierLoading, setDossierLoading] = useState(false);
   const approveRef = useRef<HTMLButtonElement>(null);
   const buildRef = useRef<HTMLButtonElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -53,13 +56,14 @@ export function ReviewDialog({ idea, onClose, onStartBuild, onDecided }: Props) 
     return () => window.removeEventListener('keydown', onKey);
   }, [acting, choice, done, onClose]);
 
-  const decide = async (action: IdeaReviewDecision) => {
-    if (action !== 'approve' && !note.trim()) return;
+  const decide = async (action: IdeaReviewDecision, decisionNote = note) => {
+    if (action !== 'approve' && !decisionNote.trim()) return;
     setActing(true);
     setError(null);
     try {
-      const r = await apiClient.ideaReviewAction(idea.id, action, action === 'approve' ? note : note.trim());
+      const r = await apiClient.ideaReviewAction(idea.id, action, action === 'approve' ? decisionNote : decisionNote.trim());
       setIdeaReview(idea.id, r.review as IdeaReview);
+      setDossier(d => d ? { ...d, review: r.review } : d);
       setDone(action);
       onDecided?.(action);
     } catch (e) {
@@ -89,6 +93,20 @@ export function ReviewDialog({ idea, onClose, onStartBuild, onDecided }: Props) 
             <ShieldCheck className="w-3.5 h-3.5" /> Review · revision {idea.review?.revision ?? idea.revision ?? 1}
           </p>
           <h2 id="review-title" className="text-ui-xl font-semibold text-foreground mt-1 pr-8">{idea.title}</h2>
+          <button
+            onClick={() => {
+              setDossierLoading(true);
+              apiClient.ideaReviewDetail(idea.id)
+                .then(setDossier)
+                .catch(e => setError((e as Error).message || 'Could not open the full review.'))
+                .finally(() => setDossierLoading(false));
+            }}
+            disabled={dossierLoading}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-ui-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
+          >
+            {dossierLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            Open full-screen review
+          </button>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
             <ApprovalTracker idea={reviewed} size="md" />
             {figures && <span className="text-ui-sm text-emerald-600 dark:text-emerald-400 font-semibold tabular-nums">~{money(figures.value.expected)} a year</span>}
@@ -189,6 +207,14 @@ export function ReviewDialog({ idea, onClose, onStartBuild, onDecided }: Props) 
           </>
         )}
       </div>
+      {dossier && (
+        <ReviewDossier
+          detail={dossier}
+          acting={acting && !done ? (choice ?? 'approve') : null}
+          onClose={() => setDossier(null)}
+          onDecision={(action, decisionNote) => decide(action, decisionNote)}
+        />
+      )}
     </div>
   );
 }

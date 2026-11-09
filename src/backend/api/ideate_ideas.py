@@ -29,6 +29,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from src.backend.api.idea_similarity import MATCHER_VERSION, find_matches, payload_fingerprint
 from src.backend.api.ideate_prompts import JUDGE_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -814,14 +815,30 @@ class SaveIdeaRequest(BaseModel):
     value_per_year: Optional[float] = None
 
 
+class SimilarIdeaRequest(BaseModel):
+    idea_id: Optional[str] = None
+    idea: Optional[Dict[str, Any]] = None
+    text: str = ""
+    title: str = ""
+    industry: str = ""
+
+
+class CompareIdeasRequest(SimilarIdeaRequest):
+    match_ids: List[str] = []
+
+
 class ReviewActionRequest(BaseModel):
     action: str
     note: Optional[str] = None
 
 
-def _review_payload(row: Dict[str, Any], viewer: str = "") -> Dict[str, Any]:
+def _review_payload(row: Dict[str, Any], viewer: str = "", candidates: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     owner = row.get("created_by") or ""
     idea = _with_score(row)
+    matches = find_matches(row.get("payload") or {}, candidates or [], current_id=str(row.get("id")))
+    for match in matches:
+        email = match.pop("ownerEmail", "")
+        match["owner"] = {"email": email, "displayName": _display_name(email), "avatar": _avatar(email)}
     return {
         "id": row.get("id"),
         "title": row.get("title") or idea.get("title") or "Untitled idea",
@@ -839,6 +856,8 @@ def _review_payload(row: Dict[str, Any], viewer: str = "") -> Dict[str, Any]:
             "valuePerYear": row.get("value_per_year"),
         },
         "score": idea.get("score"),
+        "overlappingIdeas": matches,
+        "overlapDecision": (row.get("payload") or {}).get("overlapDecision"),
     }
 
 
@@ -937,12 +956,15 @@ def _store_review_action(row: Dict[str, Any], reviewer: str, status: str, action
 @router.get("/ideate/capabilities", summary="Current user's Ideate permissions")
 @router.get("/ideate/reviews/capability", summary="Whether the current user may review ideas")
 async def ideate_capabilities(request: Request):
+    from src.backend.api.ideate import get_idea_studio_version
+
     user = _signed_in(request)
     return {
         "signedIn": bool(user),
         "email": user,
         "canReview": bool(reviewer_email(request)),
         "reviewPolicy": "authenticated" if os.getenv("IDEATE_REVIEWERS", "*").strip() == "*" else "allowlist",
+        "ideaStudioVersion": get_idea_studio_version(),
     }
 
 
@@ -957,7 +979,7 @@ async def list_ideate_reviews(request: Request, status: str = ""):
     if status and status != "all":
         rows = [row for row in rows if row.get("review_status") == status]
     viewer = _signed_in(request) or ""
-    return {"ideas": [_review_payload(row, viewer) for row in rows]}
+    return {"ideas": [_review_payload(row, viewer, rows) for row in rows]}
 
 
 @router.get("/ideate/reviews/{idea_id}", summary="Reviewer detail for one submitted idea")
@@ -968,7 +990,7 @@ async def get_ideate_review(idea_id: str, request: Request):
     row = _find_review_row(idea_id)
     if not row or row.get("deleted_at") or row.get("review_status") not in REVIEW_STATUSES:
         return JSONResponse({"error": "This submitted idea isn't available."}, status_code=404)
-    return _review_payload(row, _signed_in(request) or "")
+    return _review_payload(row, _signed_in(request) or "", _review_rows())
 
 
 @router.post("/ideate/reviews/{idea_id}/action", summary="Approve, request changes, or reject a submitted idea")
@@ -1019,7 +1041,7 @@ async def review_ideate_idea(idea_id: str, body: ReviewActionRequest, request: R
             _history_entry(status, int(row.get("submitted_revision") or 1), reviewer, note)
         ],
     }
-    return _review_payload(updated, _signed_in(request) or "")
+    return _review_payload(updated, _signed_in(request) or "", _review_rows())
 
 
 @router.get("/ideate/ideas", summary="My saved ideas, with their points")
@@ -1097,6 +1119,219 @@ async def submit_saved_idea_for_review(idea_id: str, request: Request):
         request,
     )
     return result
+
+
+@router.post("/ideate/ideas/similar", summary="Find explainable related ideas before creating or submitting")
+async def similar_ideas(body: SimilarIdeaRequest, request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to check for related ideas."}, status_code=401)
+
+    current_id = body.idea_id
+    target = dict(body.idea or {})
+    if current_id:
+        row = _get_row(current_id)
+        if not row or row.get("deleted_at"):
+            return JSONResponse({"error": "Save this idea before checking it."}, status_code=404)
+        if row.get("created_by") != user:
+            return JSONResponse({"error": "Only the idea owner can check this draft."}, status_code=403)
+        target = dict(row.get("payload") or target)
+    if not target:
+        target = {
+            "id": current_id or "draft",
+            "title": body.title or body.text[:120],
+            "seed": body.text,
+            "industry": body.industry,
+            "spark": {"statement": body.text, "industry": body.industry},
+        }
+    if not any(str(target.get(k) or "").strip() for k in ("title", "seed")) and not target.get("spark"):
+        return {"matches": [], "matcherVersion": MATCHER_VERSION, "fingerprint": payload_fingerprint(target)}
+
+    # Submitted ideas across owners plus this user's saved drafts. De-duplicate
+    # linked catalog rows by idea id and exclude rejected work.
+    rows: Dict[str, Dict[str, Any]] = {}
+    for candidate in [*_review_rows(), *_owner_rows(user)]:
+        if candidate.get("review_status") == "rejected" or candidate.get("deleted_at"):
+            continue
+        rows[str(candidate.get("id"))] = candidate
+    matches = find_matches(target, rows.values(), current_id=current_id)
+    for match in matches:
+        email = match.pop("ownerEmail", "")
+        match["owner"] = {
+            "email": email,
+            "displayName": _display_name(email),
+            "avatar": _avatar(email),
+            "isCurrentUser": email.lower() == user.lower() if email else False,
+        }
+    return {
+        "matches": matches,
+        "matcherVersion": MATCHER_VERSION,
+        "fingerprint": payload_fingerprint(target),
+    }
+
+
+_comparison_cache: Dict[str, Dict[str, Any]] = {}
+_NBA_ACTIONS = {"join_existing", "contact_owner", "differentiate_scope", "continue_separately"}
+
+
+def _comparison_snapshot(row: Dict[str, Any]) -> Dict[str, Any]:
+    idea = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    spark = idea.get("spark") if isinstance(idea.get("spark"), dict) else {}
+    shape = next((s for s in idea.get("shapes") or [] if isinstance(s, dict) and s.get("id") == idea.get("chosenShapeId")), {})
+    impact = idea.get("impact") if isinstance(idea.get("impact"), dict) else {}
+    summary = idea.get("summary") if isinstance(idea.get("summary"), dict) else {}
+    return {
+        "id": str(row.get("id") or idea.get("id") or ""),
+        "title": row.get("title") or idea.get("title"),
+        "industry": row.get("industry") or spark.get("industry") or idea.get("industry"),
+        "problem": spark.get("statement") or idea.get("seed"),
+        "primaryEntity": spark.get("primaryEntity"),
+        "approach": {
+            "title": shape.get("title"),
+            "kind": shape.get("kind"),
+            "decisionStyle": shape.get("decisionStyle"),
+            "cadence": shape.get("cadence"),
+        },
+        "questions": list(idea.get("genieQuestions") or [])[:6],
+        "keyResults": list(summary.get("keyResults") or [])[:5],
+        "valuePerYear": row.get("value_per_year"),
+        "status": _status_label(row) if row.get("mode") else row.get("review_status") or idea.get("status"),
+        "owner": _display_name(str(row.get("created_by") or "")),
+    }
+
+
+def _fallback_comparison(target: Dict[str, Any], candidates: List[Dict[str, Any]], user: str) -> Dict[str, Any]:
+    rows = find_matches(target, candidates, current_id=str(target.get("id") or ""))
+    by_id = {str(r.get("id")): r for r in candidates}
+    ordered_ids = [m["id"] for m in rows] + [str(r.get("id")) for r in candidates if str(r.get("id")) not in {m["id"] for m in rows}]
+    recommended = ordered_ids[0] if ordered_ids else ""
+    rec_row = by_id.get(recommended, {})
+    same_owner = str(rec_row.get("created_by") or "").lower() == user.lower()
+    action = "join_existing" if same_owner else "contact_owner"
+    comparisons = []
+    match_by_id = {m["id"]: m for m in rows}
+    for candidate_id in ordered_ids:
+        match = match_by_id.get(candidate_id, {})
+        comparisons.append({
+            "id": candidate_id,
+            "overlap": list(match.get("sharedSignals") or ["Related problem and outcome"])[:3],
+            "differences": ["Confirm whether users, decision scope, data, and ownership are materially different."],
+            "summary": "Compare scope and ownership before creating separate work.",
+        })
+    return {
+        "recommendedMatchId": recommended,
+        "nextBestAction": action,
+        "recommendation": "Continue the existing idea." if same_owner else "Contact the existing owner and coordinate scope.",
+        "rationale": "This initiative has the clearest explainable overlap among the related work found.",
+        "missingEvidence": ["Confirm distinct users, decision, data scope, and delivery ownership."],
+        "comparisons": comparisons,
+        "aiAssisted": False,
+        "fallback": True,
+    }
+
+
+@router.post("/ideate/ideas/compare", summary="NBA AI comparison across related ideas")
+async def compare_ideas(body: CompareIdeasRequest, request: Request):
+    user = _signed_in(request)
+    if not user:
+        return JSONResponse({"error": "Sign in to compare related ideas."}, status_code=401)
+    ids = list(dict.fromkeys(i for i in body.match_ids if i))[:5]
+    if not ids:
+        return JSONResponse({"error": "Pick at least one related idea to compare."}, status_code=400)
+
+    target = dict(body.idea or {})
+    if body.idea_id:
+        current = _get_row(body.idea_id)
+        if not current or current.get("deleted_at"):
+            return JSONResponse({"error": "Save this idea before comparing it."}, status_code=404)
+        if current.get("created_by") != user:
+            return JSONResponse({"error": "Only the idea owner can compare this draft."}, status_code=403)
+        target = dict(current.get("payload") or target)
+    if not target:
+        target = {
+            "id": body.idea_id or "draft",
+            "title": body.title or body.text[:120],
+            "seed": body.text,
+            "industry": body.industry,
+            "spark": {"statement": body.text, "industry": body.industry},
+        }
+
+    available: Dict[str, Dict[str, Any]] = {}
+    for candidate in [*_review_rows(), *_owner_rows(user)]:
+        candidate_id = str(candidate.get("id") or "")
+        if candidate_id in ids and candidate.get("review_status") != "rejected" and not candidate.get("deleted_at"):
+            available[candidate_id] = candidate
+    candidates = [available[i] for i in ids if i in available]
+    if len(candidates) != len(ids):
+        return JSONResponse({"error": "One or more related ideas are no longer available."}, status_code=409)
+
+    cache_key = payload_fingerprint(target) + "||" + "||".join(
+        f"{row['id']}:{payload_fingerprint(row.get('payload') or {})}" for row in candidates
+    )
+    cached = _comparison_cache.get(cache_key)
+    if cached:
+        return {**cached, "cached": True}
+
+    fallback = _fallback_comparison(target, candidates, user)
+    allowed = {str(r.get("id")) for r in candidates}
+    prompt = json.dumps({
+        "proposedIdea": _comparison_snapshot({"id": target.get("id") or "draft", "payload": target, "title": target.get("title"), "industry": target.get("industry"), "created_by": user}),
+        "relatedIdeas": [_comparison_snapshot(r) for r in candidates],
+    }, ensure_ascii=False)
+    system = """You are an idea-portfolio next-best-action analyst. Compare the proposed idea with ALL supplied related ideas.
+Return ONLY one JSON object:
+{
+  "recommendedMatchId": "one supplied related idea id",
+  "nextBestAction": "join_existing|contact_owner|differentiate_scope|continue_separately",
+  "recommendation": "under 20 words",
+  "rationale": "under 45 words",
+  "missingEvidence": ["up to 3 concise questions"],
+  "comparisons": [{"id":"supplied id","overlap":["up to 3"],"differences":["up to 3"],"summary":"under 25 words"}]
+}
+Analyze all candidates together. Never invent ids, owners, metrics, ROI, or facts. Prefer collaboration when scope and outcome overlap; recommend separate work only for material user, decision, data, regulatory, or ownership differences."""
+    try:
+        result = await call_databricks_serving_endpoint(
+            prompt=prompt[:24000],
+            system_prompt=system,
+            max_tokens=1800,
+            temperature=0.1,
+            feature="idea-studio",
+            action="compare",
+            detail="nba",
+        )
+        raw = (result.get("response") or "").strip()
+        match = re.search(r"\{.*\}", raw, re.S)
+        parsed = json.loads(match.group(0), strict=False) if match else None
+        if not isinstance(parsed, dict):
+            raise ValueError("comparison was not an object")
+        recommended = str(parsed.get("recommendedMatchId") or "")
+        action = str(parsed.get("nextBestAction") or "")
+        comparisons = parsed.get("comparisons")
+        returned_ids = {str(c.get("id")) for c in comparisons or [] if isinstance(c, dict)}
+        if recommended not in allowed or action not in _NBA_ACTIONS or not isinstance(comparisons, list) or not returned_ids.issubset(allowed):
+            raise ValueError("comparison returned unknown ids or action")
+        response = {
+            "recommendedMatchId": recommended,
+            "nextBestAction": action,
+            "recommendation": _str(parsed.get("recommendation"), 180),
+            "rationale": _str(parsed.get("rationale"), 400),
+            "missingEvidence": [_str(v, 180) for v in parsed.get("missingEvidence") or [] if _str(v, 180)][:3],
+            "comparisons": [{
+                "id": str(c.get("id")),
+                "overlap": [_str(v, 160) for v in c.get("overlap") or [] if _str(v, 160)][:3],
+                "differences": [_str(v, 160) for v in c.get("differences") or [] if _str(v, 160)][:3],
+                "summary": _str(c.get("summary"), 220),
+            } for c in comparisons if isinstance(c, dict) and str(c.get("id")) in allowed],
+            "aiAssisted": True,
+            "fallback": False,
+        }
+        if not response["recommendation"] or not response["rationale"]:
+            raise ValueError("comparison omitted recommendation")
+    except Exception as e:
+        logger.info(f"[Ideas] NBA comparison fell back to deterministic evidence: {e}")
+        response = fallback
+    _comparison_cache[cache_key] = response
+    return {**response, "cached": False}
 
 
 @router.get("/ideate/ideas/{idea_id}", summary="Read one idea (read-only for anyone signed in)")
@@ -1212,11 +1447,12 @@ def _judge_context(idea: Dict[str, Any]) -> str:
         "mode": _mode(idea),
         "title": idea.get("title"),
         "rawIdea": idea.get("seed"),
-        "intent": pick(idea.get("spark"), "statement", "industry", "valueHypothesis", "businessLine"),
+        "intent": pick(idea.get("spark"), "statement", "industry", "valueHypothesis", "businessLine", "primaryEntity", "aliases"),
         "industryPlacement": leaf,
         "clarifyingAnswers": answers,
-        "chosenApproach": pick(shape, "title", "value", "effort", "riskiestAssumption", "cheapTest") if shape else None,
+        "chosenApproach": pick(shape, "title", "value", "effort", "riskiestAssumption", "cheapTest", "decisionStyle", "cadence") if shape else None,
         "genieQuestions": idea.get("genieQuestions"),
+        "questionDetails": idea.get("questionDetails"),
         "impact": "skipped" if not impact or impact.get("skipped") else {
             **pick(impact, "driverLabel", "scope"),
             "answers": [{"value": a.get("label"), "source": a.get("source")} for a in (impact.get("answers") or {}).values() if isinstance(a, dict)],

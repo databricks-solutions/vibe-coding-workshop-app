@@ -39,11 +39,21 @@ export interface UcName {
   comment: string;
 }
 
+export interface SourceTaxonomy {
+  source: string;
+  provenance: 'model' | 'tags' | 'inferred';
+  domains: { name: string; label: string; tableCount: number; subdomains: string[]; workspaceUrl: string }[];
+  domainCount: number;
+  subdomainCount: number;
+  docsUrl: string;
+}
+
 let listPromise: Promise<ApprovedSource[]> | null = null;
 let catalogsPromise: Promise<UcName[]> | null = null;
 const schemaPromises = new Map<string, Promise<UcName[]>>();
 const checkPromises = new Map<string, Promise<ApprovedSource>>();
 const digestPromises = new Map<string, Promise<BlueprintDigest>>();
+const taxonomyPromises = new Map<string, Promise<SourceTaxonomy>>();
 
 /** Sources are passed around as one comma-joined, sorted id so caches agree. */
 export const sourceKey = (ids: string[]) => Array.from(new Set(ids.map(s => s.trim()).filter(Boolean))).sort().join(',');
@@ -108,6 +118,17 @@ export const sourcesApi = {
     }
     return p;
   },
+  taxonomy(source: string): Promise<SourceTaxonomy> {
+    let p = taxonomyPromises.get(source);
+    if (!p) {
+      p = getJson<SourceTaxonomy>(`${BASE}/taxonomy?source=${encodeURIComponent(source)}`).catch(err => {
+        taxonomyPromises.delete(source);
+        throw err;
+      });
+      taxonomyPromises.set(source, p);
+    }
+    return p;
+  },
   digest(key: string, certifiedOnly = false): Promise<BlueprintDigest> {
     const cacheKey = `${key}|${certifiedOnly ? 'certified' : 'all'}`;
     let p = digestPromises.get(cacheKey);
@@ -125,7 +146,7 @@ export const sourcesApi = {
     return certifiedOnly ? certifiedFit : allTablesFit;
   },
   /** Forget the cached list, e.g. after an admin edits it. */
-  reset() { listPromise = null; catalogsPromise = null; schemaPromises.clear(); checkPromises.clear(); },
+  reset() { listPromise = null; catalogsPromise = null; schemaPromises.clear(); checkPromises.clear(); taxonomyPromises.clear(); },
 };
 
 const fitFetcher = (certifiedOnly: boolean): FitFetcher => ({
@@ -220,6 +241,22 @@ export function useSourceDigest(key: string, attempt = 0, certifiedOnly = false)
   }, [key, tag, certifiedOnly]);
   if (!key) return { data: null, error: null, loading: false };
   if (result?.tag === tag) return { data: result.data, error: result.error, loading: false };
+  return { data: null, error: null, loading: true };
+}
+
+/** Loads domain/subdomain metadata only for a source the user has selected. */
+export function useSourceTaxonomy(source: string, enabled: boolean): { data: SourceTaxonomy | null; error: string | null; loading: boolean } {
+  const [result, setResult] = useState<{ source: string; data: SourceTaxonomy | null; error: string | null } | null>(null);
+  useEffect(() => {
+    if (!enabled || !source) return;
+    let alive = true;
+    sourcesApi.taxonomy(source)
+      .then(data => alive && setResult({ source, data, error: null }))
+      .catch(err => alive && setResult({ source, data: null, error: String(err?.message || err) }));
+    return () => { alive = false; };
+  }, [enabled, source]);
+  if (!enabled || !source) return { data: null, error: null, loading: false };
+  if (result?.source === source) return { data: result.data, error: result.error, loading: false };
   return { data: null, error: null, loading: true };
 }
 

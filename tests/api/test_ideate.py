@@ -10,6 +10,7 @@ so no Databricks connectivity is needed.
 """
 
 import asyncio
+import json
 import os
 import sys
 import unittest
@@ -267,6 +268,72 @@ class _Req:
     headers: dict = {}
 
 
+class TestQuestionValidation(unittest.TestCase):
+    def setUp(self):
+        self._llm = ideate.call_databricks_serving_endpoint
+        self._user = ideate._get_session_user
+        ideate._get_session_user = lambda request: "me@example.com"
+
+    def tearDown(self):
+        ideate.call_databricks_serving_endpoint = self._llm
+        ideate._get_session_user = self._user
+
+    def test_real_time_question_falls_back_to_track_live(self):
+        async def unavailable(**kwargs):
+            raise RuntimeError("offline")
+
+        ideate.call_databricks_serving_endpoint = unavailable
+        out = asyncio.run(ideate.validate_ideate_question(
+            ideate.QuestionValidateRequest(
+                question="Which departures are at risk right now?",
+                existing_questions=[],
+                idea={},
+            ),
+            _Req(),
+        ))
+        self.assertEqual(out["kind"], "track_live")
+        self.assertFalse(out["aiAssisted"])
+        self.assertTrue(out["valid"])
+
+    def test_duplicate_is_rejected_without_ai(self):
+        out = asyncio.run(ideate.validate_ideate_question(
+            ideate.QuestionValidateRequest(
+                question="Which flights are delayed?",
+                existing_questions=["Which flights are delayed?"],
+                idea={},
+            ),
+            _Req(),
+        ))
+        self.assertTrue(out["duplicate"])
+        self.assertFalse(out["valid"])
+
+    def test_ai_metadata_preserves_original_and_offers_clearer_wording(self):
+        async def llm(**kwargs):
+            return {"response": json.dumps({
+                "valid": True,
+                "kind": "predictive",
+                "drives_action": "Assign a gate before risk rises",
+                "metrics": ["At-risk departures"],
+                "dimensions": ["Flight", "Gate"],
+                "clearer_question": "Which departures are likely to leave late in the next hour?",
+                "message": "Clear predictive question.",
+            })}
+
+        ideate.call_databricks_serving_endpoint = llm
+        out = asyncio.run(ideate.validate_ideate_question(
+            ideate.QuestionValidateRequest(
+                question="what flights late next",
+                existing_questions=[],
+                idea={"title": "Departure risk"},
+            ),
+            _Req(),
+        ))
+        self.assertEqual(out["kind"], "look_ahead")
+        self.assertEqual(out["metrics"], ["At-risk departures"])
+        self.assertTrue(out["clearerQuestion"].endswith("?"))
+        self.assertTrue(out["aiAssisted"])
+
+
 class TestSubmit(unittest.TestCase):
     def setUp(self):
         self.inserts = []
@@ -405,6 +472,95 @@ class TestSubmit(unittest.TestCase):
         out = asyncio.run(ideas.submit_saved_idea_for_review("idea-submit-1", _Req()))
         self.assertEqual(out["review"]["status"], "pending")
         self.assertEqual(out["ideaId"], "idea-submit-1")
+
+
+class TestIdeaStudioVersion2(unittest.TestCase):
+    def test_version_defaults_to_v1_and_prompts_only_add_v2_when_requested(self):
+        self.assertEqual(ideate.get_idea_studio_version(), "v1")
+        v1_q = ideate.build_step_system_prompt("questions", "ideate", version="v1")
+        v2_q = ideate.build_step_system_prompt("questions", "ideate", version="v2")
+        self.assertNotIn("question_details", v1_q)
+        self.assertIn("question_details", v2_q)
+        self.assertIn('{"question": "Exact question text?"', v2_q)
+        self.assertNotIn('{{"question": "Exact question text?"', v2_q)
+        self.assertNotIn("Key Results", ideate.brief_prompt_for("ideate", version="v1"))
+        self.assertIn("Key Results", ideate.brief_prompt_for("ideate", version="v2"))
+
+    def test_v2_questions_normalize_details_and_preserve_v1_shape_when_absent(self):
+        v1_out = ideate._normalize("questions", {"questions": ["Which platforms are crowded?"]})
+        self.assertNotIn("questionDetails", v1_out)
+
+        v2_out = ideate._normalize("questions", {
+            "questions": [
+                "What is the predicted peak load by platform in the next 2 hours?",
+                "Which platforms had the highest dwell variance yesterday?",
+            ],
+            "question_details": [
+                {
+                    "question": "What is the predicted peak load by platform in the next 2 hours",
+                    "kind": "predictive",
+                    "drives_action": "Deploy platform staff before peak crowding",
+                    "metrics": ["predicted-vs-actual congestion", "peak-load smoothing"],
+                    "dimensions": ["platform", "time window"],
+                },
+                {
+                    "question": "Which platforms had the highest dwell variance yesterday?",
+                    "kind": "look_back",
+                    "drives_action": "Redesign boarding schedule buffer",
+                },
+            ],
+        })
+        details = v2_out["questionDetails"]
+        q1 = "What is the predicted peak load by platform in the next 2 hours?"
+        self.assertEqual(details[q1]["kind"], "look_ahead")
+        self.assertEqual(details[q1]["drivesAction"], "Deploy platform staff before peak crowding")
+        self.assertEqual(details[q1]["metrics"], ["predicted-vs-actual congestion", "peak-load smoothing"])
+        self.assertEqual(details[q1]["dimensions"], ["platform", "time window"])
+
+    def test_v2_question_details_fall_back_to_position_when_model_rephrases_text(self):
+        out = ideate._normalize("questions", {
+            "questions": [
+                "Which platforms are crowded now?",
+                "Where should we deploy staff next?",
+            ],
+            "question_details": [
+                {"question": "Which platforms currently have crowding?", "kind": "track_live", "drives_action": "Watch the busiest platform"},
+                {"question": "Where should station leads deploy staff?", "kind": "what_to_do", "drives_action": "Move staff before the peak"},
+            ],
+        })
+        self.assertEqual(out["questionDetails"]["Which platforms are crowded now?"]["kind"], "track_live")
+        self.assertEqual(out["questionDetails"]["Where should we deploy staff next?"]["kind"], "what_to_do")
+
+    def test_v2_spark_shape_and_summary_optional_fields(self):
+        spark = ideate._normalize("spark", {
+            "title": "Predictive Station Congestion",
+            "statement": "Station leads see crowding 30 minutes ahead.",
+            "industry": "Rail",
+            "aliases": ["Congestion Forecasting", "Dwell-Time Management"],
+            "primary_entity": "platform / station / 30-min window",
+        })
+        self.assertEqual(spark["aliases"], ["Congestion Forecasting", "Dwell-Time Management"])
+        self.assertEqual(spark["primaryEntity"], "platform / station / 30-min window")
+
+        shape = ideate._normalize("shape", {"options": [{
+            "kind": "copilot",
+            "title": "Station Load Copilot",
+            "decision_style": "Recommends · You confirm",
+            "cadence": "Real-time (30m ahead)",
+        }]})
+        self.assertEqual(shape["options"][0]["decisionStyle"], "Recommends · You confirm")
+        self.assertEqual(shape["options"][0]["cadence"], "Real-time (30m ahead)")
+
+        summary = ideate._normalize("summary", {
+            "subtitle": "s",
+            "what_we_build": "w",
+            "key_results": [
+                {"kr": "Congestion peak prediction", "target": ">=80% precision at 30-min horizon"},
+                {"kr": "Dwell-time overruns", "target": "-20%"},
+            ],
+        })
+        self.assertEqual(len(summary["keyResults"]), 2)
+        self.assertEqual(summary["keyResults"][0]["kr"], "Congestion peak prediction")
 
 
 if __name__ == "__main__":

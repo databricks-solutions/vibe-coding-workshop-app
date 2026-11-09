@@ -86,6 +86,7 @@ class Base(unittest.TestCase):
         ii._library_approved = lambda: set()
         ii._memory.clear()
         ii._leaderboard_cache.clear()
+        ii._comparison_cache.clear()
         ii._score_log.clear()
 
     def tearDown(self):
@@ -176,6 +177,127 @@ class TestRead(Base):
     def test_view_requires_sign_in(self):
         self.save(idea())
         self.assertEqual(run(ii.get_idea("idea-0001", req(""))).status_code, 401)
+
+
+class TestSimilarity(Base):
+    def test_same_raw_seed_matches_a_richer_existing_idea_before_creation(self):
+        seed = "Store managers keep asking which promotions lifted sales and it takes a week to pull the numbers"
+        existing = idea(
+            id="idea-0002",
+            title="Promotion Lift Self-Service",
+            seed=seed,
+            spark={
+                "statement": "Store managers see promotion lift and margin while the promotion is running",
+                "industry": "Grocery Retail",
+                "aliases": ["Promotion Effectiveness", "Promo Lift Analysis"],
+            },
+        )
+        self.save(existing, user=BOB)
+        ii._memory["idea-0002"]["review_status"] = "approved"
+
+        out = run(ii.similar_ideas(ii.SimilarIdeaRequest(text=seed, industry="Retail & CPG"), req()))
+
+        self.assertEqual([m["id"] for m in out["matches"]], ["idea-0002"])
+        self.assertEqual(out["matches"][0]["proximity"], "strong")
+        self.assertIn("Nearly identical starting idea", out["matches"][0]["sharedSignals"])
+
+    def test_explainable_overlap_finds_submitted_work_and_excludes_current(self):
+        existing = idea(
+            id="idea-0002",
+            title="Prevent gate delay risk",
+            seed="Prevent gate delay risk before departure",
+            spark={"statement": "Prevent gate delay risk before departure", "industry": "Airlines"},
+        )
+        self.save(existing, user=BOB)
+        ii._memory["idea-0002"]["review_status"] = "pending"
+        target = idea(
+            title="Prevent gate delay before departure",
+            seed="Prevent gate delay risk before departure",
+            spark={"statement": "Prevent gate delay risk before departure", "industry": "Airlines"},
+        )
+        self.save(target)
+
+        out = run(ii.similar_ideas(ii.SimilarIdeaRequest(idea_id="idea-0001"), req()))
+        self.assertEqual([m["id"] for m in out["matches"]], ["idea-0002"])
+        self.assertEqual(out["matches"][0]["owner"]["displayName"], "Bob")
+        self.assertTrue(out["matches"][0]["sharedSignals"])
+
+    def test_same_industry_without_shared_problem_is_not_overlap(self):
+        other = idea(
+            id="idea-0002",
+            title="Optimize catering inventory",
+            seed="Forecast meals and reduce food waste",
+            spark={"statement": "Forecast meals and reduce food waste", "industry": "Airlines"},
+        )
+        self.save(other, user=BOB)
+        ii._memory["idea-0002"]["review_status"] = "pending"
+        out = run(ii.similar_ideas(ii.SimilarIdeaRequest(
+            text="Prevent gate delay risk before departure",
+            industry="Airlines",
+        ), req()))
+        self.assertEqual(out["matches"], [])
+
+    def test_nba_compares_all_candidates_and_validates_ids(self):
+        for n, owner in ((2, BOB), (3, ALICE)):
+            candidate = idea(
+                id=f"idea-000{n}",
+                title=f"Gate delay action {n}",
+                seed="Prevent gate delay risk before departure",
+                spark={"statement": "Prevent gate delay risk before departure", "industry": "Airlines"},
+            )
+            self.save(candidate, user=owner)
+            ii._memory[candidate["id"]]["review_status"] = "pending"
+        self.save(idea(
+            seed="Prevent gate delay risk before departure",
+            spark={"statement": "Prevent gate delay risk before departure", "industry": "Airlines"},
+        ))
+
+        async def compare_llm(**kwargs):
+            return {"response": json.dumps({
+                "recommendedMatchId": "idea-0002",
+                "nextBestAction": "contact_owner",
+                "recommendation": "Coordinate with Bob.",
+                "rationale": "The same gate-delay decision and outcome are already represented.",
+                "missingEvidence": ["Confirm station scope."],
+                "comparisons": [
+                    {"id": "idea-0002", "overlap": ["Same decision"], "differences": ["Owner"], "summary": "Coordinate."},
+                    {"id": "idea-0003", "overlap": ["Same outcome"], "differences": ["Scope"], "summary": "Compare."},
+                ],
+            })}
+
+        ii.call_databricks_serving_endpoint = compare_llm
+        out = run(ii.compare_ideas(ii.CompareIdeasRequest(
+            idea_id="idea-0001",
+            match_ids=["idea-0002", "idea-0003"],
+        ), req()))
+        self.assertTrue(out["aiAssisted"])
+        self.assertEqual(out["recommendedMatchId"], "idea-0002")
+        self.assertEqual(len(out["comparisons"]), 2)
+
+    def test_nba_malformed_reply_falls_back(self):
+        other = idea(
+            id="idea-0002",
+            title="Prevent gate delay risk",
+            seed="Prevent gate delay risk before departure",
+            spark={"statement": "Prevent gate delay risk before departure", "industry": "Airlines"},
+        )
+        self.save(other, user=BOB)
+        ii._memory["idea-0002"]["review_status"] = "pending"
+        self.save(idea(
+            seed="Prevent gate delay risk before departure",
+            spark={"statement": "Prevent gate delay risk before departure", "industry": "Airlines"},
+        ))
+
+        async def bad_llm(**kwargs):
+            return {"response": "not json"}
+
+        ii.call_databricks_serving_endpoint = bad_llm
+        out = run(ii.compare_ideas(ii.CompareIdeasRequest(
+            idea_id="idea-0001",
+            match_ids=["idea-0002"],
+        ), req()))
+        self.assertTrue(out["fallback"])
+        self.assertEqual(out["recommendedMatchId"], "idea-0002")
 
 
 class TestJudge(Base):

@@ -3,6 +3,7 @@ import { apiClient } from '../../../api/client';
 import { useIdeas } from './useIdeas';
 import { alsoLeaves, buildContext, caseFigures, chosenShape, nextStep, placedLeaf, stepIndex, stepMeta } from './ideaContext';
 import { money, skippedImpact } from './businessCase';
+import { useIdeaStudioVersion } from './approval';
 import { sampleById } from '../samples';
 import type {
   Assumption,
@@ -15,6 +16,7 @@ import type {
   ImpactAnswer,
   ImpactDriver,
   IndustryMap,
+  QuestionDetail,
   QuestionSource,
   ShapeOption,
   SparkResult,
@@ -24,7 +26,8 @@ import type {
 
 type WithAssumptions<T> = T & { assumptions?: string[] };
 
-export const MAX_GENIE_QUESTIONS = 6;
+export const RECOMMENDED_GENIE_QUESTIONS = 6;
+export const MAX_GENIE_QUESTIONS = 10;
 
 const stamp = () => new Date().toISOString();
 
@@ -61,7 +64,11 @@ function resetFrom(idea: Idea, step: StepKey): Partial<Idea> {
   if (after('questions') && idea.genieQuestions) {
     // Questions from the approved use case are the user's starting point, so they survive a reset.
     const kept = idea.genieQuestions.filter(q => idea.genieQuestionSources?.[q] === 'use_case');
-    Object.assign(patch, { genieQuestions: kept.length ? kept : undefined, genieQuestionSources: Object.fromEntries(kept.map(q => [q, 'use_case'])) });
+    Object.assign(patch, {
+      genieQuestions: kept.length ? kept : undefined,
+      genieQuestionSources: Object.fromEntries(kept.map(q => [q, 'use_case'])),
+      questionDetails: undefined,
+    });
   }
   if (after('impact')) patch.impact = undefined;
   if (after('brief')) Object.assign(patch, { brief: undefined, lockedAt: undefined });
@@ -93,6 +100,7 @@ function reopenFrom(idea: Idea, step: StepKey): Partial<Idea> {
 }
 
 export function useIdeaFlow(ideaId: string) {
+  const ideaStudioVersion = useIdeaStudioVersion();
   const { ideas, updateIdea } = useIdeas();
   const sample = sampleById(ideaId);
   const idea = sample ?? ideas.find(i => i.id === ideaId);
@@ -107,9 +115,14 @@ export function useIdeaFlow(ideaId: string) {
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [briefDraft, setBriefDraft] = useState('');
   const [pushbacks, setPushbacks] = useState<string[] | null>(null);
+  const [validatingQuestions, setValidatingQuestions] = useState<Set<string>>(new Set());
   const briefCtrl = useRef<AbortController | null>(null);
+  const questionValidationCtrls = useRef<Record<string, AbortController>>({});
 
-  useEffect(() => () => briefCtrl.current?.abort(), []);
+  useEffect(() => () => {
+    briefCtrl.current?.abort();
+    Object.values(questionValidationCtrls.current).forEach(ctrl => ctrl.abort());
+  }, []);
   useEffect(() => setPushbacks(null), [viewStep]);
 
   const patch = useCallback((p: Partial<Idea> | ((i: Idea) => Partial<Idea>)) => {
@@ -247,10 +260,13 @@ export function useIdeaFlow(ideaId: string) {
       patch({ shapes: r.options, chosenShapeId: undefined });
       mergeAssumptions('shape', r.assumptions);
     } else if (step === 'questions') {
-      const r = await call<{ questions: string[]; alternates?: string[] }>('questions', 'questions', { ...ctx, providedQuestions: base.genieQuestions ?? [] }, feedback);
+      const r = await call<{ questions: string[]; alternates?: string[]; questionDetails?: Record<string, QuestionDetail> }>('questions', 'questions', { ...ctx, providedQuestions: base.genieQuestions ?? [] }, feedback);
       if (!r) return;
       mergeQuestions(r.questions, 'ai');
-      patch({ genieAlternates: r.alternates ?? [] });
+      patch(i => ({
+        genieAlternates: r.alternates ?? [],
+        ...(r.questionDetails ? { questionDetails: { ...(i.questionDetails ?? {}), ...r.questionDetails } } : {}),
+      }));
     } else if (step === 'impact') {
       const r = await call<Omit<Impact, 'answers'>>('impact', 'impact', ctx, feedback);
       if (!r || ideaRef.current?.impact?.skipped) return;
@@ -380,11 +396,94 @@ export function useIdeaFlow(ideaId: string) {
     revise('clarify', { workflow }, 'Adjusted the workflow');
   }, [revise]);
 
+  const validateQuestion = useCallback(async (question: string, existing: string[]) => {
+    const current = ideaRef.current;
+    if (!current || readOnly) return;
+    questionValidationCtrls.current[question]?.abort();
+    const ctrl = new AbortController();
+    questionValidationCtrls.current[question] = ctrl;
+    setValidatingQuestions(items => new Set(items).add(question));
+    try {
+      const result = await apiClient.validateIdeaQuestion(
+        question,
+        existing.filter(q => q !== question),
+        buildContext(current, 'questions'),
+        ctrl.signal,
+      );
+      if (!ideaRef.current?.genieQuestions?.includes(question)) return;
+      patch(i => ({
+        questionDetails: {
+          ...(i.questionDetails ?? {}),
+          [question]: {
+            kind: result.kind,
+            drivesAction: result.drivesAction || undefined,
+            metrics: result.metrics,
+            dimensions: result.dimensions,
+            clearerQuestion: result.clearerQuestion || undefined,
+            validationMessage: result.message || undefined,
+          },
+        },
+      }));
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError' && ideaRef.current?.genieQuestions?.includes(question)) {
+        patch(i => ({
+          questionDetails: {
+            ...(i.questionDetails ?? {}),
+            [question]: {
+              ...(i.questionDetails?.[question] ?? {}),
+              validationMessage: 'Question kept. Automatic validation is unavailable right now.',
+            },
+          },
+        }));
+      }
+    } finally {
+      if (questionValidationCtrls.current[question] === ctrl) {
+        delete questionValidationCtrls.current[question];
+        setValidatingQuestions(items => {
+          const next = new Set(items);
+          next.delete(question);
+          return next;
+        });
+      }
+    }
+  }, [patch, readOnly]);
+
   const setGenieQuestions = useCallback((list: string[]) => {
+    const before = ideaRef.current?.genieQuestions ?? [];
+    const added = list.filter(q => !before.includes(q));
     revise('questions', i => ({
       genieQuestions: list,
       genieQuestionSources: Object.fromEntries(list.map(q => [q, i.genieQuestionSources?.[q] ?? (i.genieAlternates?.includes(q) ? 'ai' : 'you')])),
+      questionDetails: Object.fromEntries(list.flatMap(q => i.questionDetails?.[q] ? [[q, i.questionDetails[q]]] : [])),
     }), 'Changed the questions for Genie');
+    added.forEach(question => void validateQuestion(question, list));
+  }, [revise, validateQuestion]);
+
+  const replaceGenieQuestion = useCallback((question: string, replacement: string) => {
+    const current = ideaRef.current;
+    if (!current?.genieQuestions?.includes(question) || !replacement.trim()) return;
+    const nextText = replacement.trim();
+    revise('questions', i => {
+      const list = (i.genieQuestions ?? []).map(q => q === question ? nextText : q);
+      const source = i.genieQuestionSources?.[question] ?? 'you';
+      const detail = i.questionDetails?.[question];
+      const sources = { ...(i.genieQuestionSources ?? {}) };
+      const details = { ...(i.questionDetails ?? {}) };
+      delete sources[question];
+      delete details[question];
+      sources[nextText] = source;
+      if (detail) details[nextText] = { ...detail, clearerQuestion: undefined };
+      return { genieQuestions: list, genieQuestionSources: sources, questionDetails: details };
+    }, 'Used clearer wording for a Genie question');
+  }, [revise]);
+
+  const setQuestionKind = useCallback((question: string, kind: QuestionDetail['kind']) => {
+    revise('questions', i => ({
+      questionDetails: {
+        ...(i.questionDetails ?? {}),
+        [question]: { ...(i.questionDetails?.[question] ?? {}), kind },
+      },
+    }), 'Changed a Genie question category');
   }, [revise]);
 
   const chooseShape = useCallback((id: string) => {
@@ -443,6 +542,7 @@ export function useIdeaFlow(ideaId: string) {
     pushbacks,
     clearPushbacks: () => setPushbacks(null),
     readOnly,
+    ideaStudioVersion,
     patch,
     revise,
     run,
@@ -462,6 +562,9 @@ export function useIdeaFlow(ideaId: string) {
     toggleLever,
     generateSummary,
     setGenieQuestions,
+    validatingQuestions,
+    replaceGenieQuestion,
+    setQuestionKind,
     mergeQuestions,
     updateWorkflow,
   };

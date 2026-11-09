@@ -45,8 +45,8 @@ export function BuildLinkBar({ idea, readOnly }: { idea: Idea; readOnly?: boolea
           <History className="w-3.5 h-3.5" /> Update build
         </button>
       )}
-      <button onClick={backToIdea} title={builtInInsights && idea.lockedAt ? 'Go back to where you chose the data for this idea' : 'See how the idea came about, and change any answer'} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-ui-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
-        <ArrowLeft className="w-3.5 h-3.5" /> Back to the idea
+      <button onClick={backToIdea} title="Open the seven idea steps, review every decision, and change any answer" className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-ui-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
+        <ArrowLeft className="w-3.5 h-3.5" /> Review idea
       </button>
       {!readOnly && (parked ? (
         <button onClick={resume} className="px-2.5 py-1 rounded-lg text-ui-xs font-medium text-primary hover:bg-primary/10">Resume building</button>

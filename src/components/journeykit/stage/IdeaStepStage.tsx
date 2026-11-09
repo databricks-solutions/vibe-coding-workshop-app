@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, History, Loader2, RefreshCw, SkipForward } from 'lucide-react';
+import { ArrowRight, History, Loader2, RefreshCw, SkipForward, Sparkles } from 'lucide-react';
 import { ExpandableErrorBanner } from '../../ExpandableErrorBanner';
 import { STEP_ART } from '../art';
 import { stepIndex, stepMeta, stepsOf } from '../engine/ideaContext';
@@ -47,10 +47,12 @@ interface IdeaStepStageProps {
   /** Back from the first step, e.g. to the Start screen. */
   onBackFromFirst?: () => void;
   onChangeUseCase?: () => void;
+  /** Where a completed Insights brief continues, normally the Data phase. */
+  onContinueAfterBrief?: () => void;
 }
 
 /** Renders the current idea step the same way in every flow: header, body, and the approve gate. */
-export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseCase }: IdeaStepStageProps) {
+export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseCase, onContinueAfterBrief }: IdeaStepStageProps) {
   const { idea, viewStep, loading, error } = flow;
   const autoRan = useRef<string | null>(null);
   const reduceMotion = useReducedMotion();
@@ -83,7 +85,7 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
   if (!idea) return null;
 
   if (showsTrailhead(idea, flow.readOnly)) {
-    return <TrailheadIntro idea={idea} onStart={() => flow.patch({ trailSeenAt: new Date().toISOString() })} />;
+    return <TrailheadIntro idea={idea} ideaStudioVersion={flow.ideaStudioVersion} onStart={() => flow.patch({ trailSeenAt: new Date().toISOString() })} />;
   }
 
   const config = modeOf(idea);
@@ -143,6 +145,19 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
         title={meta.hint}
         subtitle={subtitle}
       />
+
+      {flow.ideaStudioVersion === 'v2' && !flow.readOnly && viewStep === 'spark' && idea.spark && !idea.spark.primaryEntity && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3" role="status">
+          <Sparkles className="w-4 h-4 text-primary shrink-0" />
+          <p className="flex-1 min-w-[16rem] text-ui-sm text-muted-foreground">
+            <span className="font-medium text-foreground">This idea was shaped in Classic.</span>{' '}
+            Refresh it to add the V2 decision grain, action guidance, and Key Results.
+          </p>
+          <GhostButton onClick={() => flow.run('spark', 'Refresh this idea using Decision-Guided V2. Preserve its intent.')}>
+            Refresh in V2
+          </GhostButton>
+        </div>
+      )}
 
       {prefilled && idea.sourceUseCase && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 animate-fade-in">
@@ -212,7 +227,20 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
                 </PrimaryButton>
               )}
             />
-          ) : viewStep === 'brief' && approved ? <StepDock {...dock} /> : <StepActions
+          ) : viewStep === 'brief' && approved ? (
+            onContinueAfterBrief ? (
+              <ActionBar
+                onBack={onBack}
+                backLabel={backLabel}
+                dock={dock}
+                primary={(
+                  <PrimaryButton size="lg" onClick={onContinueAfterBrief}>
+                    Continue to Data <ArrowRight className="w-4 h-4" />
+                  </PrimaryButton>
+                )}
+              />
+            ) : <StepDock {...dock} />
+          ) : <StepActions
             canApprove={canApprove}
             approveLabel={approved && viewStep === 'brief' ? 'Approved' : config.approveLabel(viewStep, prefilled)}
             onApprove={() => flow.approve(viewStep)}

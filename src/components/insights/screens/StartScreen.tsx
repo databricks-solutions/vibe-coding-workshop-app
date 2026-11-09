@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, BadgeCheck, Lightbulb, PenLine } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Lightbulb, Loader2, PenLine } from 'lucide-react';
+import { apiClient, type SimilarIdeaMatch } from '../../../api/client';
 import {
-  ART, DURATION, EASE, FadeIn, Headline, MAX_GENIE_QUESTIONS, PathCard, PrimaryButton, VoiceTextarea, ideaMinutes,
+  ART, DURATION, EASE, FadeIn, Headline, MAX_GENIE_QUESTIONS, PathCard, PrimaryButton, SimilarIdeasGate, VoiceTextarea, ideaMinutes,
+  type OverlapDecision,
 } from '../../journeykit';
 import { INDUSTRY_IDEAS } from '../journey';
 import { UseCasePicker } from '../usecases/UseCasePicker';
@@ -41,15 +43,42 @@ interface StartScreenProps {
   onIndustryChange: (id: string) => void;
   replacingExisting: boolean;
   onApproved: (uc: ApprovedUseCase, questions: string[], preview: UseCasePreview) => void;
-  onOwn: (text: string) => void;
+  onOwn: (text: string, overlapDecision?: OverlapDecision) => void;
 }
 
 export function StartScreen({ industryId, onIndustryChange, replacingExisting, onApproved, onOwn }: StartScreenProps) {
   const [path, setPath] = useState<StartPath | null>(null);
   const [text, setText] = useState('');
+  const [checkingSimilar, setCheckingSimilar] = useState(false);
+  const [similarGate, setSimilarGate] = useState<{
+    matches: SimilarIdeaMatch[];
+    fingerprint: string;
+    matcherVersion: string;
+    text: string;
+  } | null>(null);
   const example = IDEA_EXAMPLES[industryId];
   const minutes = { approved: ideaMinutes('insights', ['spark', 'map']), own: ideaMinutes('insights') };
   const canShape = text.trim().length >= 12;
+  const startOwn = async () => {
+    const trimmed = text.trim();
+    if (!canShape || checkingSimilar) return;
+    setCheckingSimilar(true);
+    try {
+      const result = await apiClient.findSimilarIdeas({
+        text: trimmed,
+        industry: INDUSTRY_IDEAS.find(i => i.id === industryId)?.label ?? '',
+      });
+      if (result.matches.length) {
+        setSimilarGate({ ...result, text: trimmed });
+        return;
+      }
+    } catch {
+      // Related-work guidance is advisory and fails open.
+    } finally {
+      setCheckingSimilar(false);
+    }
+    onOwn(trimmed);
+  };
 
   return (
     <>
@@ -156,8 +185,8 @@ export function StartScreen({ industryId, onIndustryChange, replacingExisting, o
                   <p className="text-ui-sm text-muted-foreground">
                     {replacingExisting ? 'This replaces the idea saved in your current project.' : 'A sentence or two is plenty. You can refine it next.'}
                   </p>
-                  <PrimaryButton size="lg" disabled={!canShape} onClick={() => onOwn(text.trim())}>
-                    Start shaping it <ArrowRight className="w-4 h-4" />
+                  <PrimaryButton size="lg" disabled={!canShape || checkingSimilar} onClick={() => void startOwn()}>
+                    {checkingSimilar ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking related work…</> : <>Start shaping it <ArrowRight className="w-4 h-4" /></>}
                   </PrimaryButton>
                 </div>
               </div>
@@ -165,6 +194,26 @@ export function StartScreen({ industryId, onIndustryChange, replacingExisting, o
           </motion.div>
         )}
       </AnimatePresence>
+      {similarGate && (
+        <SimilarIdeasGate
+          matches={similarGate.matches}
+          mode="create"
+          currentDraft={{ text: similarGate.text, industry: INDUSTRY_IDEAS.find(i => i.id === industryId)?.label ?? '' }}
+          onClose={() => setSimilarGate(null)}
+          onContinue={(reasonCode, reasonText) => {
+            onOwn(similarGate.text, {
+              action: 'continue_independently',
+              reasonCode,
+              reasonText,
+              similarIdeaIds: similarGate.matches.map(m => m.id),
+              matcherVersion: similarGate.matcherVersion,
+              fingerprint: similarGate.fingerprint,
+              acknowledgedAt: new Date().toISOString(),
+            });
+            setSimilarGate(null);
+          }}
+        />
+      )}
     </>
   );
 }

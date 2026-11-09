@@ -167,8 +167,16 @@ export function ExplorerHeader({ eyebrow, title, picker, why, description, pill 
 
 function TrustStrip({ digest, note }: { digest: BlueprintDigest; note: string }) {
   const { stats, trust } = digest;
+  const subdomains = new Set(digest.areas.flatMap(a => a.subdomains ?? [])).size;
+  const provenance = digest.models?.length
+    ? 'Industry model domains'
+    : trust.areasBy?.includes('tags')
+      ? 'Governed tag domains'
+      : trust.areasBy?.includes('joins')
+        ? 'Business areas inferred from table connections'
+        : null;
   const tiles = [
-    { v: stats.areas, l: 'business areas' },
+    { v: stats.areas, l: 'domains / areas' },
     { v: stats.tables, l: 'tables' },
     { v: stats.measures, l: 'ready-made measures' },
     { v: stats.links, l: 'connections' },
@@ -195,6 +203,8 @@ function TrustStrip({ digest, note }: { digest: BlueprintDigest; note: string })
         )}
         {trust.standards.length > 0 && <span>Aligned to {trust.standards.slice(0, 5).join(', ')}</span>}
         {trust.sensitiveFields > 0 && <span>{trust.sensitiveFields} sensitive fields labelled</span>}
+        {subdomains > 0 && <span>{subdomains} subdomain{subdomains === 1 ? '' : 's'}</span>}
+        {provenance && <span>{provenance}</span>}
         <span className="sm:ml-auto">{note}</span>
       </div>
     </div>

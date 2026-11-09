@@ -1,4 +1,4 @@
-import { CircleDollarSign, Quote } from 'lucide-react';
+import { CircleDollarSign, Crosshair, Quote, Tags } from 'lucide-react';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 
 const LINE = { cost: 'Lower cost', revenue: 'More revenue', risk: 'Less risk', capacity: 'More capacity' } as const;
@@ -74,6 +74,29 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
             <span className="text-ui-xs text-muted-foreground" title="Where this lands in the use case catalog">in {spark.catalogIndustryLabel}</span>
           )}
         </div>
+        {flow.ideaStudioVersion === 'v2' && spark.primaryEntity && (
+          <div className="rounded-xl border border-primary/20 bg-primary/[0.04] px-3.5 py-3">
+            <p className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-wider font-semibold text-primary">
+              <Crosshair className="w-3.5 h-3.5" /> Decision grain
+            </p>
+            <input
+              title={readOnly ? undefined : 'Click to edit'}
+              readOnly={readOnly}
+              value={spark.primaryEntity}
+              onChange={e => set({ primaryEntity: e.target.value })}
+              className="w-full bg-transparent text-ui-base font-medium text-foreground outline-none border-b border-transparent hover:border-border focus:border-primary/60 mt-1 pb-0.5 transition-colors"
+            />
+            <p className="text-ui-xs text-muted-foreground mt-1">The operational unit and time window each decision acts on.</p>
+          </div>
+        )}
+        {flow.ideaStudioVersion === 'v2' && !!spark.aliases?.length && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-ui-xs text-muted-foreground"><Tags className="w-3.5 h-3.5" /> Also known as</span>
+            {spark.aliases.map(alias => (
+              <span key={alias} className="px-2.5 py-1 rounded-full border border-border bg-secondary/40 text-ui-xs text-foreground/80">{alias}</span>
+            ))}
+          </div>
+        )}
         {!readOnly && !!spark.industryAlternatives?.length && (
           <div className="flex flex-wrap items-center gap-1.5 animate-fade-in">
             <span className="text-ui-xs text-muted-foreground">Did you mean</span>

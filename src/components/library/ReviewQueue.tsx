@@ -10,6 +10,7 @@ import {
   History,
   Inbox,
   Loader2,
+  Maximize2,
   RotateCcw,
   Search,
   Sparkles,
@@ -36,6 +37,7 @@ import type { LibraryModel } from './model';
 import type { LibraryActions } from './useLibrary';
 import { Avatar, EmptyState } from './ui';
 import { cx } from './cx';
+import { ReviewDossier } from '../review/ReviewDossier';
 
 interface Props {
   notify: (notice: { tone: 'success' | 'error' | 'info'; message: string }) => void;
@@ -106,8 +108,10 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
   const [currentUser, setCurrentUser] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<IdeaReviewStatus | 'all'>('all');
+  const [overlapOnly, setOverlapOnly] = useState(false);
   const [note, setNote] = useState('');
   const [acting, setActing] = useState<IdeaReviewDecision | null>(null);
+  const [dossierOpen, setDossierOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -233,13 +237,14 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
 
   const filtered = useMemo(() => items.filter(i =>
     (statusFilter === 'all' || i.review.status === statusFilter)
+    && (!overlapOnly || !!i.overlappingIdeas?.length)
     && `${i.title} ${i.owner?.displayName ?? ''} ${i.owner?.email ?? ''} ${i.industry}`.toLowerCase().includes(query.toLowerCase()),
-  ), [items, query, statusFilter]);
+  ), [items, overlapOnly, query, statusFilter]);
 
   const highlightedIds = useMemo(() => {
-    if (statusFilter === 'all' && !query.trim()) return null;
+    if (statusFilter === 'all' && !query.trim() && !overlapOnly) return null;
     return new Set(filtered.map(i => i.id));
-  }, [filtered, statusFilter, query]);
+  }, [filtered, overlapOnly, statusFilter, query]);
 
   useEffect(() => {
     if (filtered.length && !filtered.some(i => i.id === selectedId)) {
@@ -298,17 +303,18 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
     if (!ideaId.startsWith('catalog:')) navigate(`/ideate/view/${encodeURIComponent(ideaId)}`);
   };
 
-  const decide = async (action: IdeaReviewDecision) => {
+  const decide = async (action: IdeaReviewDecision, decisionNote = note) => {
     if (!detail || !canReview) return;
-    if (action !== 'approve' && !note.trim()) {
+    if (action !== 'approve' && !decisionNote.trim()) {
       notify({ tone: 'info', message: 'Add a reviewer note before returning or rejecting the idea.' });
       return;
     }
     setActing(action);
     try {
-      const result = await apiClient.ideaReviewAction(detail.id, action, note);
+      const result = await apiClient.ideaReviewAction(detail.id, action, decisionNote);
       setDetail({ ...detail, review: result.review });
       setItems(list => list.map(i => i.id === detail.id ? { ...i, review: result.review } : i));
+      setNote(decisionNote);
       if (actions) {
         await actions.reload();
       }
@@ -516,10 +522,17 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
             <aside className="rounded-2xl border border-border bg-card p-3.5 xl:sticky xl:top-5 space-y-3">
               <div className="flex items-center justify-between px-1">
                 <h2 className="text-ui-sm font-semibold text-foreground">Submitted use cases</h2>
-                <span className="text-ui-2xs text-muted-foreground tabular-nums">
-                  Showing {filtered.length} of {items.length}
-                </span>
+                <button
+                  onClick={() => setOverlapOnly(v => !v)}
+                  className={cx(
+                    'rounded-full border px-2 py-0.5 text-ui-2xs font-semibold transition-colors',
+                    overlapOnly ? 'border-amber-500/40 bg-amber-500/12 text-amber-700 dark:text-amber-300' : 'border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  Overlap · {items.filter(i => i.overlappingIdeas?.length).length}
+                </button>
               </div>
+              <p className="px-1 text-ui-2xs text-muted-foreground tabular-nums">Showing {filtered.length} of {items.length}</p>
 
               {/* Status Filter Tabs with Counts */}
               <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-secondary/50 border border-border/60">
@@ -620,6 +633,11 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
                           )}
                           <span>·</span>
                           <span>rev {item.review.revision}</span>
+                          {!!item.overlappingIdeas?.length && (
+                            <span className="rounded-full bg-amber-500/12 px-1.5 py-0.5 font-semibold text-amber-700 dark:text-amber-300">
+                              Overlap · {item.overlappingIdeas.length}
+                            </span>
+                          )}
                         </div>
 
                         <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between gap-2 text-ui-2xs">
@@ -695,16 +713,24 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
                         </div>
                       </div>
 
-                      {linkedLibraryUc && onOpenUseCase && (
+                      <div className="flex flex-wrap gap-2">
                         <button
-                          onClick={() => onOpenUseCase(linkedLibraryUc)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-background/70 text-ui-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+                          onClick={() => setDossierOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-ui-xs font-semibold shadow-sm hover:opacity-90"
                         >
-                          <BadgeCheck className="w-3.5 h-3.5 text-primary" />
-                          Open in Library drawer
-                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <Maximize2 className="w-3.5 h-3.5" /> Open full-screen review
                         </button>
-                      )}
+                        {linkedLibraryUc && onOpenUseCase && (
+                          <button
+                            onClick={() => onOpenUseCase(linkedLibraryUc)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-background/70 text-ui-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+                          >
+                            <BadgeCheck className="w-3.5 h-3.5 text-primary" />
+                            Open in Library drawer
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -851,6 +877,14 @@ export function ReviewQueue({ notify, model, actions, onOpenUseCase }: Props) {
             </div>
           </div>
         </div>
+      )}
+      {dossierOpen && detail && (
+        <ReviewDossier
+          detail={detail}
+          acting={acting}
+          onClose={() => setDossierOpen(false)}
+          onDecision={(action, decisionNote) => decide(action, decisionNote)}
+        />
       )}
     </div>
   );

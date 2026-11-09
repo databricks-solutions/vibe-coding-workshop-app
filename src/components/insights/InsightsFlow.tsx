@@ -146,7 +146,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
 
   const links = useWorkspaceLinks();
   const parsed = useMemo(() => parseBrief(customDescription || stepPrompts[1] || ''), [customDescription, stepPrompts]);
-  const { ideas, createIdea, updateIdea, deleteIdea } = useIdeas();
+  const { ideas, createIdea, updateIdea } = useIdeas();
 
   const [stage, setStage] = useState<InsightsStage>('start');
   const [ideaId, setIdeaId] = useState<string | null>(null);
@@ -182,15 +182,18 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     const carried = idea && !idea.sessionId ? idea : undefined;
     if (!carried) {
       const linked = sessionId ? ideas.find(i => (i.mode === 'insights' || i.buildTarget === 'insights') && i.sessionId === sessionId) : undefined;
+      const draft = linked?.setupDraft;
       setIdeaId(linked?.id ?? null);
       setLockSeen(linked?.lockedAt);
       setStage(linked ? (linked.lockedAt ? (linked.buildStage === 'data' ? 'data' : 'locked') : 'idea') : 'start');
-      setDataSource(parsed.questions.length ? parsed.dataSource : null);
-      setDataLocation(parsed.dataLocation);
-      setBlueprint(parsed.blueprint);
-      setSource(parsed.source);
-      setIncludeUncertified(parsed.includeUncertified);
-      setName(fitName(linked?.title ?? (parsed.questions.length ? (customUseCaseLabel || selectedUseCaseLabel) : '')));
+      setDataSource(draft?.dataSource ?? (parsed.questions.length ? parsed.dataSource : null));
+      setDataLocation(draft?.dataLocation ?? parsed.dataLocation);
+      setBlueprint((draft?.blueprint as BlueprintChoice | null | undefined) ?? parsed.blueprint);
+      setSource((draft?.source as SourceChoice | null | undefined) ?? parsed.source);
+      setPreferredSlug(draft?.preferredSlug ?? null);
+      setIncludeUncertified(draft?.includeUncertified ?? parsed.includeUncertified);
+      setName(draft?.name ?? fitName(linked?.title ?? (parsed.questions.length ? (customUseCaseLabel || selectedUseCaseLabel) : '')));
+      setAddOnChoice((draft?.addOns as AddOn[] | null | undefined) ?? null);
       setStartIndustry(INDUSTRY_IDEAS.find(i => i.label === selectedIndustryLabel)?.id ?? insightsIndustryFor(selectedIndustry));
     }
   }
@@ -209,6 +212,33 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   useEffect(() => {
     if (idea && !idea.sessionId && sessionId && !readOnly) updateIdea(idea.id, { sessionId });
   }, [idea, sessionId, readOnly, updateIdea]);
+
+  useEffect(() => {
+    if (!idea?.lockedAt || readOnly || stage === 'idea' || stage === 'start') return;
+    const next = {
+      dataSource,
+      dataLocation,
+      includeUncertified,
+      blueprint,
+      source,
+      preferredSlug,
+      name,
+      addOns: addOnChoice,
+    };
+    const prior = idea.setupDraft;
+    const comparable = prior && {
+      dataSource: prior.dataSource,
+      dataLocation: prior.dataLocation,
+      includeUncertified: prior.includeUncertified,
+      blueprint: prior.blueprint,
+      source: prior.source,
+      preferredSlug: prior.preferredSlug,
+      name: prior.name,
+      addOns: prior.addOns,
+    };
+    if (JSON.stringify(comparable) === JSON.stringify(next)) return;
+    updateIdea(idea.id, { setupDraft: { ...next, updatedAt: new Date().toISOString() } });
+  }, [addOnChoice, blueprint, dataLocation, dataSource, idea, includeUncertified, name, preferredSlug, readOnly, source, stage, updateIdea]);
 
   useEffect(() => {
     document.querySelector('main .overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -286,7 +316,22 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const portfolio = ideas.map(other => other.id === idea?.id && priority ? priority : assessPortfolioPriority(other));
 
   const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint, tables: exploringTables });
-  const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
+  const openPhase = (key: string) => {
+    if (!idea) return;
+    setKeepCurrent(false);
+    if (ready) setReviewing(true);
+    if (key === 'idea') {
+      setLockSeen(idea.lockedAt);
+      setStage('idea');
+    } else if (key === 'data') {
+      setStage('data');
+    } else if (key === 'model') {
+      setStage(usingBlueprint ? 'blueprint' : exploringTables ? 'source' : 'data');
+    } else if (key === 'plan') {
+      setStage('ready');
+    }
+  };
+  const progress = <JourneyProgress phases={phases()} onSelectPhase={openPhase} trailing="then 4 build chapters" />;
   const compare = (
     <button onClick={openPathComparison} className="inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground hover:text-foreground transition-colors">
       <Route className="w-4 h-4" /> <span className="hidden lg:inline">Compare paths</span>
@@ -300,8 +345,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     setStage('idea');
   };
 
-  const discardIdea = () => {
-    if (idea) deleteIdea(idea.id);
+  const leaveIdea = () => {
     setIdeaId(null);
     setStage('start');
   };
@@ -465,11 +509,18 @@ function InsightsFlowInner(props: InsightsFlowProps) {
             questions: qs,
             sessionId,
           }))}
-          onOwn={text => openIdea(createIdea(text, INDUSTRY_IDEAS.find(i => i.id === startIndustry)?.label ?? '', {
-            mode: 'insights',
-            sessionId,
-            startPath: 'own',
-          }))}
+          onOwn={(text, overlapDecision) => {
+            const created = createIdea(text, INDUSTRY_IDEAS.find(i => i.id === startIndustry)?.label ?? '', {
+              mode: 'insights',
+              sessionId,
+              startPath: 'own',
+            });
+            if (overlapDecision) updateIdea(created.id, {
+              overlapDecision,
+              decisions: [...created.decisions, { at: new Date().toISOString(), text: 'Continued independently after reviewing related ideas' }],
+            });
+            openIdea(created);
+          }}
         />
       </JourneyScreen>
     );
@@ -481,8 +532,9 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         ideaId={idea.id}
         industryId={industryId}
         tools={ready ? <>{compare}{backToBuildButton}</> : compare}
-        onBackFromFirst={idea.approved.length === 0 ? discardIdea : undefined}
-        onChangeUseCase={discardIdea}
+        onBackFromFirst={idea.approved.length === 0 ? leaveIdea : undefined}
+        onChangeUseCase={leaveIdea}
+        onContinueAfterBrief={() => setStage('data')}
       />
     );
   } else if (stage === 'locked') {

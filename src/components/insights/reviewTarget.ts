@@ -2,12 +2,13 @@ import type { InsightsStage } from './progress';
 import type { Idea } from '../journeykit';
 
 /**
- * Where "Back to the idea" and "Update build" land. A locked idea goes back to where its data was chosen, with
- * that choice kept; the idea itself is one Back away from there. An idea still being shaped opens its steps.
+ * Where "Review idea" and "Update build" land. Reviewing always opens the seven
+ * idea steps directly; updating opens the locked summary so the latest approved
+ * revision can be carried into the build deliberately.
  */
 export function reviewTarget(to: 'idea' | 'update', lockedAt: string | undefined): InsightsStage {
   if (!lockedAt) return 'idea';
-  return to === 'update' ? 'locked' : 'data';
+  return to === 'update' ? 'locked' : 'idea';
 }
 
 /** Ideas built in Insights go back inside the open project, including ones first shaped in Ideate. */

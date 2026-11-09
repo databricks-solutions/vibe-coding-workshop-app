@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Loader2, Send, X } from 'lucide-react';
-import { apiClient, type SelectOption } from '../../../api/client';
+import { apiClient, type SelectOption, type SimilarIdeaMatch } from '../../../api/client';
 import { flushIdea, useIdeas } from '../engine/useIdeas';
 import { buildContext, caseFigures, placedLeaf } from '../engine/ideaContext';
 import { figuresAsContext, valueProfileFrom } from '../engine/businessCase';
 import type { Idea } from '../engine/types';
+import { SimilarIdeasGate } from './SimilarIdeasGate';
 
 const NEW = '__new__';
 
@@ -22,6 +23,11 @@ export function SubmitDialog({ idea, onClose }: { idea: Idea; onClose: () => voi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [similarGate, setSimilarGate] = useState<{
+    matches: SimilarIdeaMatch[];
+    fingerprint: string;
+    matcherVersion: string;
+  } | null>(null);
 
   const preferred = idea.catalogRef?.industry ?? idea.spark?.catalogIndustry ?? '';
   useEffect(() => {
@@ -70,13 +76,21 @@ export function SubmitDialog({ idea, onClose }: { idea: Idea; onClose: () => voi
     return () => clearTimeout(t);
   }, [done, goHome]);
 
-  const submit = async () => {
+  const submit = async (skipSimilarity = false) => {
     if (!ready) return;
     setBusy(true);
     setError(null);
     try {
       const saved = await flushIdea(idea.id);
       if (!saved) throw new Error('Save this idea to the server before submitting it for approval.');
+      if (!skipSimilarity) {
+        const related = await apiClient.findSimilarIdeas({ idea_id: idea.id });
+        if (related.matches.length) {
+          setSimilarGate(related);
+          setBusy(false);
+          return;
+        }
+      }
       const figures = caseFigures(idea);
       const r = await apiClient.ideateSubmit({
         idea_id: idea.id,
@@ -160,7 +174,7 @@ export function SubmitDialog({ idea, onClose }: { idea: Idea; onClose: () => voi
             <div className="flex items-center justify-end gap-3 mt-6">
               <button onClick={onClose} disabled={busy} className="px-4 py-2 text-ui-sm text-muted-foreground hover:text-foreground">Cancel</button>
               <button
-                onClick={submit}
+                onClick={() => void submit()}
                 disabled={!ready}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-ui-sm font-semibold hover:opacity-90 active:scale-95 disabled:opacity-40 shrink-0"
               >
@@ -170,6 +184,30 @@ export function SubmitDialog({ idea, onClose }: { idea: Idea; onClose: () => voi
           </>
         )}
       </div>
+      {similarGate && (
+        <SimilarIdeasGate
+          matches={similarGate.matches}
+          mode="submit"
+          currentIdea={idea}
+          onClose={() => setSimilarGate(null)}
+          onContinue={(reasonCode, reasonText) => {
+            updateIdea(idea.id, i => ({
+              overlapDecision: {
+                action: 'continue_independently',
+                reasonCode,
+                reasonText,
+                similarIdeaIds: similarGate.matches.map(m => m.id),
+                matcherVersion: similarGate.matcherVersion,
+                fingerprint: similarGate.fingerprint,
+                acknowledgedAt: new Date().toISOString(),
+              },
+              decisions: [...i.decisions, { at: new Date().toISOString(), text: 'Submitted separately after reviewing related ideas' }],
+            }));
+            setSimilarGate(null);
+            requestAnimationFrame(() => void submit(true));
+          }}
+        />
+      )}
     </div>
   );
 }
