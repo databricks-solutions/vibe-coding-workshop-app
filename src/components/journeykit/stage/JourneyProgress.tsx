@@ -8,6 +8,8 @@ export interface ProgressStep {
   label: string;
   icon: LucideIcon;
   state: StepState;
+  /** The underlying step is approved, even when it is currently being reviewed. */
+  completed?: boolean;
   prefilled?: boolean;
   optional?: boolean;
   disabled?: boolean;

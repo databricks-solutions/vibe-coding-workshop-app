@@ -15,6 +15,7 @@ export function ideaProgressSteps(idea: Idea, viewStep: StepKey | null): Progres
     label: s.label,
     icon: STEP_ART[s.key].icon,
     state: s.key === viewStep ? 'current' : idea.approved.includes(s.key) ? 'done' : 'upcoming',
+    completed: idea.approved.includes(s.key),
     prefilled: idea.prefilled?.includes(s.key),
     optional: s.optional,
     disabled: i > furthest,

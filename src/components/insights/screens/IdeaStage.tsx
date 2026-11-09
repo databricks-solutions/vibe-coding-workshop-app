@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ArrowRight, CloudOff } from 'lucide-react';
 import {
-  IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, MAX_GENIE_QUESTIONS, PrimaryButton, QuestionListEditor, ideaProgressSteps, ideaTrail, showsTrailhead, useIdeaFlow,
+  IdeaStepNav, IdeaStepStage, IdeaTools, JourneyScreen, MAX_GENIE_QUESTIONS, PrimaryButton, QuestionListEditor, ideaProgressSteps, showsTrailhead, useIdeaFlow,
   type IdeaFlow, type StepKey,
 } from '../../journeykit';
 import { INDUSTRY_IDEAS } from '../journey';
@@ -21,7 +21,8 @@ export function IdeaStage({ ideaId, industryId, tools, onBackFromFirst, onChange
   if (!flow.idea) return null;
   return (
     <JourneyScreen
-      progress={showsTrailhead(flow.idea, flow.readOnly) ? undefined : <JourneyProgress variant="trail" steps={ideaProgressSteps(flow.idea, flow.viewStep)} {...ideaTrail(flow.idea)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
+      sticky
+      navigation={showsTrailhead(flow.idea, flow.readOnly) ? undefined : <IdeaStepNav steps={ideaProgressSteps(flow.idea, flow.viewStep)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
       tools={<>{tools}<IdeaTools flow={flow} /></>}
     >
       <IdeaStepStage

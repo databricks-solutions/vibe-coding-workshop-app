@@ -16,6 +16,7 @@ export { ART, STEP_ART, avatarFor } from './art';
 
 export { JourneyScreen } from './stage/JourneyScreen';
 export { JourneyProgress, type ProgressPhase, type ProgressStep } from './stage/JourneyProgress';
+export { IdeaStepNav } from './stage/IdeaStepNav';
 export { PROGRESS_TOKENS, TIER_TOKENS, EASE, DURATION, scoreTone, type StepState } from './tokens';
 export { hasOutput, canReach } from './engine/reach';
 export { StepDot, StepSegment, StepConnector } from './stage/StepDot';

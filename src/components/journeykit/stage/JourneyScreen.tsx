@@ -5,6 +5,8 @@ interface JourneyScreenProps {
   header?: ReactNode;
   /** Left of the top row, usually JourneyProgress. */
   progress?: ReactNode;
+  /** Full-width primary navigation below the context/tools row. */
+  navigation?: ReactNode;
   /** Right of the top row: compact tools such as Compare paths or the clarity ring. */
   tools?: ReactNode;
   /** Pin the top rows while scrolling (used where the screen owns its scroll area). */
@@ -17,9 +19,9 @@ interface JourneyScreenProps {
 const WIDTH = { default: 'max-w-4xl', wide: 'max-w-5xl' };
 
 /** The frame every guided screen shares: progress row, then the screen's header, body and ActionBar. */
-export function JourneyScreen({ header, progress, tools, sticky = false, width = 'default', children }: JourneyScreenProps) {
+export function JourneyScreen({ header, progress, navigation, tools, sticky = false, width = 'default', children }: JourneyScreenProps) {
   const column = `${WIDTH[width]} mx-auto`;
-  const rows = (header || progress || tools) && (
+  const rows = (header || progress || navigation || tools) && (
     <div className={`${column} ${sticky ? 'py-3 space-y-2.5' : 'px-1 pt-6 sm:pt-10 pb-2 space-y-4'}`}>
       {header}
       {(progress || tools) && (
@@ -28,6 +30,7 @@ export function JourneyScreen({ header, progress, tools, sticky = false, width =
           {tools && <div className="flex items-center gap-2 shrink-0">{tools}</div>}
         </div>
       )}
+      {navigation && <div className="w-full">{navigation}</div>}
     </div>
   );
   return (

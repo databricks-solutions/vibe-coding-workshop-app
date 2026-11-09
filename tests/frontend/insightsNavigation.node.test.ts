@@ -99,3 +99,20 @@ test('related ideas compare as a metric matrix with optional full screen and sho
   assert.match(comparison, /Show \$\{matches\.length - 1\} more related idea/);
   assert.match(comparison, /ComparisonRowLabels/);
 });
+
+test('Idea screens use one named top stepper and a bottom action summary without duplicate bars', () => {
+  const ideate = readFileSync(new URL('../../src/components/ideate/IdeaFlow.tsx', import.meta.url), 'utf-8');
+  const insights = readFileSync(new URL('../../src/components/insights/screens/IdeaStage.tsx', import.meta.url), 'utf-8');
+  assert.match(ideate, /navigation=\{.*<IdeaStepNav/);
+  assert.match(insights, /navigation=\{.*<IdeaStepNav/);
+  assert.doesNotMatch(ideate, /variant="trail"/);
+  assert.doesNotMatch(insights, /variant="trail"/);
+
+  const nav = readFileSync(new URL('../../src/components/journeykit/stage/IdeaStepNav.tsx', import.meta.url), 'utf-8');
+  for (const label of ['Idea', 'Fit', 'Clarify', 'Approach', 'Genie questions', 'ROI', 'Brief']) assert.match(nav, new RegExp(`'${label}'`));
+
+  const dock = readFileSync(new URL('../../src/components/journeykit/stage/StepDock.tsx', import.meta.url), 'utf-8');
+  assert.match(dock, /Reviewing.*Step/);
+  assert.match(dock, /All steps complete/);
+  assert.doesNotMatch(dock, /<ol/);
+});

@@ -1,7 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Lightbulb, Menu } from 'lucide-react';
 import {
-  IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, SampleBanner, SaveStatus, ideaProgressSteps, ideaTrail, openBuildHref, showsTrailhead, useIdeaCelebrations, useIdeaFlow,
+  IdeaStepNav, IdeaStepStage, IdeaTools, JourneyScreen, SampleBanner, SaveStatus, ideaProgressSteps, openBuildHref, showsTrailhead, useIdeaCelebrations, useIdeaFlow,
   type StepKey,
 } from '../journeykit';
 
@@ -49,7 +49,7 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
             </div>
           </div>
         }
-        progress={showsTrailhead(idea, flow.readOnly) ? undefined : <JourneyProgress variant="trail" steps={ideaProgressSteps(idea, viewStep)} {...ideaTrail(idea)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
+        navigation={showsTrailhead(idea, flow.readOnly) ? undefined : <IdeaStepNav steps={ideaProgressSteps(idea, viewStep)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
       >
         {flow.readOnly && <SampleBanner idea={idea} />}
         <IdeaStepStage flow={flow} />
