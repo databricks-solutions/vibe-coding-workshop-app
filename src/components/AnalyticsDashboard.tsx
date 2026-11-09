@@ -721,7 +721,7 @@ export function AnalyticsDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 size={24} className="animate-spin text-primary" />
           <span className="text-ui-base text-muted-foreground">Loading analytics...</span>
@@ -732,7 +732,7 @@ export function AnalyticsDashboard() {
 
   if (!data) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-3">
+      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3">
         <p className="text-ui-md text-muted-foreground">Failed to load analytics data.</p>
         <button
           onClick={() => navigate('/')}
@@ -751,7 +751,7 @@ export function AnalyticsDashboard() {
       : 0;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-full min-h-0 overflow-y-auto bg-background">
       {/* Header */}
       <header className="sticky top-0 z-20 bg-card border-b border-border">
         <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto px-6 h-[3.5rem] flex items-center justify-between">
