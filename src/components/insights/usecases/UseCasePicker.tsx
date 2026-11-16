@@ -336,7 +336,7 @@ function PreviewPanel({ uc, room, onApply, applyLabel }: { uc: ApprovedUseCase; 
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <p className="text-ui-xs text-muted-foreground">
-              {room <= 0 ? 'Your question list is full. Remove one to add more.' : 'Ticked questions carry into "Questions for Genie". Your project will be linked to this use case.'}
+              {room <= 0 ? 'Your question list is full. Remove one to add more.' : 'Ticked questions carry into "Business questions". Your project will be linked to this use case.'}
             </p>
             <PrimaryButton onClick={() => data && onApply(uc, chosen, data)} disabled={!data}>
               {applyLabel ?? (chosen.length ? `Use ${chosen.length} question${chosen.length === 1 ? '' : 's'}` : 'Use this use case')} <ArrowRight className="w-4 h-4" />

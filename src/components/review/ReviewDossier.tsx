@@ -27,6 +27,14 @@ const REASON_LABEL: Record<string, string> = {
   other: 'Other distinct scope',
 };
 
+const DOSSIER_FEEDBACK_CHIPS = [
+  'Tighten PII / auth constraints',
+  'Clarify success metric & baseline',
+  'Scope pilot smaller',
+  'Verify data source',
+  'Strengthen kill criterion',
+];
+
 function recommendation(overlaps: SimilarIdeaMatch[]) {
   const strong = overlaps.find(m => m.proximity === 'strong');
   if (!strong) return {
@@ -273,6 +281,18 @@ export function ReviewDossier({ detail, onClose, onDecision, acting = null }: Pr
             {detail.review.status === 'pending' && (
               <section className="rounded-2xl border border-primary/25 bg-card p-4 shadow-sm">
                 <p className="flex items-center gap-2 text-ui-sm font-semibold text-foreground"><ShieldCheck className="w-4 h-4 text-primary" /> Review decision</p>
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {DOSSIER_FEEDBACK_CHIPS.map(chip => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setNote(prev => (prev.trim() ? `${prev.trim()}\n- ${chip}` : `${chip}: `))}
+                      className="px-2 py-0.5 rounded-full border border-border bg-secondary/40 text-ui-2xs text-muted-foreground hover:text-foreground hover:border-primary/40"
+                    >
+                      + {chip}
+                    </button>
+                  ))}
+                </div>
                 <textarea
                   id="dossier-review-note"
                   value={note}

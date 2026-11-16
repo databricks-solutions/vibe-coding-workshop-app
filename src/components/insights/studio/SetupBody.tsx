@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Check, Copy, SquareTerminal, MessageSquarePlus } from 'lucide-react';
+import { Check, Copy, FileCode2, SquareTerminal, MessageSquarePlus } from 'lucide-react';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
+import { DlcAssetsModal, useLinkedIdea } from '../../journeykit';
 import { SetUpProjectStep } from '../../SetUpProjectStep';
 
 const REPO_URL = 'https://github.com/databricks-solutions/vibe-coding-workshop-template.git';
@@ -69,20 +70,44 @@ interface SetupBodyProps {
 
 export function SetupBody({ codingAssistant, currentUser, isDone, onDone, onUndo, sessionId, useCaseLabel }: SetupBodyProps) {
   const email = currentUser && currentUser.includes('@') && currentUser !== 'user@databricks.com' ? currentUser : null;
+  const linkedIdea = useLinkedIdea(sessionId);
+  const [assetsOpen, setAssetsOpen] = useState(false);
+
+  const dlcBanner = linkedIdea ? (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3 mt-3">
+        <div className="min-w-0">
+          <p className="text-ui-sm font-semibold text-foreground">AI-DLC Starter Pack ready</p>
+          <p className="text-ui-xs text-muted-foreground">Download <span className="font-mono">intent.md</span>, <span className="font-mono">spec.md</span>, <span className="font-mono">AGENTS.md</span>, and <span className="font-mono">evals.json</span> to drop into your repo.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAssetsOpen(true)}
+          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-primary/30 bg-card text-ui-sm font-semibold text-primary hover:bg-primary/10 shrink-0"
+        >
+          <FileCode2 className="w-4 h-4" /> AI-DLC Assets (.zip)
+        </button>
+      </div>
+      <DlcAssetsModal idea={linkedIdea} open={assetsOpen} readOnly onClose={() => setAssetsOpen(false)} />
+    </>
+  ) : null;
 
   if (codingAssistant !== 'genie-code') {
     return (
-      <SetUpProjectStep
-        isComplete={isDone}
-        onMarkComplete={isDone ? onUndo : onDone}
-        isExpanded
-        onToggleExpand={() => {}}
-        isPreviousStepComplete
-        sessionId={sessionId}
-        useCaseLabel={useCaseLabel}
-        codingAssistant={codingAssistant}
-        currentUserEmail={email}
-      />
+      <>
+        <SetUpProjectStep
+          isComplete={isDone}
+          onMarkComplete={isDone ? onUndo : onDone}
+          isExpanded
+          onToggleExpand={() => {}}
+          isPreviousStepComplete
+          sessionId={sessionId}
+          useCaseLabel={useCaseLabel}
+          codingAssistant={codingAssistant}
+          currentUserEmail={email}
+        />
+        {dlcBanner}
+      </>
     );
   }
 
@@ -105,6 +130,7 @@ export function SetupBody({ codingAssistant, currentUser, isDone, onDone, onUndo
           text={firstMessage}
         />
       </ol>
+      {dlcBanner}
       {!email && (
         <p className="text-ui-sm text-amber-500">We could not read your email yet. Replace &lt;your_email&gt; in the copied text before running it.</p>
       )}

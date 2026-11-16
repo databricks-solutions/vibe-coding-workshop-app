@@ -39,6 +39,8 @@ interface DataScreenProps {
   hint: ModelHint;
   value: DataSource | null;
   location: string;
+  /** Hard constraints carried forward from Idea Studio. */
+  constraints?: string[];
   /** Scan only tables tagged certified in Unity Catalog. On by default. */
   certifiedOnly: boolean;
   onCertifiedOnlyChange: (v: boolean) => void;
@@ -169,7 +171,7 @@ function SourceChip({ source: s, tables, on, added, certifiedOnly, onToggle, onR
   );
 }
 
-export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOnlyChange, progress, tools, onChange, onLocationChange, onBack, onNext, onOpenInstalled }: DataScreenProps) {
+export function DataScreen({ hint, value, location, constraints = [], certifiedOnly, onCertifiedOnlyChange, progress, tools, onChange, onLocationChange, onBack, onNext, onOpenInstalled }: DataScreenProps) {
   const blueprintOption = useBlueprintOption(hint);
   const { data: catalog, loading: catalogLoading } = useBlueprintCatalog();
   // Only the model that fits this idea; other installed models are a distraction here.
@@ -250,6 +252,18 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
           <p role="status" className="flex items-center gap-1.5 text-ui-xs text-muted-foreground mt-1.5 animate-fade-in">
             <Loader2 className="w-3 h-3 animate-spin text-primary" /> Matching your idea to ready-made industry models…
           </p>
+        )}
+        {constraints.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.04] px-3 py-2">
+            <span className="inline-flex items-center gap-1 text-ui-xs font-semibold text-amber-700 dark:text-amber-300 mr-1">
+              <ShieldCheck className="w-3.5 h-3.5" /> Constraints in effect:
+            </span>
+            {constraints.map(c => (
+              <span key={c} className="rounded-full border border-amber-500/30 bg-card px-2 py-0.5 text-ui-2xs text-foreground">
+                {c}
+              </span>
+            ))}
+          </div>
         )}
       </FadeIn>
 
@@ -441,6 +455,11 @@ export function DataScreen({ hint, value, location, certifiedOnly, onCertifiedOn
                                 : 'Scans every table, certified or not. Tick to stick to tables tagged certified in Unity Catalog.'}
                               {pickedTotal > 0 && ` ${pickedCertified.toLocaleString()} of ${pickedTotal.toLocaleString()} tables in your picks are certified.`}
                             </span>
+                            {!certifiedOnly && constraints.some(c => /\b(certified|governed|pii)\b/i.test(c)) && (
+                              <span className="block text-ui-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                                Heads up: one of your idea constraints calls for certified/governed data or PII isolation.
+                              </span>
+                            )}
                           </span>
                         </label>
                         <p className="text-ui-xs text-muted-foreground mt-1.5">

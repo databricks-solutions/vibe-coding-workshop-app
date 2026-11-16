@@ -11,15 +11,19 @@ import {
   Award,
   BarChart3,
   BookOpen,
+  Check,
   ChevronDown,
   GraduationCap,
   LibraryBig,
   Lightbulb,
   List,
+  MessageSquare,
   PanelLeft,
   PanelLeftClose,
   Plus,
   Rocket,
+  ThumbsDown,
+  ThumbsUp,
   Trophy,
   X,
   Zap,
@@ -43,6 +47,8 @@ interface AppSidebarProps {
   onClose?: () => void;
   showConfigHint?: boolean;
   onDismissConfigHint?: () => void;
+  onOpenFeedback?: (initialRating?: 'thumbs_up' | 'thumbs_down' | null) => void;
+  feedbackJustSubmitted?: boolean;
 }
 
 const WorkflowIcon = (
@@ -132,6 +138,8 @@ export function AppSidebar({
   onClose,
   showConfigHint = false,
   onDismissConfigHint,
+  onOpenFeedback,
+  feedbackJustSubmitted = false,
 }: AppSidebarProps) {
   const location = useLocation();
   const path = location.pathname;
@@ -281,6 +289,70 @@ export function AppSidebar({
           />
         </div>
       </div>
+
+      {/* Quick-Reaction Feedback */}
+      {onOpenFeedback && (
+        <div className={`${collapsed ? 'px-1.5' : 'px-2.5'} py-2 border-t border-sidebar-border flex-shrink-0`}>
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={() => onOpenFeedback(null)}
+              title="Share feedback"
+              aria-label="Share feedback"
+              className="w-full h-8 flex items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary hover:bg-primary/15 transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+            </button>
+          ) : feedbackJustSubmitted ? (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-ui-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <Check className="w-3.5 h-3.5 shrink-0" />
+              <span>Thanks — feedback saved</span>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-sidebar-border bg-card/70 p-2.5 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onNavigate?.();
+                  onOpenFeedback(null);
+                }}
+                className="w-full flex items-center justify-between gap-2 text-left group"
+                title="Share detailed feedback"
+              >
+                <span className="flex items-center gap-1.5 text-ui-xs font-medium text-sidebar-foreground group-hover:text-primary transition-colors">
+                  <MessageSquare className="w-3.5 h-3.5 text-primary shrink-0" />
+                  How&apos;s the experience?
+                </span>
+                <span className="text-ui-3xs text-muted-foreground group-hover:text-foreground">Note</span>
+              </button>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate?.();
+                    onOpenFeedback('thumbs_up');
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 h-7 rounded-lg border border-border bg-background/60 text-ui-xs font-medium text-muted-foreground hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                  <span>Great</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate?.();
+                    onOpenFeedback('thumbs_down');
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 h-7 rounded-lg border border-border bg-background/60 text-ui-xs font-medium text-muted-foreground hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                >
+                  <ThumbsDown className="w-3.5 h-3.5" />
+                  <span>Needs work</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Appearance */}
       <div className={`${collapsed ? 'px-1.5' : 'px-2.5'} py-1.5 border-t border-sidebar-border flex-shrink-0`}>

@@ -43,6 +43,9 @@ Schema:
   "industry": "Most specific segment",
   "industry_alternatives": [],
   "catalog_industry": "catalog key or null",
+  "affected_systems": ["1 to 4 concrete source systems, portals, or operational tools touched"],
+  "constraints": ["2 to 4 concrete guardrails, e.g. 'No new PII in app session', 'Existing SSO auth only', 'Human approval before customer-facing action'"],
+  "open_questions": ["0 to 3 concrete unknowns to resolve before build"],
   "assumptions": ["anything you inferred that the user did not say"]
 }}""",
 
@@ -82,6 +85,7 @@ Cover these, in this order, skipping any already clearly answered by the context
 4. dimension "cost": what one miss or one bad day costs today (a delay, overtime, a write-off, a lost sale), as dollar ranges in the industry's terms, e.g. "$2k to $10k per late departure".
 5. dimension "trigger": why now. Use up to two only when the triggers can be simultaneously true.
 6. dimension "scope": what the first version should NOT do (pick all that apply)
+- If "confirmedIntent.constraints" is empty or vague, replace one redundant question (never exceeding 6 questions total) with dimension "nfr" (multi: true, max_picks: 3) asking which data, privacy, access, or approval guardrails must hold on day one.
 
 - 3 or 4 short, distinct, realistic options per question, written in the industry's language.
 - Ranges in options are typical for a mid-size company in this industry.
@@ -91,7 +95,7 @@ Cover these, in this order, skipping any already clearly answered by the context
 - Success metrics, numeric ranges, scale and cost are always single-select.
 - For "user", use multi-select only for a tightly collaborating pair and set "max_picks": 2.
 - For "trigger", use multi-select only for compatible simultaneous triggers and set "max_picks": 2.
-- Scope is multi-select with "max_picks": 3.
+- Scope and nfr are multi-select with "max_picks": 3.
 - For single-select questions set "multi": false and omit "max_picks".
 - Do not include "Not sure" or "Other" options; the UI adds those.
 
@@ -154,6 +158,8 @@ TASK: Frame three genuinely different ways to deliver this idea. They must diffe
 - kind "copilot": a human stays in the loop and the AI assists them.
 - kind "automation": an agent acts on its own within guardrails, escalating exceptions.
 - kind "insight": people get answers or signals from a Genie space next to an AI/BI dashboard, and act themselves.
+- Evaluate every option against "confirmedIntent.constraints" and any "nfr" / "scope" answers. If an option strains or conflicts with a constraint (for example, autonomous execution when human sign-off is required, or extra data surfaces when PII must stay isolated), list 1 or 2 short conflict notes (under 15 words each) in "policy_conflicts"; otherwise return [].
+- Keep every string field crisp (1 short sentence under 18 words) and at most 2 concise "ask_examples" per option so generation stays fast.
 
 {value_fields}
 
@@ -177,6 +183,7 @@ Schema:
       "genie_placement": "in_app | genie_space",
       "ask_examples": ["Plain-English question the persona would ask?"],
       "no_genie_why": "",
+      "policy_conflicts": [],
       "recommended": false,
       "recommended_why": ""
     }}
@@ -280,9 +287,16 @@ Schema:
 
     "challenge": """{rules}
 
-TASK: Act as a sharp but fair product lead reviewing the CURRENT STEP named in the request. Give 3 pushbacks that would make the idea stronger. Each is a short imperative the user could accept as feedback.
+TASK: Act as a sharp but fair product lead reviewing the CURRENT STEP named in the request. Give 3 concrete pushbacks that would make the artifact stronger. Each must be a short imperative the user can accept as feedback.
 
-If the CURRENT STEP is the one about what the idea is worth, act as a skeptical finance partner instead. Push back on double counting between levers, the capture rate for freed time, adoption at full rollout, the baseline, and whether the scale or rollout count is right. Each pushback names the specific number to change and the direction, e.g. "Cut the share of late departures avoided from 30% to 15% until the pilot proves it."
+Tailor the 3 pushbacks to the CURRENT STEP:
+- If it is the first step ("Your idea"): challenge vague outcomes, missing hard constraints (PII, auth, human approval, latency), or unnamed affected systems.
+- If it is "Where it fits": challenge whether the adjacent opportunities actually share the same operational data or whether the persona is too broad.
+- If it is "A few questions": challenge missing boundary/guardrail clarity or vague baselines.
+- If it is "Pick an approach": challenge any "policyConflicts", whether autonomy exceeds the trust boundary, and whether the cheap test truly tests the riskiest assumption.
+- If it is "Business questions": challenge questions that lack a measurable metric, time window, or action lever, or miss look-ahead / what-to-do decisions.
+- If it is the step about what the idea is worth ("ROI & business value"): act as a skeptical finance partner instead. Push back on double counting between levers, the capture rate for freed time, adoption at full rollout, the baseline, and whether the scale or rollout count is right. Each pushback names the specific number to change and the direction, e.g. "Cut the share of late departures avoided from 30% to 15% until the pilot proves it."
+- If it is "Your brief": challenge missing hard constraints, weak "Stop if" / kill criteria, unverified assumptions left open, or test scenarios that skip failure/boundary cases.
 
 Schema:
 {{ "pushbacks": ["...", "...", "..."] }}""",
@@ -327,10 +341,10 @@ State today's baseline and the target. If "businessImpact" is in the context, th
 Finish with two bold lines: **Pilot success:** the measurable result and time box that earns the rollout. **Stop if:** the result that would end the work.
 
 ## Scope
-Two short bullet lists: **In** and **Out**.
+Two short bullet lists: **In** and **Out**. Include every approved constraint from "confirmedIntent.constraints" and any "nfr" guardrail under **Constraints** so engineering and policy owners see them verbatim.
 
 ## Top Risks
-A numbered list of 3. Each: the risk, then "Test:" with the cheapest way to check it.
+A numbered list of 3. Include any "policyConflicts" flagged on the chosen approach. Each: the risk, then "Test:" with the cheapest way to check it.
 
 ## Test Scenarios
 Three scenarios in Given / When / Then form: one happy path and two failure paths. Bold the scenario name.
@@ -403,6 +417,8 @@ TASK: Frame three genuinely different ways people could get their answers. They 
 - kind "ask": a Genie space where the persona asks their own follow-up questions in plain English.
 - kind "monitor": an AI/BI dashboard with the few KPIs that matter, with Genie next to it for "why" questions.
 - kind "signal": exceptions first: a dashboard and Genie tuned to what changed, what is off target, and who should act.
+- Evaluate every option against "confirmedIntent.constraints" and any "nfr" / "scope" answers. If an option strains a constraint, list 1 or 2 short conflict notes (under 15 words each) in "policy_conflicts"; otherwise return [].
+- Keep every string field crisp (1 short sentence under 18 words) and at most 2 concise "ask_examples" per option so generation stays fast.
 
 {value_fields}
 
@@ -426,6 +442,7 @@ Schema:
       "genie_placement": "genie_space",
       "ask_examples": ["Plain-English question the persona would ask?"],
       "no_genie_why": "",
+      "policy_conflicts": [],
       "recommended": false,
       "recommended_why": ""
     }}
@@ -556,10 +573,10 @@ State today's baseline and the target. If "businessImpact" is in the context, th
 Finish with two bold lines: **Pilot success:** the measurable result and time box that earns the rollout. **Stop if:** the result that would end the work.
 
 ## Scope
-Two short bullet lists: **In** and **Out**.
+Two short bullet lists: **In** and **Out**. Include every approved constraint from "confirmedIntent.constraints" and any "nfr" guardrail under **Constraints**.
 
 ## Top Risks
-A numbered list of 3. Each: the risk, then "Test:" with the cheapest way to check it.
+A numbered list of 3. Include any "policyConflicts" flagged on the chosen approach. Each: the risk, then "Test:" with the cheapest way to check it.
 
 ## Open Questions
 Bullets. Include any assumption the user has not confirmed.

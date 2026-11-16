@@ -16,6 +16,14 @@ const NOTE_HINT: Record<Exclude<IdeaReviewDecision, 'approve'>, string> = {
   reject: 'Why is this not moving forward? The owner sees this and can revise and resubmit.',
 };
 
+const FEEDBACK_CHIPS = [
+  'Tighten PII / auth constraints',
+  'Clarify success metric & baseline',
+  'Scope pilot smaller',
+  'Verify data source in Unity Catalog',
+  'Strengthen Stop / kill criterion',
+];
+
 interface Props {
   idea: Idea;
   onClose: () => void;
@@ -155,6 +163,18 @@ export function ReviewDialog({ idea, onClose, onStartBuild, onDecided }: Props) 
                   <label htmlFor="review-note" className="block text-ui-sm font-semibold text-foreground">
                     {choice === 'reject' ? 'Why not?' : 'What needs to change?'}
                   </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {FEEDBACK_CHIPS.map(chip => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => setNote(prev => (prev.trim() ? `${prev.trim()}\n- ${chip}` : `${chip}: `))}
+                        className="px-2.5 py-1 rounded-full border border-border bg-secondary/50 text-ui-2xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40"
+                      >
+                        + {chip}
+                      </button>
+                    ))}
+                  </div>
                   <textarea
                     id="review-note"
                     ref={noteRef}

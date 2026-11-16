@@ -44,7 +44,7 @@ export const STEPS: StepMeta[] = [
   { key: 'map', label: 'Where it fits', hint: 'Where your idea sits in the industry', detail: 'See where the idea sits in your industry, who it helps, and the related opportunities around it.', minutes: 1 },
   { key: 'clarify', label: 'A few questions', hint: 'A few quick questions', detail: 'Answer a handful of multiple-choice questions so the plan fits how your team really works.', minutes: 2 },
   { key: 'shape', label: 'Pick an approach', hint: 'Three ways to bring it to life', detail: 'Compare three ways to build it, with the effort and value of each, and pick one.', minutes: 2 },
-  { key: 'questions', label: 'Questions for Genie', hint: 'What should people be able to ask?', detail: 'List the questions people should be able to ask. Your Genie is tested on them.', minutes: 2 },
+  { key: 'questions', label: 'Business questions', hint: 'What business questions should this answer?', detail: 'List the core business questions your product must answer. Your solution is tested on them.', minutes: 2 },
   { key: 'impact', label: 'ROI & business value', hint: 'Estimate your ROI & business impact', detail: 'Optional. Size the expected annual ROI, payback period, and value drivers for your business case.', optional: true, minutes: 2 },
   { key: 'brief', label: 'Your brief', hint: 'Your decision-ready one-pager', detail: 'Everything you decided, on one page you can share and submit for approval.', minutes: 2 },
 ];
@@ -89,6 +89,12 @@ export interface SparkResult {
   aliases?: string[];
   /** Operational unit/grain a decision acts on (v2), e.g. "platform / station / 30-min window". */
   primaryEntity?: string;
+  /** Systems, APIs, or data sources touched by this idea. */
+  affectedSystems?: string[];
+  /** Non-negotiable boundaries (PII, auth, human approval, latency, compliance). */
+  constraints?: string[];
+  /** Initial unknowns carried into Clarify / intent.md. */
+  openQuestions?: string[];
 }
 
 export interface IndustryLeaf {
@@ -172,6 +178,8 @@ export interface ShapeOption {
   noGenieWhy?: string;
   recommended?: boolean;
   recommendedWhy?: string;
+  /** Policy or constraint tensions detected at design/write time (e.g. autonomous action vs. human sign-off). */
+  policyConflicts?: string[];
   /** Plain-English phrase on how decisions happen (v2), e.g. "Recommends · You confirm". */
   decisionStyle?: string;
   /** Decision cadence or lead time (v2), e.g. "Real-time (30m ahead)". */

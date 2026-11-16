@@ -47,6 +47,34 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.9.1',
+    date: '2026-11-15',
+    title: 'AI-DLC alignment, faster Idea Studio steps, and sidebar quick feedback',
+    items: [
+      {
+        title: 'Constraints, policy checks, and downloadable AI-DLC starter pack',
+        description: 'Capture affected systems and guardrails early on Step 1, flag policy tensions on Step 4, thread constraints into the data scan and build handoff, and export intent.md, spec.md, AGENTS.md, and evals.json as a zip.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'shield',
+      },
+      {
+        title: 'Faster, timeout-safe Idea Studio generation and Business questions framing',
+        description: 'Raised structured token ceilings and bounded request budgets to prevent truncation and gateway timeouts, and renamed Step 5 to Business questions.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'Sidebar quick feedback, focused 2x2 map, and overview video card',
+        description: 'Added one-tap feedback in the left sidebar across all pages with audit tracking, focused the plan Value vs. Feasibility map on the active use case, and linked the Idea Studio hero card to the overview video.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'rocket',
+      },
+    ],
+  },
+  {
     version: '2.9.0',
     date: '2026-11-08',
     title: 'Idea Studio decision guidance, collaboration, and governed review',

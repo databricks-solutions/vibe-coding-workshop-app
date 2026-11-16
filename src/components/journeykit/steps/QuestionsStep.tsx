@@ -22,16 +22,16 @@ export function QuestionsStep({ flow }: { flow: IdeaFlow }) {
   return (
     <div className="space-y-5">
       <div className="animate-fade-in">
-        <p className="text-ui-xl font-semibold text-foreground leading-snug">Which questions should Genie answer on day one?</p>
+        <p className="text-ui-xl font-semibold text-foreground leading-snug">Which business questions should your product answer on day one?</p>
         <p className="flex items-center gap-1.5 text-ui-xs text-muted-foreground mt-1.5">
-          <Info className="w-3 h-3 shrink-0" /> These become the test set the Genie is checked against, and they decide which data it needs.
+          <Info className="w-3 h-3 shrink-0" /> These become the evaluation test set for your product, and they decide which data it needs.
         </p>
         <p className="text-ui-md text-muted-foreground mt-3">
           {fromUseCase > 0
             ? `${fromUseCase} came from your use case${suggested ? ` and ${suggested} are recommended` : ''}. Keep, edit, or add your own. Aim for 3 to 6.`
             : suggested > 0
               ? `${suggested} recommended to start. Remove any that miss, tap one below to swap in, or add your own. Aim for 3 to 6.`
-              : 'Plain-English questions someone would type into Genie. Keep the ones that matter, edit freely, aim for 3 to 6.'}
+              : 'Plain-English questions business users need answered. Keep the ones that matter, edit freely, aim for 3 to 6.'}
         </p>
       </div>
       {flow.ideaStudioVersion === 'v2' && (

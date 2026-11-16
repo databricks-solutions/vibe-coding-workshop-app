@@ -563,5 +563,100 @@ class TestIdeaStudioVersion2(unittest.TestCase):
         self.assertEqual(summary["keyResults"][0]["kr"], "Congestion peak prediction")
 
 
+class TestAiDlcAlignment(unittest.TestCase):
+    def test_spark_normalizes_systems_constraints_and_open_questions(self):
+        spark = ideate._normalize("spark", {
+            "title": "Claims Status Self-Service",
+            "statement": "Customers check claim status in the portal without calling handlers.",
+            "industry": "Property & Casualty Insurance",
+            "affected_systems": ["claims-core API", "Customer portal", "CRM"],
+            "constraints": ["No new PII in portal session", "Existing SSO auth only"],
+            "open_questions": ["Do third-party loss adjusters need access?"],
+        })
+        self.assertEqual(spark["affectedSystems"], ["claims-core API", "Customer portal", "CRM"])
+        self.assertEqual(spark["constraints"], ["No new PII in portal session", "Existing SSO auth only"])
+        self.assertEqual(spark["openQuestions"], ["Do third-party loss adjusters need access?"])
+
+    def test_clarify_allows_multi_select_nfr_and_shape_normalizes_policy_conflicts(self):
+        clarify = ideate._normalize("clarify", {"questions": [
+            {"dimension": "nfr", "question": "Which guardrails must hold on day one?",
+             "options": ["No PII in session", "Existing SSO only", "Human approval"], "multi": False, "max_picks": 9},
+        ]})
+        nfr_q = clarify["questions"][0]
+        self.assertTrue(nfr_q["multi"])
+        self.assertEqual(nfr_q["maxPicks"], 3)
+
+        shape = ideate._normalize("shape", {"options": [
+            {"kind": "copilot", "title": "Claim Copilot", "policy_conflicts": []},
+            {"kind": "automation", "title": "Auto-Approve Bot",
+             "policy_conflicts": ["Autonomous action conflicts with human-approval constraint"]},
+        ]})
+        self.assertNotIn("policyConflicts", shape["options"][0])
+        self.assertEqual(shape["options"][1]["policyConflicts"], [
+            "Autonomous action conflicts with human-approval constraint",
+        ])
+
+    def test_prompts_carry_constraints_and_step_aware_challenges(self):
+        challenge = ideate.build_step_system_prompt("challenge")
+        self.assertIn("policyConflicts", challenge)
+        self.assertIn("kill criteria", challenge)
+        brief = ideate.brief_prompt_for("ideate")
+        self.assertIn("confirmedIntent.constraints", brief)
+
+
+class TestTimeoutAndMaxTokens(unittest.TestCase):
+    def setUp(self):
+        self._llm = ideate.call_databricks_serving_endpoint
+        self._user = ideate._get_session_user
+        self._budget = ideate.STEP_REQUEST_BUDGET_S
+        self._attempt_t = ideate.STEP_ATTEMPT_TIMEOUT_S
+        self._min_rem = ideate.STEP_RETRY_MIN_REMAINING_S
+        ideate._get_session_user = lambda request: "me@example.com"
+
+    def tearDown(self):
+        ideate.call_databricks_serving_endpoint = self._llm
+        ideate._get_session_user = self._user
+        ideate.STEP_REQUEST_BUDGET_S = self._budget
+        ideate.STEP_ATTEMPT_TIMEOUT_S = self._attempt_t
+        ideate.STEP_RETRY_MIN_REMAINING_S = self._min_rem
+
+    def test_parse_json_handles_embedded_fence_and_trailing_commas(self):
+        raw = 'Here is the JSON:\n```json\n{"options": [{"kind": "copilot", "title": "A",}],}\n```\nDone.'
+        parsed = ideate._parse_json(raw)
+        self.assertEqual(parsed, {"options": [{"kind": "copilot", "title": "A"}]})
+
+    def test_shape_step_uses_full_token_ceiling_and_recovers_after_bad_first_attempt(self):
+        seen_tokens = []
+
+        async def llm(**kwargs):
+            seen_tokens.append(kwargs.get("max_tokens"))
+            if len(seen_tokens) == 1:
+                return {"response": '{"options": [{"kind": "copilot"', "model": "m", "usage": {"completion_tokens": 8000}}
+            return {
+                "response": json.dumps({"options": [{"kind": "copilot", "title": "Radar Copilot", "value": "Cuts delays", "effort": "M"}]}),
+                "model": "m",
+                "usage": {"completion_tokens": 420},
+            }
+
+        ideate.call_databricks_serving_endpoint = llm
+        out = asyncio.run(ideate.ideate_step(ideate.IdeateStepRequest(step="shape", idea={"title": "Delay Radar"}), _Req()))
+        self.assertEqual(seen_tokens, [8000, 8000])
+        self.assertEqual(out["step"], "shape")
+        self.assertEqual(out["data"]["options"][0]["title"], "Radar Copilot")
+
+    def test_step_timeout_returns_504_cleanly(self):
+        async def slow_llm(**kwargs):
+            await asyncio.sleep(0.2)
+            return {"response": "{}"}
+
+        ideate.call_databricks_serving_endpoint = slow_llm
+        ideate.STEP_REQUEST_BUDGET_S = 0.05
+        ideate.STEP_ATTEMPT_TIMEOUT_S = 0.03
+        ideate.STEP_RETRY_MIN_REMAINING_S = 10.0
+
+        res = asyncio.run(ideate.ideate_step(ideate.IdeateStepRequest(step="shape", idea={"title": "Delay Radar"}), _Req()))
+        self.assertEqual(res.status_code, 504)
+
+
 if __name__ == "__main__":
     unittest.main()

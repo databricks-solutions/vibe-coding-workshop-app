@@ -1,17 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Copy, Crosshair, Download, FileText, Hammer, History, Loader2, Pencil, Search, Send, ShieldCheck, Shuffle, Target, TriangleAlert } from 'lucide-react';
+import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Clock, Copy, Crosshair, Download, FileCode2, FileText, Hammer, History, Loader2, MessageSquareShare, Pencil, Search, Send, ShieldCheck, Shuffle, Sparkles, Target, TriangleAlert } from 'lucide-react';
 import { SubmitDialog } from '../ui/SubmitDialog';
 import { ReviewDialog } from '../ui/ReviewDialog';
 import { ApprovalTracker } from '../ui/ApprovalTracker';
 import { personName, useCanReview, useReviewRefresh } from '../engine/approval';
 import { BusinessCaseSheet, InlineBusinessCase } from '../ui/BusinessCase';
 import { BusinessCaseButton } from '../ui/BusinessCaseButton';
+import { DlcAssetsModal } from '../ui/DlcAssetsModal';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent.utils';
 import { briefAsMarkdown, caseFigures, chosenShape, placedLeaf } from '../engine/ideaContext';
+import { buildStakeholderReviewRequest } from '../engine/dlcAssets';
 import { money, units } from '../engine/businessCase';
 import { DIMENSIONS } from '../engine/types';
 import { modeOf } from '../modes';
@@ -47,6 +49,8 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   const canReview = useCanReview();
   const [fullBrief, setFullBrief] = useState(false);
   const [caseOpen, setCaseOpen] = useState(false);
+  const [assetsOpen, setAssetsOpen] = useState(false);
+  const { copied: reviewReqCopied, handleCopy: copyReviewReq } = useCopyToClipboard();
   const sectionNames = idea.mode === 'insights' ? INSIGHTS_SECTIONS : SECTIONS;
   const sections = useMemo(() => splitSections(text), [text]);
   const collapsed = !streaming && !fullBrief && sections.length > PREVIEW_SECTIONS + 1;
@@ -151,6 +155,12 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
               <button onClick={download} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60">
                 <Download className="w-3.5 h-3.5" /> Download brief
               </button>
+              <button onClick={() => copyReviewReq(buildStakeholderReviewRequest(idea))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60" title="Copy a 10-line sanity check for Slack, email, or Teams">
+                {reviewReqCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <MessageSquareShare className="w-3.5 h-3.5" />} {reviewReqCopied ? 'Review check copied' : 'Copy review request'}
+              </button>
+              <button onClick={() => setAssetsOpen(true)} className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/[0.06] text-ui-sm font-medium text-primary hover:bg-primary/15">
+                <FileCode2 className="w-3.5 h-3.5" /> AI-DLC Assets (.zip)
+              </button>
             </div>
           </div>
         </details>
@@ -184,9 +194,19 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
               <ArrowRight className="w-4 h-4" />
             </button>
           ) : review?.status === 'changes_requested' || review?.status === 'rejected' ? (
-            <button onClick={() => flow.setViewStep('spark')} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-ui-lg font-semibold shadow-sm hover:opacity-90 active:scale-[0.99]">
-              <Pencil className="w-4 h-4" /> Revise the idea
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              {review.note?.trim() && (
+                <button
+                  onClick={() => flow.run('brief', `Apply reviewer feedback: ${review.note}`)}
+                  className="flex-1 flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-ui-lg font-semibold shadow-sm hover:opacity-90 active:scale-[0.99]"
+                >
+                  <Sparkles className="w-4 h-4" /> Apply reviewer notes with AI
+                </button>
+              )}
+              <button onClick={() => flow.setViewStep('spark')} className={`${review.note?.trim() ? 'sm:px-5 bg-secondary text-foreground hover:bg-secondary/80' : 'w-full bg-primary text-primary-foreground hover:opacity-90'} flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl text-ui-lg font-semibold shadow-sm active:scale-[0.99]`}>
+                <Pencil className="w-4 h-4" /> Revise the idea
+              </button>
+            </div>
           ) : review?.status === 'pending' ? (canReview ? (
             <button onClick={() => setReviewOpen(true)} className="w-full flex items-center justify-center gap-2 min-h-12 px-5 py-3 rounded-xl bg-amber-500 text-white text-ui-lg font-semibold shadow-sm hover:bg-amber-400 active:scale-[0.99] animate-pulse-glow">
               <ShieldCheck className="w-4 h-4" /> Review &amp; approve
@@ -222,6 +242,13 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
             onAddNumbers={() => { setCaseOpen(false); flow.setViewStep('impact'); }}
           />
         )}
+        <DlcAssetsModal
+          idea={idea}
+          open={assetsOpen}
+          readOnly={flow.readOnly}
+          onClose={() => setAssetsOpen(false)}
+          onUpdateConstraints={flow.readOnly ? undefined : constraints => flow.revise('spark', i => ({ spark: { ...i.spark!, constraints } }), 'Updated constraints before AI-DLC export')}
+        />
       </div>
     );
   }
@@ -292,6 +319,12 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
             )}
             <div className="flex-1" />
             <BusinessCaseButton idea={idea} onClick={openCase} variant="compact" className="mr-1" />
+            <button onClick={() => setAssetsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/[0.06] text-ui-sm font-medium text-primary hover:bg-primary/15 mr-1">
+              <FileCode2 className="w-3.5 h-3.5" /> AI-DLC Assets
+            </button>
+            <button onClick={() => copyReviewReq(buildStakeholderReviewRequest(idea))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60" title="Copy a 10-line sanity check for Slack, email, or Teams">
+              {reviewReqCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <MessageSquareShare className="w-3.5 h-3.5" />} {reviewReqCopied ? 'Copied check' : 'Review check'}
+            </button>
             <button onClick={() => handleCopy(briefAsMarkdown(idea))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60">
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />} {copied ? 'Copied' : 'Copy'}
             </button>
@@ -359,6 +392,13 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
           onAddNumbers={() => { setCaseOpen(false); flow.setViewStep('impact'); }}
         />
       )}
+      <DlcAssetsModal
+        idea={idea}
+        open={assetsOpen}
+        readOnly={flow.readOnly}
+        onClose={() => setAssetsOpen(false)}
+        onUpdateConstraints={flow.readOnly ? undefined : constraints => flow.revise('spark', i => ({ spark: { ...i.spark!, constraints } }), 'Updated constraints before AI-DLC export')}
+      />
     </div>
   );
 }

@@ -7,7 +7,7 @@ const SHORT: Record<string, string> = {
   map: 'Fit',
   clarify: 'Clarify',
   shape: 'Approach',
-  questions: 'Genie questions',
+  questions: 'Business questions',
   impact: 'ROI',
   brief: 'Brief',
 };

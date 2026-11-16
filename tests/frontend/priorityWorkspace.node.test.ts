@@ -4,12 +4,14 @@ import { readFileSync } from 'node:fs';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf-8');
 
-test('attendee and review maps use the same canonical portfolio assessment', () => {
+test('attendee plan shows only the active use case while review queue plots full portfolio', () => {
   const insights = read('../../src/components/insights/InsightsFlow.tsx');
+  const ready = read('../../src/components/insights/screens/ReadyScreen.tsx');
   const review = read('../../src/components/library/ReviewQueue.tsx');
 
   assert.match(insights, /assessPortfolioPriority\(idea\)/);
-  assert.match(insights, /assessPortfolioPriority\(other\)/);
+  assert.match(insights, /const portfolio = priority \? \[priority\] : \[\];/);
+  assert.match(ready, /portfolioLimit=\{0\}/);
   assert.match(review, /assessPortfolioPriority\(idea,/);
   assert.doesNotMatch(insights, /assessPriority\(idea,\s*\{\s*dataSource/);
 });

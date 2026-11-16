@@ -5,6 +5,8 @@
 export * from './engine/types';
 export * from './engine/ideaContext';
 export * from './engine/businessCase';
+export * from './engine/dlcAssets';
+export * from './engine/zip';
 export { useIdeas, useSyncState, flushIdea, setIdeaScore, setIdeaReview, refreshReviews, normalizeIdea, type ReviewChange, type SyncState } from './engine/useIdeas';
 export { nextNudge, welcomeBack, type Nudge } from './engine/encouragement';
 export { useIdeaFlow, MAX_GENIE_QUESTIONS, RECOMMENDED_GENIE_QUESTIONS, type IdeaFlow } from './engine/useIdeaFlow';
@@ -61,6 +63,7 @@ export {
 } from './engine/approval';
 export { BusinessCaseView, BusinessCaseSheet, CaseDocument } from './ui/BusinessCase';
 export { BusinessCaseButton } from './ui/BusinessCaseButton';
+export { DlcAssetsModal } from './ui/DlcAssetsModal';
 export { SurfaceChips } from './ui/SurfaceChips';
 export { IndustryBadge } from './ui/IndustryBadge';
 export { SampleBanner, MakeItMineButton } from './ui/SampleBanner';

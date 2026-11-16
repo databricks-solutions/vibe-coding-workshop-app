@@ -109,7 +109,7 @@ test('Idea screens use one named top stepper and a bottom action summary without
   assert.doesNotMatch(insights, /variant="trail"/);
 
   const nav = readFileSync(new URL('../../src/components/journeykit/stage/IdeaStepNav.tsx', import.meta.url), 'utf-8');
-  for (const label of ['Idea', 'Fit', 'Clarify', 'Approach', 'Genie questions', 'ROI', 'Brief']) assert.match(nav, new RegExp(`'${label}'`));
+  for (const label of ['Idea', 'Fit', 'Clarify', 'Approach', 'Business questions', 'ROI', 'Brief']) assert.match(nav, new RegExp(`'${label}'`));
 
   const dock = readFileSync(new URL('../../src/components/journeykit/stage/StepDock.tsx', import.meta.url), 'utf-8');
   assert.match(dock, /Reviewing.*Step/);

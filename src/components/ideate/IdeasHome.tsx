@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { calculateIdeaScore } from '../../constants/scoring';
 import { apiClient, type SimilarIdeaMatch } from '../../api/client';
-import { ArrowRight, BookOpenCheck, Check, CheckCircle2, Clock, Copy, Hammer, HelpCircle, History, Inbox, Lightbulb, Loader2, Menu, MoreHorizontal, Pencil, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowRight, BookOpenCheck, Check, CheckCircle2, Clock, Copy, ExternalLink, Hammer, HelpCircle, History, Inbox, Lightbulb, Loader2, Menu, MoreHorizontal, Pencil, Play, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import { Modal } from '../library/ui';
 import {
   ApprovalTracker, ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, ReviewDialog, SAMPLES, SimilarIdeasGate, STEP_ART, SubmitDialog, SummitTrail,
@@ -254,7 +254,33 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
               </p>
             )}
           </div>
-          <img src={ART.hero} alt="" width={320} height={213} className="hidden md:block w-full rounded-3xl" />
+          <a
+            href="https://www.youtube.com/watch?v=x9AqatyrCJw"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Watch Idea Studio overview video on YouTube"
+            title="Watch overview video on YouTube"
+            className="group relative hidden md:block w-full overflow-hidden rounded-3xl border border-border/70 shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          >
+            <img
+              src={ART.hero}
+              alt="Idea Studio overview video"
+              width={320}
+              height={213}
+              className="block w-full transition-transform duration-300 group-hover:scale-[1.02]"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-950/65 text-white ring-1 ring-white/45 shadow-lg backdrop-blur-sm transition-transform duration-200 group-hover:scale-110 group-hover:bg-slate-950/80">
+                <Play className="h-4 w-4 fill-current ml-0.5" />
+              </span>
+            </span>
+            <span className="pointer-events-none absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-slate-950/65 px-2.5 py-1 text-ui-2xs font-medium text-white ring-1 ring-white/25 backdrop-blur-sm">
+              Watch overview <ExternalLink className="h-3 w-3 opacity-80" />
+            </span>
+          </a>
         </div>
 
         <div className="rounded-3xl border border-border bg-card p-5 md:p-6 shadow-sm animate-slide-up-fade">

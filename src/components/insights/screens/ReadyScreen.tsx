@@ -169,6 +169,7 @@ export function ReadyScreen({
           <PriorityMatrix
             current={priority}
             portfolio={portfolio}
+            portfolioLimit={0}
             onImproveValue={onImproveValue}
             onImproveFeasibility={onImproveFeasibility}
             onSelectIdea={onOpenPriorityIdea}

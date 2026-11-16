@@ -54,7 +54,25 @@ export const needsBuildUpdate = (idea: Idea) => hasBuild(idea) && (idea.revision
 export function buildDescription(idea: Idea): string {
   const shape = chosenShape(idea);
   const builds = buildLines(shape);
-  if (idea.brief?.trim()) return [`# ${idea.title}`, idea.brief.trim(), builds.length ? `## What It Builds\n\n${builds.map(l => `- ${l}`).join('\n')}` : ''].filter(Boolean).join('\n\n');
+  const constraints = [
+    ...(idea.spark?.constraints ?? []),
+    ...(answerFor(idea, 'nfr') ? [answerFor(idea, 'nfr')!] : []),
+  ];
+  const systems = idea.spark?.affectedSystems ?? [];
+  const evals = idea.genieQuestions ?? [];
+  const guardrailsBlock = [
+    systems.length ? `## Affected Systems\n\n${systems.map(s => `- ${s}`).join('\n')}` : '',
+    constraints.length ? `## Constraints & Guardrails\n\n${constraints.map(c => `- ${c}`).join('\n')}` : '',
+    evals.length ? `## Locked Eval Questions\n\n${evals.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : '',
+  ].filter(Boolean);
+  if (idea.brief?.trim()) {
+    return [
+      `# ${idea.title}`,
+      idea.brief.trim(),
+      builds.length ? `## What It Builds\n\n${builds.map(l => `- ${l}`).join('\n')}` : '',
+      ...guardrailsBlock,
+    ].filter(Boolean).join('\n\n');
+  }
   const f = caseFigures(idea);
   const who = placedLeaf(idea)?.personas ?? [];
   const lines = [
@@ -64,6 +82,7 @@ export function buildDescription(idea: Idea): string {
     answerFor(idea, 'business') ? `Success metric: ${answerFor(idea, 'business')}` : '',
     shape ? `Approach: ${shape.title}. ${shape.value}` : '',
     ...builds,
+    ...guardrailsBlock,
     f ? `Value: about ${money(f.value.expected)} a year${f.rollout ? ` across ${units(f.rollout.units, f.rollout.unit)}` : ''}` : '',
   ];
   return lines.filter(Boolean).join('\n\n');

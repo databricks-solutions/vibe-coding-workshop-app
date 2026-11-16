@@ -14,7 +14,7 @@ export const STEP_ART: Record<StepKey, { image: string; icon: typeof Sparkles; p
   map: { image: `${BASE}/step-map.webp`, icon: MapIcon, promise: 'Plus who it helps and what it touches' },
   clarify: { image: `${BASE}/step-clarify.webp`, icon: MessagesSquare, promise: 'Pick answers, no essays needed' },
   shape: { image: `${BASE}/step-shape.webp`, icon: Shapes, promise: 'Compare what each builds, the effort, and what to validate first' },
-  questions: { image: `${BASE}/step-clarify.webp`, icon: ListChecks, promise: 'These become the questions your Genie is tested on' },
+  questions: { image: `${BASE}/step-clarify.webp`, icon: ListChecks, promise: 'List the core business questions your product will be tested on' },
   impact: { image: `${BASE}/step-map.webp`, icon: TrendingUp, promise: 'Select directional baselines to model annual value and payback, or use industry benchmarks.' },
   brief: { image: `${BASE}/step-brief.webp`, icon: FileText, promise: 'Review it, check for gaps, then decide' },
 };

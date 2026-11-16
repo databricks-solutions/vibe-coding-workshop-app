@@ -6,7 +6,8 @@ import { apiClient } from '../../api/client';
 import { ASSISTANT_CATALOG } from '../../constants/codingAssistants';
 import { WORKSHOP_LEVELS } from '../../constants/workflowSections';
 import {
-  BusinessCaseSheet, JourneyProgress, JourneyScreen, REVIEW_IDEA_EVENT, SHAPE_KINDS, answerFor, buildLines, caseFigures, chosenShape, matchingContext, money,
+  BusinessCaseSheet, JourneyProgress, JourneyScreen, REVIEW_IDEA_EVENT, SHAPE_KINDS, answerFor, buildLines, caseFigures, chosenShape,
+  collectAffectedSystems, collectConstraints, matchingContext, money,
   PageLoader, needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeaCelebrations, useIdeas,
   type Idea, type ReviewIdeaDetail, type StepKey,
 } from '../journeykit';
@@ -117,12 +118,22 @@ function ideaBriefOf(idea: Idea): IdeaBrief {
   const shape = chosenShape(idea);
   const figures = caseFigures(idea);
   const who = placedLeaf(idea)?.personas ?? idea.useCaseContext?.personas.map(p => p.name) ?? [];
+  const notDoingRaw = answerFor(idea, 'scope');
+  const notDoing = notDoingRaw ? notDoingRaw.split(';').map(s => s.trim()).filter(Boolean) : undefined;
+  const constraints = collectConstraints(idea);
+  const affectedSystems = collectAffectedSystems(idea);
   return {
     headline: idea.title,
     problem: idea.spark?.statement,
     who: who.join(', '),
+    decisionGrain: idea.spark?.primaryEntity,
+    affectedSystems: affectedSystems.length ? affectedSystems : undefined,
+    constraints: constraints.length ? constraints : undefined,
     metric: answerFor(idea, 'business'),
     approach: shape ? [`${shape.title} (${SHAPE_KINDS[shape.kind].label}): ${shape.value}`, ...buildLines(shape)].join('. ') : undefined,
+    notDoing: notDoing?.length ? notDoing : undefined,
+    pilotSuccess: idea.summary?.pilotSuccess,
+    killCriterion: idea.summary?.killCriterion,
     value: figures ? `about ${money(figures.value.expected)} a year from ${figures.driverLabel.toLowerCase()}` : undefined,
     origin: idea.sourceUseCase ? `the approved use case "${idea.sourceUseCase.label}"` : 'their own idea',
   };
@@ -313,7 +324,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const effectiveBuiltAddOns = normalizeAddOns([...required, ...parsed.addOns]);
   const builtMoments = momentsFor(effectiveBuiltAddOns);
   const priority = idea ? assessPortfolioPriority(idea) : null;
-  const portfolio = ideas.map(other => other.id === idea?.id && priority ? priority : assessPortfolioPriority(other));
+  const portfolio = priority ? [priority] : [];
 
   const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint, tables: exploringTables });
   const openPhase = (key: string) => {
@@ -561,6 +572,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         hint={modelHint}
         value={dataSource}
         location={dataLocation}
+        constraints={idea ? collectConstraints(idea) : undefined}
         progress={progress}
         onChange={setDataSource}
         onLocationChange={setDataLocation}

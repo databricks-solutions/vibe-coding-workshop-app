@@ -137,12 +137,17 @@ VALUE_SIZES = {"$", "$$", "$$$"}
 HARD_SHARES = {"mostly hard", "mixed", "mostly soft"}
 BUSINESS_LINES = {"cost", "revenue", "risk", "capacity"}
 
-# Impact sizing and the business case use the analysis model when one is configured.
+# Structured steps use a generous ceiling so JSON replies never truncate mid-object on
+# Sonnet 5.5 or reasoning models.
+STEP_MAX_TOKENS = 8000
 ANALYSIS_STEPS = {"impact", "summary"}
-# Reasoning models spend part of the budget thinking before the JSON; 3000 truncated impact replies.
 ANALYSIS_MAX_TOKENS = 8000
+# Keep total request latency safely below the ~60s Databricks Apps proxy cutoff.
+STEP_REQUEST_BUDGET_S = 48.0
+STEP_ATTEMPT_TIMEOUT_S = 34.0
+STEP_RETRY_MIN_REMAINING_S = 16.0
 RETRY_NOTE = {
-    "": "\n\nYour previous reply was not valid JSON. Return ONLY the JSON object.",
+    "": "\n\nYour previous reply was cut off or not valid JSON. Keep every string concise (1 short sentence max) and return ONLY the valid JSON object.",
     "impact": "\n\nYour previous reply could not be used: it was not valid JSON, or fewer than 2 questions used the allowed input keys. "
               "Return ONLY the JSON object, with every question and input key spelled exactly as listed for its driver.",
 }
@@ -284,15 +289,24 @@ def _context_block(idea: Dict[str, Any], feedback: Optional[str], extra: str = "
 def _parse_json(text: str) -> Optional[Dict[str, Any]]:
     if not text:
         return None
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
+    cleaned = text.strip()
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned, flags=re.IGNORECASE)
+    if fenced:
+        cleaned = fenced.group(1).strip()
+    else:
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE).strip()
     start, end = cleaned.find("{"), cleaned.rfind("}")
     if start == -1 or end <= start:
         return None
-    try:
-        parsed = json.loads(cleaned[start:end + 1])
-        return parsed if isinstance(parsed, dict) else None
-    except json.JSONDecodeError:
-        return None
+    candidate = cleaned[start:end + 1]
+    for payload in (candidate, re.sub(r",\s*([}\]])", r"\1", candidate)):
+        try:
+            parsed = json.loads(payload, strict=False)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            continue
+    return None
 
 
 def _question_kind_fallback(question: str) -> str:
@@ -359,7 +373,7 @@ Classification rules: historical/diagnostic=look_back; current/live/real-time mo
         result = await call_databricks_serving_endpoint(
             prompt=prompt[:MAX_CONTEXT_CHARS],
             system_prompt=system,
-            max_tokens=700,
+            max_tokens=1800,
             temperature=0.1,
             feature="idea-studio",
             action="validate",
@@ -660,11 +674,11 @@ def _clarify_question(q: Dict[str, Any], qid: str) -> Dict[str, Any]:
     rec = q.get("recommended")
     rec = rec if isinstance(rec, int) and not isinstance(rec, bool) and 0 <= rec < len(options) else -1
     requested_multi = bool(q.get("multi"))
-    multi = len(options) > 1 and (dimension == "scope" or (requested_multi and dimension in {"user", "trigger"}))
+    multi = len(options) > 1 and (dimension in {"scope", "nfr"} or (requested_multi and dimension in {"user", "trigger"}))
     raw_max = q.get("max_picks")
     max_picks: Optional[int] = None
     if multi:
-        ceiling = 3 if dimension == "scope" else 2
+        ceiling = 3 if dimension in {"scope", "nfr"} else 2
         default = ceiling
         candidate = raw_max if isinstance(raw_max, int) and not isinstance(raw_max, bool) else default
         max_picks = max(2, min(candidate, ceiling, len(options)))
@@ -796,6 +810,7 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
             recommended = recommended or is_rec
             decision_style = str(o.get("decision_style") or o.get("decisionStyle") or "").strip()[:48]
             cadence = str(o.get("cadence") or o.get("decision_cadence") or "").strip()[:40]
+            policy_conflicts = _as_str_list(o.get("policy_conflicts") or o.get("policyConflicts"), 3)
             opt_entry: Dict[str, Any] = {
                 "id": _slug(kind + "-" + o.get("title", ""), used),
                 "kind": kind,
@@ -812,6 +827,8 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
                 "recommended": is_rec,
                 "recommendedWhy": str(o.get("recommended_why", "")).strip() if is_rec else "",
             }
+            if policy_conflicts:
+                opt_entry["policyConflicts"] = policy_conflicts
             if decision_style:
                 opt_entry["decisionStyle"] = decision_style
             if cadence:
@@ -838,6 +855,9 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
         industry = str(data.get("industry", "")).strip()
         aliases = _as_str_list(data.get("aliases"), 3)
         primary_entity = str(data.get("primary_entity") or data.get("primaryEntity") or "").strip()[:80]
+        affected_systems = _as_str_list(data.get("affected_systems") or data.get("affectedSystems"), 5)
+        constraints = _as_str_list(data.get("constraints"), 6)
+        open_questions = _as_str_list(data.get("open_questions") or data.get("openQuestions"), 5)
         spark_out: Dict[str, Any] = {
             "title": str(data.get("title", "")).strip(),
             "statement": str(data.get("statement", "")).strip(),
@@ -852,6 +872,12 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
             spark_out["aliases"] = aliases
         if primary_entity:
             spark_out["primaryEntity"] = primary_entity
+        if affected_systems:
+            spark_out["affectedSystems"] = affected_systems
+        if constraints:
+            spark_out["constraints"] = constraints
+        if open_questions:
+            spark_out["openQuestions"] = open_questions
         return spark_out
     return data
 
@@ -874,22 +900,50 @@ async def ideate_step(body: IdeateStepRequest, request: Request):
         extra = f"CATALOG INDUSTRIES:\n{listing}"
     prompt = _context_block(body.idea, body.feedback, extra)
 
+    import asyncio
+
     analysis = os.getenv("IDEATE_ANALYSIS_ENDPOINT", "").strip()
     endpoint = resolve_endpoint(analysis) if analysis and body.step in ANALYSIS_STEPS else None
+    max_tokens = ANALYSIS_MAX_TOKENS if body.step in ANALYSIS_STEPS else STEP_MAX_TOKENS
+    deadline = time.monotonic() + STEP_REQUEST_BUDGET_S
+    timed_out = False
+
     for attempt in range(2):
-        result = await call_databricks_serving_endpoint(
-            prompt=prompt if attempt == 0 else prompt + RETRY_NOTE.get(body.step, RETRY_NOTE[""]),
-            system_prompt=system_prompt,
-            max_tokens=ANALYSIS_MAX_TOKENS if body.step in ANALYSIS_STEPS else 2500,
-            temperature=STEP_TEMPERATURE.get(body.step, DEFAULT_TEMPERATURE),
-            endpoint_name=endpoint,
-            feature="idea-studio",
-            action="step",
-            detail=body.step,
-        )
+        remaining = deadline - time.monotonic()
+        if attempt > 0 and remaining < STEP_RETRY_MIN_REMAINING_S:
+            logger.warning(f"[Ideate] {body.step} skipping attempt {attempt + 1}; only {remaining:.1f}s remaining")
+            break
+        attempt_timeout = min(STEP_ATTEMPT_TIMEOUT_S, max(5.0, remaining))
+        try:
+            result = await asyncio.wait_for(
+                call_databricks_serving_endpoint(
+                    prompt=prompt if attempt == 0 else prompt + RETRY_NOTE.get(body.step, RETRY_NOTE[""]),
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=STEP_TEMPERATURE.get(body.step, DEFAULT_TEMPERATURE),
+                    endpoint_name=endpoint,
+                    feature="idea-studio",
+                    action="step",
+                    detail=body.step,
+                ),
+                timeout=attempt_timeout,
+            )
+        except asyncio.TimeoutError:
+            timed_out = True
+            logger.warning(f"[Ideate] {body.step} timed out on attempt {attempt + 1} after {attempt_timeout:.1f}s")
+            if attempt == 0 and (deadline - time.monotonic()) >= STEP_RETRY_MIN_REMAINING_S:
+                continue
+            return JSONResponse({"error": "That step took too long. Please click Try again."}, status_code=504)
+
         text = (result.get("response") or "").strip()
         if not text or text.startswith("[Error]") or text.startswith("[Mock Response"):
             return JSONResponse({"error": AI_UNAVAILABLE, "detail": text[:300]}, status_code=503)
+        usage = result.get("usage") or {}
+        completion_tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
+        truncated = (
+            result.get("source") == "llm_reasoning_exhausted"
+            or (isinstance(completion_tokens, int) and completion_tokens >= int(max_tokens * 0.95))
+        )
         parsed = _parse_json(text)
         normalized = _normalize(body.step, parsed, body.idea) if parsed else None
         if normalized is not None and body.step == "spark":
@@ -900,8 +954,13 @@ async def ideate_step(body: IdeateStepRequest, request: Request):
             model = result.get("model") or ""
             configured = {m for m in (SERVING_ENDPOINT_NAME, analysis) if m}
             return {"step": body.step, "data": normalized, "model": model, "fallback": bool(configured) and model not in configured}
-        logger.warning(f"[Ideate] {body.step} returned unparseable output on attempt {attempt + 1}")
+        logger.warning(
+            f"[Ideate] {body.step} returned unparseable output on attempt {attempt + 1} "
+            f"(chars={len(text)}, completion_tokens={completion_tokens}, max_tokens={max_tokens}, truncated={truncated})"
+        )
 
+    if timed_out:
+        return JSONResponse({"error": "That step took too long. Please click Try again."}, status_code=504)
     return JSONResponse({"error": "The AI returned something unexpected. Please try again."}, status_code=502)
 
 
@@ -922,7 +981,7 @@ async def ideate_brief(body: IdeateBriefRequest, request: Request):
     return StreamingResponse(
         _stream_with_retry(
             messages,
-            max_tokens=4000,
+            max_tokens=6000,
             temperature=0.5,
             section_tag="ideate_brief",
             feature="idea-studio",
@@ -948,7 +1007,7 @@ async def _catalog_template(body: IdeateSubmitRequest) -> str:
     result = await call_databricks_serving_endpoint(
         prompt="\n\n".join(parts),
         system_prompt=CATALOG_PROMPT,
-        max_tokens=3000,
+        max_tokens=4500,
         temperature=0.4,
         feature="idea-studio",
         action="submit",

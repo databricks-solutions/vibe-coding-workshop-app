@@ -29,6 +29,11 @@ export interface IdeaBrief {
   metric?: string;
   approach?: string;
   notDoing?: string[];
+  constraints?: string[];
+  affectedSystems?: string[];
+  decisionGrain?: string;
+  pilotSuccess?: string;
+  killCriterion?: string;
   value?: string;
   origin?: string;
 }
@@ -184,13 +189,19 @@ function parseAddOns(line: string | undefined): AddOn[] {
 
 function ideaLines(i: IdeaBrief): string[] {
   const one = (v?: string) => (v ?? '').replace(/\s+/g, ' ').trim();
+  const joinList = (list?: string[]) => (list ?? []).map(one).filter(Boolean).join('; ');
   const fields: [string, string][] = [
     [IDEA_HEADER.slice(0, -1), one(i.headline)],
     ['Problem', one(i.problem)],
     ['Who', one(i.who)],
+    ['Decision grain', one(i.decisionGrain)],
+    ['Affected systems', joinList(i.affectedSystems)],
+    ['Constraints', joinList(i.constraints)],
     ['Success metric', one(i.metric)],
     ['Approach', one(i.approach)],
-    ['First version will not', (i.notDoing ?? []).map(one).filter(Boolean).join('; ')],
+    ['First version will not', joinList(i.notDoing)],
+    ['Pilot success', one(i.pilotSuccess)],
+    ['Stop if', one(i.killCriterion)],
     ['Value', one(i.value)],
     ['Started from', one(i.origin)],
   ];

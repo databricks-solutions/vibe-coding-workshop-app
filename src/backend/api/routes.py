@@ -5654,11 +5654,58 @@ class NewSessionResponse(BaseModel):
 
 
 class FeedbackRequest(BaseModel):
-    """Request to submit feedback"""
-    session_id: str = Field(..., description="Session ID")
+    """Request to submit feedback (works with or without an active Build Studio session)."""
+    session_id: Optional[str] = Field(default=None, description="Optional session ID")
     feedback_rating: str = Field(..., description="Rating: thumbs_up or thumbs_down")
     feedback_comment: str = Field(..., description="Comment is required")
     feedback_request_followup: bool = Field(False, description="Whether user requests follow-up support")
+    source_area: Optional[str] = Field(default=None, description="App area where feedback was submitted")
+
+
+_FEEDBACK_RATING_ENUM = {
+    "thumbs_up": "thumbs-up",
+    "thumbs_down": "thumbs-down",
+}
+_FEEDBACK_AREA_ENUM = {
+    "build-studio",
+    "idea-studio",
+    "hackathons",
+    "leaderboard",
+    "learning-academy",
+    "library",
+    "analytics",
+    "config",
+    "release-notes",
+}
+
+
+def _feedback_telemetry_ua(rating: str, source_area: Optional[str], followup: bool) -> str:
+    from src.backend.identity import build_user_agent
+
+    action = _FEEDBACK_RATING_ENUM.get((rating or "").strip().lower(), "rated")
+    area = (source_area or "").strip().lower()
+    if area not in _FEEDBACK_AREA_ENUM:
+        area = "app"
+    detail = f"{area}-followup" if followup else area
+    return build_user_agent(feature="feedback", action=action, detail=detail)
+
+
+async def _emit_feedback_telemetry(rating: str, source_area: Optional[str], followup: bool) -> None:
+    """Best-effort, fail-open SDK ping carrying bounded feature/feedback User-Agent into system.access.audit."""
+    try:
+        client = get_workspace_client()
+        if not client:
+            return
+        ua = _feedback_telemetry_ua(rating, source_area, followup)
+        await asyncio.to_thread(
+            lambda: client.api_client.do(
+                method="GET",
+                path="/api/2.0/preview/scim/v2/Me",
+                headers={"User-Agent": ua},
+            )
+        )
+    except Exception as e:
+        logger.debug(f"[Feedback] Telemetry ping skipped: {type(e).__name__}")
 
 
 class UpdateStepPromptRequest(BaseModel):
@@ -6394,25 +6441,53 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
 @router.post("/session/feedback")
 async def submit_feedback_endpoint(request_body: FeedbackRequest, request: Request) -> Dict[str, Any]:
     """
-    Submit feedback for a session.
+    Submit feedback for a session or from any page in the workshop app.
+    Also emits bounded User-Agent telemetry (feature/feedback) for Databricks system.access.audit.
     """
     try:
         current_user = _get_session_user(request)
-        logger.info(f"[Session API] Submitting feedback for session {request_body.session_id}")
-        
-        success = save_session(
-            session_id=request_body.session_id,
-            feedback_rating=request_body.feedback_rating,
-            feedback_comment=request_body.feedback_comment,
-            feedback_request_followup=request_body.feedback_request_followup,
-            created_by=current_user,
-        )
-        
+        area = (request_body.source_area or "").strip().lower()
+        if area not in _FEEDBACK_AREA_ENUM:
+            area = "app"
+        sid = (request_body.session_id or "").strip() or f"fb-{uuid.uuid4()}"
+        has_existing_session = bool((request_body.session_id or "").strip())
+        area_label = area.replace("-", " ").title()
+
+        logger.info(f"[Session API] Submitting feedback for session {sid} (area={area})")
+
+        if is_lakebase_configured():
+            success = save_session(
+                session_id=sid,
+                feedback_rating=request_body.feedback_rating,
+                feedback_comment=request_body.feedback_comment,
+                feedback_request_followup=request_body.feedback_request_followup,
+                created_by=current_user,
+                **({} if has_existing_session else {
+                    "session_name": f"Feedback ({area_label})",
+                    "industry_label": area_label,
+                    "use_case_label": "App Feedback",
+                }),
+            )
+        else:
+            success = True
+
+        # Emit bounded User-Agent telemetry without blocking the response.
+        try:
+            asyncio.create_task(
+                _emit_feedback_telemetry(
+                    request_body.feedback_rating,
+                    area,
+                    request_body.feedback_request_followup,
+                )
+            )
+        except RuntimeError:
+            pass
+
         if success:
             return {"success": True, "message": "Feedback submitted"}
         else:
             return {"success": False, "message": "Failed to submit feedback"}
-            
+
     except Exception as e:
         logger.error(f"[Session API] Error submitting feedback: {e}")
         return {"success": False, "message": str(e)}

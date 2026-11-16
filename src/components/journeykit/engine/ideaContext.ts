@@ -126,12 +126,20 @@ export function matchingContext(idea: Idea | null | undefined): string {
   const activeDetails = (idea.genieQuestions ?? []).flatMap(q => (idea.questionDetails?.[q] ? [idea.questionDetails[q]] : []));
   const metrics = [...new Set(activeDetails.flatMap(d => d.metrics ?? []))];
   const dimensions = [...new Set(activeDetails.flatMap(d => d.dimensions ?? []))];
+  const systems = idea.spark?.affectedSystems ?? [];
+  const constraints = idea.spark?.constraints ?? [];
+  const notDoing = answerFor(idea, 'scope');
+  const nfr = answerFor(idea, 'nfr');
   return [
     idea.title,
     idea.spark?.aliases?.length && `Also known as: ${idea.spark.aliases.join(', ')}`,
     idea.spark?.industry && `Industry: ${idea.spark.industry}`,
     idea.spark?.primaryEntity && `Decision grain: ${idea.spark.primaryEntity}`,
     idea.spark?.statement ?? idea.seed,
+    systems.length && `Affected systems: ${systems.join(', ')}`,
+    constraints.length && `Constraints: ${constraints.join('; ')}`,
+    nfr && `Guardrails: ${nfr}`,
+    notDoing && `Out of scope: ${notDoing}`,
     idea.sourceUseCase && `Use case: ${idea.sourceUseCase.label}`,
     uc?.summary,
     uc?.personas?.length && `Personas: ${uc.personas.map(p => `${p.name} (${p.role})`).join(', ')}`,
@@ -150,6 +158,7 @@ export function clarityByDimension(idea: Idea): Record<Dimension, number> {
   const has = (s: StepKey) => idea.approved.includes(s);
   const brief = !!idea.brief;
   const sized = has('impact') && hasNumbers(idea.impact);
+  const hasConstraints = (idea.spark?.constraints?.length ?? 0) > 0;
   // Genie questions double as the benchmark set, so they count toward scope and testability.
   const asked = has('questions');
   const scores: Record<Dimension, number> = {
@@ -157,7 +166,7 @@ export function clarityByDimension(idea: Idea): Record<Dimension, number> {
     user: (has('map') ? 0.34 : 0) + (real('user') ? 0.33 : 0) + (brief ? 0.33 : 0),
     functional: (has('spark') ? 0.25 : 0) + (has('shape') ? 0.5 : 0) + (asked ? 0.15 : 0) + (brief ? 0.25 : 0),
     technical: (has('map') ? 0.5 : 0) + (has('shape') ? 0.25 : 0) + (brief ? 0.25 : 0),
-    nfr: brief ? 0.5 : 0,
+    nfr: (hasConstraints ? 0.35 : 0) + (real('nfr') ? 0.35 : 0) + (brief ? 0.5 : 0),
     quality: (asked ? 0.3 : 0) + (brief ? 0.6 : 0),
   };
   for (const g of idea.gaps ?? []) {

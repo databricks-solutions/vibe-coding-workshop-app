@@ -1293,7 +1293,7 @@ Analyze all candidates together. Never invent ids, owners, metrics, ROI, or fact
         result = await call_databricks_serving_endpoint(
             prompt=prompt[:24000],
             system_prompt=system,
-            max_tokens=1800,
+            max_tokens=3000,
             temperature=0.1,
             feature="idea-studio",
             action="compare",
@@ -1531,7 +1531,7 @@ async def score_idea(idea_id: str, request: Request):
         result = await call_databricks_serving_endpoint(
             prompt=_judge_context(idea) + ("" if attempt == 0 else "\n\nReturn ONLY the JSON object."),
             system_prompt=JUDGE_PROMPT,
-            max_tokens=1500,
+            max_tokens=3000,
             temperature=0.0,
             feature="idea-studio",
             action="score",

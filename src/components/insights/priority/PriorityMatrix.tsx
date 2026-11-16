@@ -171,7 +171,7 @@ export function PriorityMatrix({
   const [fx0, fx1] = current.feasibilityRange;
   const [vy0, vy1] = current.valueRange;
 
-  const hasStatuses = allPoints.some(p => p.status && p.status !== 'draft');
+  const hasStatuses = others.length > 0 && allPoints.some(p => p.status && p.status !== 'draft');
   const currentStatusMeta = current.status ? STATUS_META[current.status] : null;
   const hoveredPoint = hoveredId ? laidOut.find(point => point.item.ideaId === hoveredId) : null;
 
@@ -202,9 +202,11 @@ export function PriorityMatrix({
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <p id={headingId} className="text-ui-xl font-semibold text-foreground">Value vs. feasibility</p>
-              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-ui-2xs font-semibold text-muted-foreground tabular-nums">
-                {allPoints.length} {allPoints.length === 1 ? 'use case' : 'use cases'} on map
-              </span>
+              {others.length > 0 && (
+                <span className="rounded-full bg-secondary px-2.5 py-0.5 text-ui-2xs font-semibold text-muted-foreground tabular-nums">
+                  {allPoints.length} {allPoints.length === 1 ? 'use case' : 'use cases'} on map
+                </span>
+              )}
             </div>
             <p className="text-ui-sm text-muted-foreground mt-1">
               {subtitle ?? 'Evidence from your idea, value inputs, selected data, and build plan.'}
@@ -232,16 +234,18 @@ export function PriorityMatrix({
             >
               <Info className="h-3.5 w-3.5" /> How to read
             </button>
-            <button
-              type="button"
-              onClick={() => setShowAllLabels(value => !value)}
-              aria-pressed={showAllLabels}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-ui-xs font-medium transition-colors ${
-                showAllLabels ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background/60 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Tags className="h-3.5 w-3.5" /> {showAllLabels ? 'Hide labels' : 'Show labels'}
-            </button>
+            {others.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAllLabels(value => !value)}
+                aria-pressed={showAllLabels}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-ui-xs font-medium transition-colors ${
+                  showAllLabels ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background/60 text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Tags className="h-3.5 w-3.5" /> {showAllLabels ? 'Hide labels' : 'Show labels'}
+              </button>
+            )}
             {expandedView ? (
               <button
                 type="button"

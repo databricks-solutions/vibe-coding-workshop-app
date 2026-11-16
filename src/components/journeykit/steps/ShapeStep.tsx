@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Clock, FlaskConical, Info, MessagesSquare, RotateCcw, Sparkles } from 'lucide-react';
+import { Check, Clock, FlaskConical, Info, MessagesSquare, RotateCcw, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import type { ShapeOption } from '../engine/types';
 import { placementLabel, shapeBuild } from '../engine/surfaces';
@@ -138,6 +138,21 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
                       <p className="text-ui-xs text-muted-foreground break-words">No Genie: {build.noGenieWhy}</p>
                     )}
                   </div>
+
+                  {s.policyConflicts?.length ? (
+                    <div className="mt-3 rounded-xl border border-amber-500/35 bg-amber-500/[0.06] p-2.5 space-y-1">
+                      <p className="flex items-center gap-1.5 text-ui-2xs uppercase tracking-wider font-semibold text-amber-700 dark:text-amber-300">
+                        <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> Policy tension to resolve
+                      </p>
+                      {s.policyConflicts.map(conflict => (
+                        <p key={conflict} className="text-ui-xs text-foreground/90 break-words">{conflict}</p>
+                      ))}
+                    </div>
+                  ) : (idea.spark?.constraints?.length ?? 0) > 0 && (
+                    <p className="mt-3 inline-flex items-center gap-1 text-ui-2xs font-medium text-emerald-600 dark:text-emerald-400">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" /> Aligns with stated constraints
+                    </p>
+                  )}
 
                   {(chips.length > 0 || s.timeToValue) && (
                     <div className="flex flex-wrap items-center gap-1.5 mt-3">

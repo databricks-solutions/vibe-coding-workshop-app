@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react';
-import { ArrowRight, Database, History, Pencil, Target } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ArrowRight, Database, FileCode2, History, Pencil, ShieldAlert, Target } from 'lucide-react';
 import {
-  ART, BusinessCaseButton, ClimbRoute, FadeIn, GhostButton, PersonaChip, PrimaryButton, SecondaryButton, SHAPE_KINDS, SurfaceChips, UseCaseBadge,
-  answerFor, chosenShape, ideaLockedClimbSteps, placedLeaf, shapeBuild, type Idea, type StepKey,
+  ART, BusinessCaseButton, ClimbRoute, DlcAssetsModal, FadeIn, GhostButton, PersonaChip, PrimaryButton, SecondaryButton, SHAPE_KINDS, SurfaceChips, UseCaseBadge,
+  answerFor, chosenShape, collectConstraints, ideaLockedClimbSteps, placedLeaf, shapeBuild, type Idea, type StepKey,
 } from '../../journeykit';
 
 interface IdeaLockedScreenProps {
@@ -17,11 +17,13 @@ interface IdeaLockedScreenProps {
 
 /** The beat between shaping and building: what is locked in, and what comes next. */
 export function IdeaLockedScreen({ idea, readOnly, onEdit, onOpenCase, onNext, build }: IdeaLockedScreenProps) {
+  const [assetsOpen, setAssetsOpen] = useState(false);
   const shape = chosenShape(idea);
   const kind = shape ? SHAPE_KINDS[shape.kind] : null;
   const personas = placedLeaf(idea)?.personas ?? idea.useCaseContext?.personas.map(p => p.name) ?? [];
   const metric = answerFor(idea, 'business');
   const questions = idea.genieQuestions ?? [];
+  const constraints = collectConstraints(idea);
 
   return (
     <>
@@ -99,12 +101,24 @@ export function IdeaLockedScreen({ idea, readOnly, onEdit, onOpenCase, onNext, b
             <UseCaseBadge uc={idea.sourceUseCase} />
           </Row>
         )}
+        {constraints.length > 0 && (
+          <Row label="Constraints">
+            <div className="flex flex-wrap gap-1.5">
+              {constraints.map(c => (
+                <span key={c} className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/[0.06] px-2.5 py-0.5 text-ui-xs text-foreground">
+                  <ShieldAlert className="w-3 h-3 text-amber-500 shrink-0" /> {c}
+                </span>
+              ))}
+            </div>
+          </Row>
+        )}
       </FadeIn>
 
       <FadeIn delay={0.12} className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 pt-2">
         <div className="flex flex-wrap items-center gap-2">
           {!readOnly && <GhostButton onClick={() => onEdit()}><Pencil className="w-3.5 h-3.5" /> Edit idea</GhostButton>}
           {onOpenCase && <BusinessCaseButton idea={idea} onClick={onOpenCase} />}
+          <GhostButton onClick={() => setAssetsOpen(true)}><FileCode2 className="w-3.5 h-3.5" /> AI-DLC pack (.zip)</GhostButton>
         </div>
         {build && !readOnly ? (
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -126,6 +140,7 @@ export function IdeaLockedScreen({ idea, readOnly, onEdit, onOpenCase, onNext, b
           </PrimaryButton>
         )}
       </FadeIn>
+      <DlcAssetsModal idea={idea} open={assetsOpen} readOnly onClose={() => setAssetsOpen(false)} />
     </>
   );
 }

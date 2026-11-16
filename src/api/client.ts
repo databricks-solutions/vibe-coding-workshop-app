@@ -395,10 +395,11 @@ export interface TrackOutlineResponse {
 }
 
 export interface FeedbackRequest {
-  session_id: string;
+  session_id?: string;
   feedback_rating: 'thumbs_up' | 'thumbs_down';
   feedback_comment?: string;
   feedback_request_followup?: boolean;
+  source_area?: string;
 }
 
 export interface ChapterFeedbackRequest {
@@ -2229,17 +2230,41 @@ class ApiClient {
     feedback?: string,
     signal?: AbortSignal,
   ): Promise<{ data: T; model: string; fallback: boolean }> {
-    const response = await fetch(`${this.baseUrl}/ideate/step`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ step, idea, feedback }),
-      signal,
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 55_000);
+    const onCallerAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', onCallerAbort, { once: true });
     }
-    return { data: body.data as T, model: body.model ?? '', fallback: !!body.fallback };
+    try {
+      const response = await fetch(`${this.baseUrl}/ideate/step`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step, idea, feedback }),
+        signal: controller.signal,
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = (response.status === 504 || response.status === 408)
+          ? (body.error || 'That step took too long. Click Try again.')
+          : (body.error || `Request failed (${response.status})`);
+        throw Object.assign(new Error(message), { status: response.status });
+      }
+      return { data: body.data as T, model: body.model ?? '', fallback: !!body.fallback };
+    } catch (e) {
+      if (timedOut) {
+        throw Object.assign(new Error('That step took too long. Click Try again.'), { status: 504 });
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onCallerAbort);
+    }
   }
 
   async validateIdeaQuestion(

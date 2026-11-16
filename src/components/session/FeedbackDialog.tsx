@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MessageSquare, X, ThumbsUp, ThumbsDown, Send } from 'lucide-react';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
 
@@ -9,6 +9,7 @@ interface FeedbackDialogProps {
   isSubmitting: boolean;
   initialRating?: 'thumbs_up' | 'thumbs_down' | null;
   initialComment?: string;
+  submitError?: string | null;
 }
 
 export function FeedbackDialog({
@@ -18,11 +19,13 @@ export function FeedbackDialog({
   isSubmitting,
   initialRating = null,
   initialComment = '',
+  submitError = null,
 }: FeedbackDialogProps) {
   const [rating, setRating] = useState<'thumbs_up' | 'thumbs_down' | null>(initialRating);
   const [comment, setComment] = useState(initialComment || '');
   const [requestFollowup, setRequestFollowup] = useState(false);
   const [errors, setErrors] = useState<{ rating?: string; comment?: string }>({});
+  const commentRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset form when dialog opens (or its initial values change while open)
   const [resetFor, setResetFor] = useState({ isOpen, initialRating, initialComment });
@@ -35,6 +38,13 @@ export function FeedbackDialog({
       setErrors({});
     }
   }
+
+  useEffect(() => {
+    if (isOpen && initialRating) {
+      const id = requestAnimationFrame(() => commentRef.current?.focus());
+      return () => cancelAnimationFrame(id);
+    }
+  }, [isOpen, initialRating]);
 
   useEscapeKey(isOpen, onClose);
 
@@ -139,6 +149,7 @@ export function FeedbackDialog({
               Additional Comments <span className="text-red-400">*</span>
             </label>
             <textarea
+              ref={commentRef}
               id="feedback-comment"
               value={comment}
               onChange={(e) => {
@@ -200,6 +211,11 @@ export function FeedbackDialog({
               </div>
             </label>
           </div>
+          {submitError && (
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-ui-xs text-red-400">
+              {submitError}
+            </p>
+          )}
         </div>
 
         {/* Footer */}

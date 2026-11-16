@@ -35,7 +35,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient, FALLBACK_WORKSHOP_DEFAULTS, isPristineSession, newSessionMetadata, type WorkshopDefaults } from './api/client';
-import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
+import { Plus, Menu, Eye } from 'lucide-react';
 import { orderedSectionsForRead, WORKSHOP_LEVELS, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { mergeStatus } from './constants/mergeStatus';
 import type { SessionLoadResponse, TrackOutlineItem } from './api/client';
@@ -77,7 +77,23 @@ export default function App() {
   const isSkillsPage = location.pathname === '/skills';
   const isReleaseNotesPage = location.pathname === '/release-notes';
   const isIdeatePage = location.pathname === '/ideate' || location.pathname.startsWith('/ideate/');
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage && !isReleaseNotesPage && !isIdeatePage;  
+  const feedbackSourceArea = isIdeatePage
+    ? 'idea-studio'
+    : isHackathonsPage
+      ? 'hackathons'
+      : isLeaderboardPage
+        ? 'leaderboard'
+        : isSkillsPage
+          ? 'learning-academy'
+          : location.pathname.startsWith('/library')
+            ? 'library'
+            : isConfigPage
+              ? 'config'
+              : isAnalyticsPage
+                ? 'analytics'
+                : isReleaseNotesPage
+                  ? 'release-notes'
+                  : 'build-studio';
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -319,6 +335,9 @@ export default function App() {
   // Dialog state
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
+  const [feedbackInitialRating, setFeedbackInitialRating] = useState<'thumbs_up' | 'thumbs_down' | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackJustSubmitted, setFeedbackJustSubmitted] = useState(false);
   const [showSessionList, setShowSessionList] = useState(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
@@ -1221,20 +1240,33 @@ export default function App() {
     }
   };
 
+  const openFeedback = useCallback((initialRating: 'thumbs_up' | 'thumbs_down' | null = null) => {
+    setFeedbackInitialRating(initialRating);
+    setFeedbackError(null);
+    setShowFeedbackDialog(true);
+  }, []);
+
   const handleSubmitFeedback = async (rating: 'thumbs_up' | 'thumbs_down', comment: string, requestFollowup: boolean) => {
-    if (!sessionId) return;
-    
     setIsSubmittingFeedback(true);
+    setFeedbackError(null);
     try {
-      await apiClient.submitFeedback({
-        session_id: sessionId,
+      const res = await apiClient.submitFeedback({
+        ...(sessionId ? { session_id: sessionId } : {}),
         feedback_rating: rating,
         feedback_comment: comment,
-        feedback_request_followup: requestFollowup
+        feedback_request_followup: requestFollowup,
+        source_area: feedbackSourceArea,
       });
+      if (!res.success) {
+        setFeedbackError(res.message || 'Could not save feedback. Try again.');
+        return;
+      }
       setShowFeedbackDialog(false);
+      setFeedbackJustSubmitted(true);
+      setTimeout(() => setFeedbackJustSubmitted(false), 4000);
     } catch (err) {
       console.error('Error submitting feedback:', err);
+      setFeedbackError((err as Error).message || 'Could not save feedback. Try again.');
     } finally {
       setIsSubmittingFeedback(false);
     }
@@ -1732,6 +1764,8 @@ export default function App() {
             brand={brandConfig}
             sessionId={sessionId}
             onClose={() => setMobileSidebarOpen(false)}
+            onOpenFeedback={openFeedback}
+            feedbackJustSubmitted={feedbackJustSubmitted}
           />
         </div>
       )}
@@ -1748,6 +1782,8 @@ export default function App() {
           setShowConfigHint(false);
           setHintDismissed(true);
         }}
+        onOpenFeedback={openFeedback}
+        feedbackJustSubmitted={feedbackJustSubmitted}
       />
 
       {/* Main Content */}
@@ -2072,6 +2108,8 @@ export default function App() {
         onClose={() => setShowFeedbackDialog(false)}
         onSubmit={handleSubmitFeedback}
         isSubmitting={isSubmittingFeedback}
+        initialRating={feedbackInitialRating}
+        submitError={feedbackError}
       />
 
       <SessionListDialog
@@ -2123,19 +2161,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Feedback Button - Bottom Center (only on workflow page) */}
-      {isWorkflowPage && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40">
-          <button
-            onClick={() => setShowFeedbackDialog(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-primary hover:from-purple-500 hover:to-primary/90 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-ui-base font-medium group"
-            title="Share your feedback"
-          >
-            <MessageSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />
-            <span>Share Feedback</span>
-          </button>
-        </div>
-      )}
       <SessionSyncNotice
         message={syncMessage}
         onOpen={id => { setSyncMessage(null); window.history.replaceState({}, '', `?sessionId=${id}`); loadSession(id); }}

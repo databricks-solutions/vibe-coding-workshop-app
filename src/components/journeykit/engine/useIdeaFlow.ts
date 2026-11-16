@@ -178,7 +178,7 @@ export function useIdeaFlow(ideaId: string) {
     } catch (e) {
       if (!current() || (e as Error).name === 'AbortError') return null;
       const status = (e as { status?: number }).status;
-      if (status === undefined || UNAVAILABLE.has(status)) setAiUnavailable(true);
+      if (status !== undefined && UNAVAILABLE.has(status)) setAiUnavailable(true);
       setError((e as Error).message);
       return null;
     } finally {
@@ -529,6 +529,28 @@ export function useIdeaFlow(ideaId: string) {
     setViewStep('shape');
   }, [logDecision, patch]);
 
+  /** Non-destructive AI polish of Spark intent, affected systems, and constraints without wiping downstream steps. */
+  const improveIntent = useCallback(async (feedback?: string) => {
+    const current = ideaRef.current;
+    if (!current || readOnly) return;
+    const promptFeedback = feedback?.trim()
+      || 'Sharpen the problem statement and proposed outcome, and surface concrete affected_systems, hard constraints (PII, auth, latency, human approval), and open_questions. Keep the core intent intact.';
+    const r = await call<WithAssumptions<SparkResult>>('spark', 'spark', buildContext(current, 'spark'), promptFeedback);
+    if (!r) return;
+    const { assumptions, ...spark } = r;
+    revise('spark', i => ({
+      spark: {
+        ...i.spark,
+        ...spark,
+        affectedSystems: spark.affectedSystems?.length ? spark.affectedSystems : i.spark?.affectedSystems,
+        constraints: spark.constraints?.length ? spark.constraints : i.spark?.constraints,
+        openQuestions: spark.openQuestions?.length ? spark.openQuestions : i.spark?.openQuestions,
+      },
+      title: spark.title || i.title,
+    }), 'Sharpened intent & constraints with AI');
+    mergeAssumptions('spark', assumptions);
+  }, [call, mergeAssumptions, readOnly, revise]);
+
   return {
     idea,
     viewStep,
@@ -546,6 +568,7 @@ export function useIdeaFlow(ideaId: string) {
     patch,
     revise,
     run,
+    improveIntent,
     approve,
     chooseShape,
     answer,
