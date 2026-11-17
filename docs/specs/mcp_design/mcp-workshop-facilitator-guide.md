@@ -68,6 +68,11 @@ The switches are read per call, but `app.yaml` only changes on the next deploy.
 
 - **Genie Code in Agent mode.** The MCP surface only works in **Agent mode** (probe / Databricks
   docs). Ask/edit modes won't invoke the tools.
+- **Approvals set to Ask first for setup.** In its default Auto-approve mode, Genie Code always
+  denies the agent's writes to `.assistant/`, even after the learner confirms, so the Set Up
+  Project skills copy fails. With Ask first (the ⋮ menu, Settings, Actions), the learner clicks
+  Allow and the copy runs; they can switch back to Auto-approve afterwards. The fallback is the
+  template's `setup/publish_skills.ipynb`: attach serverless and click Run all.
 - **Same workspace.** The MCP app and the learner's Genie Code must be in the **same Databricks
   workspace**.
 - **The app is deployed with an `mcp-` name.** e.g. `mcp-vibe-workshop` (D9 §4). If the name doesn't
@@ -80,13 +85,14 @@ The switches are read per call, but `app.yaml` only changes on the next deploy.
 ## 2. Add the app as a Custom MCP server (learner)
 
 In the app, choose **Interactive Mode (MCP Server)** (Recommended · Beta; Copy & Paste is the
-default). The panel shows these four steps in order:
+default). The panel shows these five steps in order:
 
 1. **Copy your MCP URL** — This link connects Genie Code to this workshop app.
    (The app shows the real URL, `https://<app-url>/mcp`, with a copy button.)
 2. **Open Genie Code in Agent mode** — In your Databricks workspace, open Genie Code and switch the mode to Agent.
-3. **Add the URL as a custom MCP server** — Open MCP settings, choose "Add custom MCP server", paste the URL from Step 1, then Save.
-4. **Start the workshop** — Paste this message into the Genie Code chat and press Enter:
+3. **Set approvals to Ask first** — Open the ⋮ menu, then Settings, then Actions, and choose Ask first. You'll click Allow once when setup copies the workshop skills.
+4. **Add the URL as a custom MCP server** — Open MCP settings, choose "Add custom MCP server", paste the URL from Step 1, then Save.
+5. **Start the workshop** — Paste this message into the Genie Code chat and press Enter:
    **"Start a workshop track: <track name> (session <id>)"** (shown in the app with a copy button).
 
 After Save, Genie Code performs the handshake; the `vibe_*` tools and the workshop prompts become
@@ -99,7 +105,7 @@ Genie Accelerator" still works too).
 ## 3. Start the track / continue
 
 - Type the line the web UI shows: **"Start a workshop track: <track name> (session <id>)"**. It is
-  in the Genie Code card of **Choose Your Coding Assistant** (with the MCP URL and the four
+  in the Genie Code card of **Choose Your Coding Assistant** (with the MCP URL and the five
   setup steps) and again in **Set Up Project**, each with a copy button; it names the
   session's track and id, so Genie Code continues that same web session. Without the web UI, say
   **"Start a workshop track"** with the track ("Start the Genie Accelerator" still works too). The track can be its

@@ -116,7 +116,8 @@ def test_c4_no_other_row_changed(tmp_path):
     # 1124: the D-144 ontology_domain genie-code v3 row (genie-default-ontology PR 1).
     # 320/321/1320/1321: the D-168 v2 Insights rows (activation, alerts).
     # 943/944: semlayer_locate_upload updated on main (6b289a7).
-    assert set(head) - set(base) == NEW_IDS | MAIN_INSIGHTS_IDS | {1124} | {320, 321, 1320, 1321}
+    # 1125: the D-223 skill_apply_contracts genie-code v2 row.
+    assert set(head) - set(base) == NEW_IDS | MAIN_INSIGHTS_IDS | {1124} | {320, 321, 1320, 1321} | {1125}
     assert {pk: head[pk] for pk in base if pk not in {943, 944}} == {pk: s for pk, s in base.items() if pk not in {943, 944}}
     for v1, _, _ in V2.values():
         assert _row(head[v1])["is_active"] is True

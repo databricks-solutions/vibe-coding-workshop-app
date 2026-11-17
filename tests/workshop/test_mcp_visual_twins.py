@@ -622,7 +622,8 @@ WEB_GOLDEN = {
     "silver_layer_sdp|default": "d059b44d38455ce602ed68f679b24301337dea781ad40c87d6dd6df114aa7eda",
     "silver_layer_sdp|genie-code": "1fc3072b52bc3393d2d1d3221cce6ce3f92dffee098704ae4241f6e879b1abd9",
     "skill_apply_contracts|default": "d1171d7d5ba64137b42b3a88c1863be69426f246f8f99cbb9fb52cd69ba7a3de",
-    "skill_apply_contracts|genie-code": "fd17a41462f6752b837a9bdfd0ec7d348a42f201c097c9449c178b57e40dfc6c",
+    # D-223: served from the v2 row 1125 (Ask first approval for the .assistant/skills publish).
+    "skill_apply_contracts|genie-code": "5c80c1facb08078555d6985d5f7fe1a5a3cd352c925f289627a2564bd9d4a829",
     "skill_certify_tables|default": "629710bdcf73089c13e6e66a3e835f0a73f52452576834e243d2650b35789b06",
     "skill_certify_tables|genie-code": "201d6a69f50f5b1ae49a889f2ac5d22427a04f4258e5a7ecfd2ea1ea6ffa9ee1",
     "skill_create_skillmd|default": "efe9f41076990e1db480b212452b1ba007422171615aea26814a8eba804c0072",

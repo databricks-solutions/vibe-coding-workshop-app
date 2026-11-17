@@ -320,8 +320,8 @@ def test_split_parity_on_seed_files(seed_file, transformed):
     ours, theirs = snr.split_statements(content), _shell_splitter()(content)
     assert ours == theirs
     # +12: main's Insights rows; +1: the D-144 ontology_domain genie-code v3 row 1124;
-    # +4: the D-168 v2 Insights rows 320/321/1320/1321.
-    assert len(ours) == {F01: 48 + 3, F02: 173 + 12 + 1 + 4}[seed_file]
+    # +4: the D-168 v2 Insights rows 320/321/1320/1321; +1: the D-223 v2 row 1125.
+    assert len(ours) == {F01: 48 + 3, F02: 173 + 12 + 1 + 4 + 1}[seed_file]
 
 
 ADVERSARIAL = [
@@ -494,9 +494,11 @@ MAIN_INSIGHTS_IDS = list(range(300, 306)) + list(range(1300, 1306))
 D144_V3_IDS = [1124]
 # D-168 adds the v2 Insights rows (activation, alerts): defaults 320/321, forks 1320/1321 (new max 1321).
 D168_V2_IDS = [320, 321, 1320, 1321]
+# D-223 adds the skill_apply_contracts genie-code v2 row 1125 (below max 1321: the sequence never moves for it).
+D223_V2_IDS = [1125]
 POST_BASELINE_SIP = (
     set(range(1001, 1018)) | set(D57_V2_IDS) | {1033} | set(D77_V2_IDS) | set(MAIN_INSIGHTS_IDS) | set(D144_V3_IDS)
-    | set(D168_V2_IDS)
+    | set(D168_V2_IDS) | set(D223_V2_IDS)
 )
 
 
@@ -508,13 +510,13 @@ def test_populated_today_seed_files_insert_only_the_post_baseline_rows():
     assert _seed_inserts(db, UC) == []
     # D-56 fills 1009, the gap D-51 left; D-57 adds the v2 forks 1018-1032 (D-70
     # ships the three D-61 held); D-58 adds 1033; D-77 adds 1034-1036; D-144 adds 1124;
-    # D-168 adds 320/321/1320/1321.
+    # D-168 adds 320/321/1320/1321; D-223 adds 1125.
     assert db.ledger == {(SIP, input_id) for input_id in POST_BASELINE_SIP}
     # Only section_input_prompts' sequence moves: raised to max 1321 + 1 (1305 + 1 before D-168).
     assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1322)]
     assert f"    {UC}: 0 inserted / 0 warnings" in log
-    # 48 before D-144; +1 for its v3 row 1124; +4 for the D-168 v2 rows.
-    assert f"    {SIP}: 53 inserted / 0 warnings" in log
+    # 48 before D-144; +1 for its v3 row 1124; +4 for the D-168 v2 rows; +1 for the D-223 v2 row.
+    assert f"    {SIP}: 54 inserted / 0 warnings" in log
 
 
 def test_populated_release_with_1009_inserts_only_1009_and_keeps_the_sequence():
@@ -565,6 +567,28 @@ def test_populated_release_with_d144_inserts_only_1124_and_keeps_the_sequence():
     assert not [s for s in db.executed if DESTRUCTIVE.match(s)]
 
 
+def test_populated_release_with_d223_inserts_only_1125_and_keeps_the_sequence():
+    """The D-223 release on the live install: every earlier post-baseline row is applied
+    and ledgered and the sequence sits at 1322, so an additive run inserts the
+    skill_apply_contracts genie-code v2 row 1125 alone and the sequence stays (1125 is below it)."""
+    applied = POST_BASELINE_SIP - set(D223_V2_IDS)
+    db = _populated(
+        ledger={(SIP, input_id) for input_id in applied},
+        seqs={
+            "usecase_descriptions_config_id_seq": [max(BASELINE[UC]), True, 1],
+            "section_input_prompts_input_id_seq": [1321, True, 1],
+        },
+    )
+    db.tables[SIP] |= applied
+    log = _run_create(db, DML_SEED)
+    assert [re.search(r"VALUES\s*\((\d+),", s).group(1) for s in _seed_inserts(db, SIP)] == ["1125"]
+    assert (SIP, 1125) in db.ledger and 1125 in db.tables[SIP]
+    assert db.setvals == []
+    assert f"    {SIP}: 1 inserted / 0 warnings" in log
+    assert f"    {SIP}.input_id sequence kept at 1322 (max input_id 1321)" in log
+    assert not [s for s in db.executed if DESTRUCTIVE.match(s)]
+
+
 def test_populated_release_with_d57_inserts_the_15_v2_rows_and_raises_the_sequence():
     """The D-57 release on the live install: 1001-1017 are applied and the sequence
     sits at 1018, so the reseed inserts the 15 v2 forks (D-70 ships the 3 D-61 held), plus
@@ -580,12 +604,14 @@ def test_populated_release_with_d57_inserts_the_15_v2_rows_and_raises_the_sequen
     db.tables[SIP] |= applied
     log = _run_create(db, DML_SEED)
     inserted = [int(re.search(r"VALUES\s*\((\d+),", s).group(1)) for s in _seed_inserts(db, SIP)]
-    assert sorted(inserted) == sorted(D57_V2_IDS + [1033] + D77_V2_IDS + MAIN_INSIGHTS_IDS + D144_V3_IDS + D168_V2_IDS)
+    assert sorted(inserted) == sorted(
+        D57_V2_IDS + [1033] + D77_V2_IDS + MAIN_INSIGHTS_IDS + D144_V3_IDS + D168_V2_IDS + D223_V2_IDS
+    )
     assert db.ledger == {(SIP, input_id) for input_id in POST_BASELINE_SIP}
     # D-168: max input_id 1321 + 1 (1306 before its v2 rows).
     assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1322)]
-    # 31 before D-144; +1 for its v3 row 1124; +4 for the D-168 v2 rows.
-    assert f"    {SIP}: 36 inserted / 0 warnings" in log
+    # 31 before D-144; +1 for its v3 row 1124; +4 for the D-168 v2 rows; +1 for the D-223 v2 row.
+    assert f"    {SIP}: 37 inserted / 0 warnings" in log
     assert f"    {SIP}.input_id sequence raised 1018 -> 1322" in log
 
 

@@ -10448,6 +10448,89 @@ The generated statements are applied in the next step (Validate & Automate) by i
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- skill_apply_contracts (genie-code fork) v2 (D-223) — 1005 plus the Ask first approval before the .assistant/skills publish and the learner-run fallback when Auto-approve denies it; otherwise 1005 byte for byte; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1125, 'skill_apply_contracts', 'genie-code',
+'## Step 4: Apply & Test Your New Skill
+
+Save your Agent Skill package (SKILL.md + references + assets) to your project, publish it so Genie Code can load it, and test it against your target assets. Before this step the skill exists only as the previous step''s output; after it, the skill is saved under `<REPO_ROOT>`, published under the skills copy, and has been exercised against at least one target asset as a **dry run** whose statements the next step (Validate & Automate) applies through its bundle-deployed job.
+
+### Your Use Case: {use_case_title}
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is written to a fully qualified `/Workspace/Users/<your-email>/…` path; every CLI call goes through `runDatabricksCli` with NO `--profile` flag (Genie Code is already authenticated to this workspace).**
+
+### 🔴 Non-negotiable rule (read before anything)
+
+❌ **NEVER** run `ALTER TABLE … SET TAGS`, `UNSET TAGS`, or any DDL / DML against the target tables in this step — not with `executeCode`, not with `spark.sql`, not in a notebook cell. The workshop changes warehouse state only through a deployed bundle job, and the next step''s validator job is the one that applies the tags.
+
+✅ The ONLY statements you run here are **read-only**: `SELECT` from `system.information_schema.table_tags`, and `DESCRIBE TABLE`.
+
+**IMPORTANT: These are EXISTING gold-layer tables. Do NOT create new schemas or tables. Your skill should read and govern the tables already in this schema.**
+
+Target: **{gold_table_target}**
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "skill_apply_contracts"`). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `state_file_root` = `artifact_root` = your cloned workshop repository (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`). Referred to below as `<REPO_ROOT>`.
+- `skills_install_root` = `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` — the published skills copy Genie Code loads skills from.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `<skill-name>` = the skill name from the previous step''s SKILL.md output (Skill Identity).
+
+### Step 1 — Save the skill under `<REPO_ROOT>`
+
+Write every generated file under `<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>/`, keeping the exact file names and folder structure from the previous step''s output:
+
+```
+<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>/
+├── SKILL.md
+├── references/
+│   └── <reference-doc>.md
+└── assets/
+    └── <config-file>.yaml
+```
+
+Write each file with `executeCode` `open(path, "w").write(...)`, one call per file, using its fully qualified path (make the FIRST `executeCode` a trivial `print("ready")` to absorb the serverless cold start). Never write to a bare relative path: Genie Code''s working directory depends on the page you are on.
+
+### Step 2 — Publish the skill so Genie Code can load it
+
+A skill saved only in `<REPO_ROOT>` is not loadable: Genie Code loads skills only from the published copy under `.assistant/skills`. Publish JUST this skill''s folder (do not delete or re-copy the rest of the published tree), in ONE `executeCode` block.
+
+**Approval first.** This copy writes into `.assistant/skills`, which Genie Code''s Auto-approve mode always denies to the agent, even after I confirm. Before you run it, tell me an approval prompt will appear and to click Allow; if my approvals are not set to **Ask first**, ask me to set it (the ⋮ menu, Settings, Actions).
+
+- `import shutil; shutil.copytree("<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>", "/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop/data_product_accelerator/skills/common/<skill-name>", dirs_exist_ok=True)`
+
+Then, in the SAME `executeCode` block, verify BOTH copies with `os.path.exists(...)` on each file (NOT `listFiles`, which lags FUSE writes) — the saved `<REPO_ROOT>/…/<skill-name>/SKILL.md` and the published `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop/…/<skill-name>/SKILL.md`. If either is missing, STOP and fix the write before going on.
+
+If the copy is denied as protected assistant configuration, do NOT retry it, and do NOT write a notebook, script or job that does the copy for you. Show me the exact copy line above and ask me to paste it into a serverless notebook cell and run it myself, wait until I reply "done", then re-check both copies with `os.path.exists(...)`.
+
+### Step 3 — Use the new skill (dry run against your target assets)
+
+1. Load it by its published path: `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/<skill-name>/SKILL.md")`, and echo one line naming the rule you will apply from it. If the read fails, the publish did not land — go back to Step 2.
+2. Follow the skill against at least one target table to GENERATE (as text only — do NOT run them) the exact `ALTER TABLE … SET TAGS` statements it calls for, plus the validation SQL from its reference document.
+3. Record the current (before) state read-only: `SELECT * FROM system.information_schema.table_tags WHERE catalog_name = ''<catalog>'' AND schema_name = ''<schema>'' AND table_name = ''<table_name>''`, and `DESCRIBE TABLE` on the same table.
+4. Run the validation SQL only where it is a read-only `SELECT`, and show me the generated statements, the before-state and the validation results.
+5. Save that dry-run output (the generated statements, the before-state, the validation results) with `executeCode` `open(path, "w").write(...)` to `<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>/references/dry_run_output.md`, publish it the same way as Step 2, and verify it with `os.path.exists(...)`.
+
+The generated statements are applied in the next step (Validate & Automate) by its bundle-deployed validator job — do NOT run them here.
+
+### Deliverables
+
+- [ ] All skill files saved to the correct folder structure under `<REPO_ROOT>`
+- [ ] Skill published to the skills copy and loaded via `readSkillFile`
+- [ ] Skill exercised against at least one target asset: statements generated and dry-run validated (read-only)
+- [ ] Results verified with the read-only `system.information_schema.table_tags` query
+- [ ] No errors during skill execution, and application handed to Validate & Automate
+
+**State file:** this prompt runs between an `enter` (Step 0) and an `exit`. When the deliverables above are met, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "skill_apply_contracts"`, `gate: "Skill saved, published and dry-run tested"`, `captured: {applied_skill}` (the skill name, both paths, and the dry-run output path). **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the live `.vibecoding-state.md` file under `<REPO_ROOT>` (`state_file_root`). The closing `exit` MUST append this prompt''s Per-Step Log entry and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. This prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.',
+'',
+true, 2, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 30: Validate & Automate
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
