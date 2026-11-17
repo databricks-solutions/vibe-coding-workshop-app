@@ -9,6 +9,7 @@ Facts this script relies on, all at APP `99660a9` (the deployed SHA, FORGE/state
 ## S0. Prerequisites
 
 1. A Databricks workspace with **Genie Code** in **Agent mode**, and a participant identity (your email) that owns nothing you would mind cleaning up (S4).
+   - Use a user that has never changed Genie Code settings, so you see what a customer sees, then set approvals to **Ask first** (the ⋮ menu, Settings, Actions). In the default Auto-approve mode, Genie Code always denies the agent's writes to `.assistant/`, so the S1.1 skills copy fails.
 2. The app: https://mcp-vibe-coding-workshop-app-7474656657532371.aws.databricksapps.com
    - Its MCP endpoint is https://mcp-vibe-coding-workshop-app-7474656657532371.aws.databricksapps.com/mcp
    - The endpoint is mounted at app.py:284, `app.mount("/mcp", mcp_app, name="mcp")`, behind `MCP_MOUNT_ENABLED` (app.py:283).
@@ -44,6 +45,7 @@ Facts this script relies on, all at APP `99660a9` (the deployed SHA, FORGE/state
       ```
       D=/Workspace/Users/<email>; test -d "$D/vibe-coding-workshop/.git" && echo "✅ 1/2 project cloned" || echo "❌ 1/2 re-run command 1"; test -f "$D/.assistant/skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md" && echo "✅ 2/2 skills published" || echo "❌ 2/2 re-run command 2"
       ```
+   Command 2 shows an approval prompt; click Allow. If it is denied instead (approvals still on Auto-approve), Genie Code must not retry it; it asks you to switch to Ask first or to run `/Workspace/Users/<email>/vibe-coding-workshop/setup/publish_skills.ipynb` (attach serverless, Run all). Record which path you took (S5).
 3. Expected (:1031-1036): `✅ 1/2 project cloned`, `✅ 2/2 skills published`. Then Genie Code re-verifies both paths with `os.path.exists` in one `executeCode` block, loads `skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md` with `readSkillFile`, and confirms "Setup verified ✅" (:1015-1023).
 
 **S1.2 Switch the clone to the TPL integration branch (until TPL RC #21 merges).** The clone above checks out the TPL default branch, main. The forge's template changes (TPL #18-#20) are only on `feature/genie-code-mcp-integration` (ledger L1, L3). Ask Genie Code to run these in the Genie Code terminal, the same way it ran the project_setup commands:
@@ -52,7 +54,7 @@ Facts this script relies on, all at APP `99660a9` (the deployed SHA, FORGE/state
    git -C /Workspace/Users/<email>/vibe-coding-workshop fetch origin feature/genie-code-mcp-integration && git -C /Workspace/Users/<email>/vibe-coding-workshop checkout -B feature/genie-code-mcp-integration origin/feature/genie-code-mcp-integration
    ```
    Expected: git reports the branch set up and switched; no error.
-2. Re-publish the skills: the same copy_cmd as S1.1 step 2:
+2. Re-publish the skills: the same copy_cmd as S1.1 step 2 (it needs the same Allow under Ask first):
    ```
    D=/Workspace/Users/<email>; rm -rf "$D/.assistant/skills/vibe-coding-workshop"; mkdir -p "$D/.assistant/skills"; cp -R "$D/vibe-coding-workshop" "$D/.assistant/skills/"
    ```

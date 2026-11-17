@@ -59,7 +59,7 @@ export interface GenieCodeMcpStep {
   detail: string;
 }
 
-/** The four setup steps from D10 §2 (learner path), shown in order. */
+/** The five setup steps from D10 §2 (learner path), shown in order. */
 export const GENIE_CODE_MCP_CONNECTION_STEPS: readonly GenieCodeMcpStep[] = [
   {
     title: 'Copy your MCP URL',
@@ -68,6 +68,12 @@ export const GENIE_CODE_MCP_CONNECTION_STEPS: readonly GenieCodeMcpStep[] = [
   {
     title: 'Open Genie Code in Agent mode',
     detail: 'In your Databricks workspace, open Genie Code and switch the mode to Agent.',
+  },
+  {
+    // Auto-approve always denies the agent's writes to .assistant/, so the
+    // project_setup skills copy needs a learner approval.
+    title: 'Set approvals to Ask first',
+    detail: "Open the ⋮ menu, then Settings, then Actions, and choose Ask first. You'll click Allow once when setup copies the workshop skills.",
   },
   {
     title: 'Add the URL as a custom MCP server',

@@ -691,6 +691,9 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
 
               {genieMode === 'mcp' && (
                 <div className="space-y-1.5">
+                  <p data-testid="genie-code-ask-first-note" className="text-ui-xs text-muted-foreground">
+                    Before you begin, set Genie Code approvals to <span className="font-semibold text-foreground">Ask first</span> (the ⋮ menu, Settings, Actions). You&apos;ll approve the skills copy once, then you can switch back.
+                  </p>
                   <p className="text-ui-xs font-medium text-foreground">
                     After running the 1-time workspace clone below, paste this single line in Genie Code to start your interactive walk:
                   </p>

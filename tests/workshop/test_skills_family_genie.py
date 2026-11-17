@@ -7,12 +7,12 @@ Same real-seed harness as the app and lakehouse families
 S1 marker lint: every step in the skills-accelerator MCP outline, served to a
    genie-code session with a resolved learner email (as live), carries no local-IDE
    marker. The one allowance is project_setup's own /Workspace/Users/<email>/... path.
-S2 fork resolution: a genie-code session gets the 1004-1006 and 1002 fork bodies; a
-   non-genie session still gets the default rows.
-S3 paths: the 1004/1005 bodies name no bare relative data_product_accelerator/skills/
-   path, and 1005 saves under <REPO_ROOT>, publishes into .assistant/skills and
-   verifies, in that order.
-S4 no in-session mutation (D-46): 1005 generates the SET TAGS statements as a dry run
+S2 fork resolution: a genie-code session gets the 1004, 1125 (v2 of 1005, D-223),
+   1006 and 1002 fork bodies; a non-genie session still gets the default rows.
+S3 paths: the 1004/1125 bodies name no bare relative data_product_accelerator/skills/
+   path, and 1125 saves under <REPO_ROOT>, publishes into .assistant/skills (after
+   asking for Ask first) and verifies, in that order.
+S4 no in-session mutation (D-46): 1125 generates the SET TAGS statements as a dry run
    and runs none of them; the next step's bundle job applies them.
 S5 1006 writes its bundle files with executeCode open().write (never createAsset /
    editAsset), pins source_linked_deployment: false, and runs no `bundle run` before
@@ -53,10 +53,12 @@ ALLOWED = {
     ),
 }
 
-# section_tag -> genie-code fork input_id: 1002 (#114), 1004-1006 (this PR).
+# section_tag -> served genie-code fork input_id: 1002 (#114), 1004-1006 (P4.3); D-223
+# serves skill_apply_contracts from its v2 row 1125 (1005 stays as v1).
+SKILL_APPLY_V2_ID = 1125
 FORK_ID = {
     "skill_install_explore": 1004,
-    "skill_apply_contracts": 1005,
+    "skill_apply_contracts": SKILL_APPLY_V2_ID,
     "skill_certify_tables": 1006,
     "redeploy_test": 1002,
 }
@@ -127,7 +129,7 @@ def test_s1_skills_forks_are_marker_clean():
 
 @pytest.mark.parametrize("tag", sorted(NEW_FORKS))
 def test_s2_seed_carries_the_fork_rows(tag):
-    fork_id, default_id = FORKS[tag]
+    fork_id, default_id = NEW_FORKS[tag], FORKS[tag][1]
     fork, default = SEED_ROWS.get(fork_id), SEED_ROWS[default_id]
     assert fork is not None, f"seed has no input_id {fork_id}"
     assert (fork["section_tag"], fork["coding_assistant"]) == (tag, "genie-code")
@@ -178,7 +180,7 @@ def test_s2_non_genie_session_still_gets_the_default(seeded, tag, assistant):
     assert _distinct_line(fork, default) not in body
 
 
-# --- S3: no bare relative skill paths; 1005 publishes ----------------------------
+# --- S3: no bare relative skill paths; 1005/1125 publish -------------------------
 
 _SKILL_PATH = re.compile(r"data_product_accelerator/skills/")
 # A skill path is anchored when it is a readSkillFile path (which the published
@@ -187,7 +189,7 @@ _SKILL_PATH = re.compile(r"data_product_accelerator/skills/")
 _ANCHORS = ("skills/vibe-coding-workshop/", "<REPO_ROOT>/")
 
 
-@pytest.mark.parametrize("fork_id", [1004, 1005])
+@pytest.mark.parametrize("fork_id", [1004, 1005, SKILL_APPLY_V2_ID])
 def test_s3_no_bare_relative_skill_paths(fork_id):
     body = _fork(fork_id)
     starts = [m.start() for m in _SKILL_PATH.finditer(body)]
@@ -199,11 +201,12 @@ def test_s3_no_bare_relative_skill_paths(fork_id):
 _PUBLISHED = "/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop/"
 
 
-def test_s3_apply_contracts_saves_publishes_then_verifies():
-    """A skill saved only in the clone is not loadable in Genie Code: 1005 writes it
+@pytest.mark.parametrize("fork_id", [1005, SKILL_APPLY_V2_ID])
+def test_s3_apply_contracts_saves_publishes_then_verifies(fork_id):
+    """A skill saved only in the clone is not loadable in Genie Code: the fork writes it
     under <REPO_ROOT>, copies that folder into the published skills copy, and checks
     both copies with os.path.exists, in that order; then loads it via readSkillFile."""
-    body = _fork(1005)
+    body = _fork(fork_id)
     save = body.index("<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>/")
     copies = [
         line
@@ -217,24 +220,77 @@ def test_s3_apply_contracts_saves_publishes_then_verifies():
     assert save < copy < verify < use
 
 
-# --- S4: 1005 is a dry run (D-46) -----------------------------------------------
+_APPROVAL_FIRST = (
+    "**Approval first.** This copy writes into `.assistant/skills`, which Genie Code''s Auto-approve mode "
+    "always denies to the agent, even after I confirm. Before you run it, tell me an approval prompt will "
+    "appear and to click Allow; if my approvals are not set to **Ask first**, ask me to set it (the ⋮ menu, "
+    "Settings, Actions)."
+).replace("''", "'")
+_DENIED = (
+    "If the copy is denied as protected assistant configuration, do NOT retry it, and do NOT write a notebook, "
+    "script or job that does the copy for you. Show me the exact copy line above and ask me to paste it into a "
+    'serverless notebook cell and run it myself, wait until I reply "done", then re-check both copies with '
+    "`os.path.exists(...)`."
+)
+
+
+def test_s3_apply_contracts_publish_needs_learner_approval():
+    """Auto-approve always denies the agent's writes to .assistant/ (D-223): 1125 asks
+    for Ask first before the copy, and on a denial hands the copy to the learner
+    instead of retrying or routing around it."""
+    body = _fork(SKILL_APPLY_V2_ID)
+    copy = body.index("shutil.copytree(")
+    ask_first = body.index(_APPROVAL_FIRST)
+    denied = body.index(_DENIED)
+    use = body.index('readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/<skill-name>/')
+    assert ask_first < copy < denied < use
+
+
+def test_s3_apply_contracts_v2_is_v1_plus_the_approval_paragraphs():
+    """D-223 ships as a version-2 row because seed_new_rows never updates an existing
+    row: 1125 is 1005 with the two approval paragraphs added, and nothing else."""
+    v1, v2 = SEED_ROWS[1005], SEED_ROWS[SKILL_APPLY_V2_ID]
+    assert (v1["version"], v1["is_active"], v2["version"], v2["is_active"]) == (1, True, 2, True)
+    assert {k: v for k, v in v2.items() if k not in ("input_id", "version", "input_template")} == {
+        k: v for k, v in v1.items() if k not in ("input_id", "version", "input_template")
+    }
+    rebuilt = (
+        v1["input_template"]
+        .replace(
+            "(do not delete or re-copy the rest of the published tree), in ONE `executeCode` block:\n\n",
+            "(do not delete or re-copy the rest of the published tree), in ONE `executeCode` block.\n\n"
+            + _APPROVAL_FIRST
+            + "\n\n",
+            1,
+        )
+        .replace(
+            "If either is missing, STOP and fix the write before going on.\n\n",
+            "If either is missing, STOP and fix the write before going on.\n\n" + _DENIED + "\n\n",
+            1,
+        )
+    )
+    assert v2["input_template"] == rebuilt
+
+
+# --- S4: the skill_apply_contracts forks are a dry run (D-46) --------------------
 
 _MUTATION = re.compile(r"\b(?:ALTER\s+TABLE|SET\s+TAGS|UNSET\s+TAGS|CREATE|DROP|INSERT|UPDATE|DELETE|MERGE)\b")
 _EXECUTE = re.compile(r"\b(?:run|runs|execute|executes|apply|applies|executeCode|spark\.sql)\b", re.IGNORECASE)
 _PROHIBITION = re.compile(r"\bNEVER\b|\b[Dd]o NOT\b")
 
 
-def test_s4_apply_contracts_runs_no_mutation_in_session():
-    """Every line of 1005 that pairs a mutating statement with an execution verb is
+@pytest.mark.parametrize("fork_id", [1005, SKILL_APPLY_V2_ID])
+def test_s4_apply_contracts_runs_no_mutation_in_session(fork_id):
+    """Every line of the fork that pairs a mutating statement with an execution verb is
     a NEVER / do-NOT line; application is handed to the next step's bundle job."""
     affirmative = [
         line.strip()
-        for line in _fork(1005).splitlines()
+        for line in _fork(fork_id).splitlines()
         if _MUTATION.search(line) and _EXECUTE.search(line) and not _PROHIBITION.search(line)
     ]
     assert affirmative == [], affirmative
-    body = _fork(1005)
-    assert "SET TAGS" in body, "1005 no longer generates the tag statements; revisit this pin"
+    body = _fork(fork_id)
+    assert "SET TAGS" in body, f"{fork_id} no longer generates the tag statements; revisit this pin"
     assert "applied in the next step (Validate & Automate) by its bundle-deployed validator job" in body
 
 

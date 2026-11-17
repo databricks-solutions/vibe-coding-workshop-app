@@ -46,6 +46,21 @@ def test_project_setup_content_renders_commands_with_email():
     assert "✅" in content["expected_output"]
 
 
+def test_project_setup_prompt_handles_auto_approve_block():
+    """Auto-approve always denies the agent's copy into .assistant/: the prompt asks
+    for Ask first, forbids retrying or routing around a denial, and names the
+    learner-run notebook in the clone as the fallback."""
+    content = mcp_server._project_setup_content("dev@example.com")
+    prompt = content["prompt"]
+    assert "Ask first" in prompt
+    assert "Settings" in prompt and "Actions" in prompt
+    assert "do not retry" in prompt.lower()
+    assert "/Workspace/Users/dev@example.com/vibe-coding-workshop/setup/publish_skills.ipynb" in prompt
+    # The copy command itself is unchanged and still served before validation.
+    assert prompt.index('cp -R "$D/vibe-coding-workshop"') < prompt.index("3) Validate")
+    assert "Ask first" in content["how_to_apply"]
+
+
 def test_project_setup_content_falls_back_to_placeholder():
     content = mcp_server._project_setup_content("")
     assert "<your_email>" in content["prompt"]

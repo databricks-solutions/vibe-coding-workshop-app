@@ -59,15 +59,17 @@ test('with nothing saved, Copy & Paste is selected first and no MCP setup render
   assert.doesNotMatch(html, /data-testid="start-line"/);
 });
 
-test('Interactive Mode shows four numbered steps with the URL in Step 1 and the start line in Step 4', () => {
+test('Interactive Mode shows five numbered steps with the URL in Step 1 and the start line in Step 5', () => {
   const html = withSavedMode('mcp', () =>
     renderToStaticMarkup(createElement(ConnectToGenieCodePanel, { workshopLevel: 'lakehouse-di', sessionId: SID })));
-  for (const n of [1, 2, 3, 4]) assert.match(html, new RegExp(`data-testid="mcp-step-${n}"`));
-  assert.match(html, /Set up Interactive Mode in 4 steps/);
+  for (const n of [1, 2, 3, 4, 5]) assert.match(html, new RegExp(`data-testid="mcp-step-${n}"`));
+  assert.match(html, /Set up Interactive Mode in 5 steps/);
   const step1 = html.slice(html.indexOf('data-testid="mcp-step-1"'), html.indexOf('data-testid="mcp-step-2"'));
   assert.match(step1, /data-testid="mcp-url"/);
-  const step4 = html.slice(html.indexOf('data-testid="mcp-step-4"'));
-  assert.match(step4, /data-testid="start-line"/);
+  const step3 = html.slice(html.indexOf('data-testid="mcp-step-3"'), html.indexOf('data-testid="mcp-step-4"'));
+  assert.match(step3, /Set approvals to Ask first/);
+  const step5 = html.slice(html.indexOf('data-testid="mcp-step-5"'));
+  assert.match(step5, /data-testid="start-line"/);
   assert.match(html, new RegExp(`Start a workshop track: Lakehouse \\+ AI and Agents \\(session ${SID}\\)`));
   assert.doesNotMatch(html, /Start the Genie Accelerator/);
 });

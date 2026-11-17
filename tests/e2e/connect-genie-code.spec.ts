@@ -12,7 +12,7 @@ import {
  */
 
 test.describe('Connect to Genie Code on-ramp', () => {
-  test('Copy & Paste is the default; Interactive shows MCP URL, copy, four numbered steps, start line', async ({
+  test('Copy & Paste is the default; Interactive shows MCP URL, copy, five numbered steps, start line', async ({
     page,
   }) => {
     await page.goto('/');
@@ -51,7 +51,9 @@ test.describe('Connect to Genie Code on-ramp', () => {
       await expect(item.getByText(step.detail, { exact: true })).toBeVisible();
     }
     await expect(panel.getByTestId('mcp-step-1').getByTestId('mcp-url')).toBeVisible();
-    await expect(panel.getByTestId('mcp-step-4').getByTestId('start-line')).toBeVisible();
+    await expect(
+      panel.getByTestId(`mcp-step-${GENIE_CODE_MCP_CONNECTION_STEPS.length}`).getByTestId('start-line'),
+    ).toBeVisible();
 
     // Session linking: the line names the session's track and id, so Genie Code
     // continues this session.
